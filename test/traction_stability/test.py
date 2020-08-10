@@ -9,7 +9,7 @@ from test_traction_stability import traction_test as traction
 
 class TestTraction(unittest.TestCase):
 	def test_stability(self):
-		ell_list = .5*np.logspace(-1, 0, 6)
+		ell_list = .5*np.logspace(-1, 0, 10)
 		rtol = 0.1
 		t_stab = []
 		for ell in ell_list:

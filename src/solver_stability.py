@@ -47,13 +47,13 @@ class EigenSolver(object):
 
         if type(a_k) == ufl.form.Form:
             # a form to be assembled
-            self.K = as_backend_type(assemble(a_k)).mat()
+            self.K = dolfin.as_backend_type(dolfin.assemble(a_k)).mat()
         elif type(a_k) == petsc4py.PETSc.Mat:
             # an assembled petsc matrix
             self.K = a_k
 
         if a_m is not None and type(a_m) == ufl.form.Form:
-            self.M = as_backend_type(assemble(a_m)).mat()
+            self.M = dolfin.as_backend_type(dolfin.assemble(a_m)).mat()
         elif a_m is not None and type(a_m) == petsc4py.PETSc.Mat:
             self.M = a_m
 
@@ -136,13 +136,13 @@ class EigenSolver(object):
         print("---- setting additional slepc options -----")
         for (opt, value) in slepc_options.items():
             print("    ",opt,":",value)
-            PETScOptions.set(opt,value) 
+            dolfin.PETScOptions.set(opt,value) 
         print("-------------------------------------------")
         self.E.setFromOptions()
 
     def get_eigenpair(self,i):
-        u_r = Function(self.V)
-        u_im = Function(self.V)
+        u_r = dolfin.Function(self.V)
+        u_im = dolfin.Function(self.V)
         v_r, v_i = self.K.createVecs()
         eig = self.E.getEigenpair(i, v_r, v_i)
         err = self.E.computeError(i)

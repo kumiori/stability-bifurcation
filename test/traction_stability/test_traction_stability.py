@@ -19,13 +19,12 @@ petsc4py.init(sys.argv)
 from petsc4py import PETSc
 from hashlib import md5
 import petsc4py
-from slepc_eigensolver import EigenSolver
-from post_processing import plot_global_data
-from pathlib import Path
 import json
 from dolfin import set_log_level
 from dolfin.cpp.log import log, LogLevel
 from dolfin import PETScOptions
+from slepc4py import SLEPc
+from solver_stability import StabilitySolver
 
 set_log_level(LogLevel.ERROR)
 
@@ -56,7 +55,6 @@ petsc_options_alpha_tao = {"tao_type": "gpcg",
                            "tao_ls_stepmax": 1e6,  #
                            "pc_type": "bjacobi",
                            "tao_monitor": "True",  # "tao_ls_type": "more-thuente"
-                           # "ksp_type": "preonly"  # "tao_ls_type": "more-thuente"
                            }
 
 petsc_options_u = {
@@ -72,21 +70,24 @@ alt_min_parameters = {"max_it": 300,
                       "tol": 1.e-5,
                       "solver_alpha": "tao",
                       "solver_u": petsc_options_u,
-                      # "solver_alpha_snes": petsc_options_alpha_snes
                      "solver_alpha_tao": petsc_options_alpha_tao
                      }
 
 
 
-# from post_processing import make_figures, plot_global_data
-# set_log_level(100)
+stability_parameters = {"order": 4,
+                        "projection": 'none',
+                        'maxmodes': 5,
+                        'checkstability': True,
+                        'continuation': False,
+                        'cont_rtol': 1e-5,
+                        'inactiveset_atol': 1e-5
+                        }
+
 dolfin.parameters["std_out_all_processes"] = False
 dolfin.parameters["form_compiler"].update(form_compiler_parameters)
 
-from slepc4py import SLEPc
 
-from solver_stability import StabilitySolver
-from solver_stability import MyEigen
 
 def traction_test(
     ell=0.1,
@@ -109,9 +110,7 @@ def traction_test(
     load_min = load_min
     load_max = load_max
     nsteps = nsteps
-    # outdir = outdir
     loads=loads
-    # Path(outdir).mkdir(parents=True, exist_ok=True)
 
     savelag = 1
     nu = dolfin.Constant(nu)
@@ -137,13 +136,10 @@ def traction_test(
         'max': load_max,
         'nsteps':  nsteps
     } }
-    # with open(os.path.join(outdir, 'parameters.pkl'), 'w') as f:
-    #     json.dump(params, f)
 
     print(params)
     geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
-    # mesh = dolfin.Mesh("data/bar-15348f15e04fcbc0d8620fdfa9467b02.xml")
-    
+
     nel = max(int(n * float(Lx / ell)), int(Ly/3.))
     mesh = mshr.generate_mesh(geom, nel)
 
@@ -186,7 +182,8 @@ def traction_test(
     rP = model.rP(u, alpha, v, beta)*dx
     rN = model.rN(u, alpha, beta)*dx
 
-    stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN])
+    stability = StabilitySolver(mesh, energy,
+        [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = stability_parameters)
 
     # Time iterations
     time_data = []
@@ -213,13 +210,6 @@ def traction_test(
         time_data_i["max alpha"] = np.max(alpha.vector()[:])
         time_data.append(time_data_i)
         time_data_pd = pd.DataFrame(time_data)
-        # if np.mod(it, savelag) == 0:
-        #     time_data_pd.to_json(os.path.join(outdir + "/time_data.json"))
-        #     ColorPrint.print_pass('written data to file {}'.format(str(os.path.join(outdir + "/time_data.json"))))
-
-        #     with file_out as f:
-        #         f.write(alpha, load)
-        #         f.write(u, load)
 
         if stable == False:
             break
@@ -243,11 +233,6 @@ if __name__ == "__main__":
     parser.add_argument("--postfix", type=str, default='')
     parser.add_argument("--savelag", type=int, default=1)
     args = parser.parse_args()
-    # signature = md5().hexdigest()
-    # if args.outdir == None:
-    #     outdir = "../output/{:s}-ell{:3.4f}-{}".format('traction',args.ell,args.postfix)
-    # else:
-    #     outdir = args.outdir
 
     traction_test(
         ell=args.ell,
