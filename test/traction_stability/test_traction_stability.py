@@ -54,7 +54,7 @@ petsc_options_alpha_tao = {"tao_type": "gpcg",
                            "tao_ls_stepmin": 1e-8,  #
                            "tao_ls_stepmax": 1e6,  #
                            "pc_type": "bjacobi",
-                           "tao_monitor": "True",  # "tao_ls_type": "more-thuente"
+                           "tao_monitor": "False",  # "tao_ls_type": "more-thuente"
                            }
 
 petsc_options_u = {
@@ -77,7 +77,7 @@ alt_min_parameters = {"max_it": 300,
 
 stability_parameters = {"order": 4,
                         "projection": 'none',
-                        'maxmodes': 5,
+                        'maxmodes': 1,
                         'checkstability': True,
                         'continuation': False,
                         'cont_rtol': 1e-5,
