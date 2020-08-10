@@ -3,7 +3,7 @@ import sys
 from utils import ColorPrint
 from ufl import sqrt, inner, dot, conditional, derivative, ge, le
 import os
-from slepc_eigensolver import EigenSolver
+# from slepc_eigensolver import EigenSolver
 from slepc4py import SLEPc
 import ufl
 from functools import reduce
@@ -19,80 +19,165 @@ comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-class MyEigen(EigenSolver):
+
+class EigenSolver(object):
+    def __init__(self,
+                 a_k,
+                 u,
+                 a_m=None,                                   # optional, for eigpb of the type (K-lambda M)x=0
+                 bcs=None,
+                 restricted_dofs_is=None,
+                 slepc_options={'eps_max_it':100},
+                 option_prefix=None,
+                 comm=MPI.comm_world, 
+                 slepc_eigensolver = None
+                ):
+        self.comm = comm
+        self.slepc_options = slepc_options
+        if option_prefix:
+            self.E.setOptionsPrefix(option_prefix)
+        self.V = u.function_space()
+        self.index_set_not_bc = None
+        if type(bcs) == list:
+            self.bcs = bcs
+        elif type(bcs) == dolfin.fem.dirichletbc.DirichletBC:
+            self.bcs = [bcs]
+        else:
+            self.bcs = None
+
+        if type(a_k) == ufl.form.Form:
+            # a form to be assembled
+            self.K = as_backend_type(assemble(a_k)).mat()
+        elif type(a_k) == petsc4py.PETSc.Mat:
+            # an assembled petsc matrix
+            self.K = a_k
+
+        if a_m is not None and type(a_m) == ufl.form.Form:
+            self.M = as_backend_type(assemble(a_m)).mat()
+        elif a_m is not None and type(a_m) == petsc4py.PETSc.Mat:
+            self.M = a_m
+
+        # if bcs extract reduced matrices on dofs with no bcs
+        if self.bcs:
+            self.index_set_not_bc = self.get_interior_index_set(self.bcs, self.V)
+        elif restricted_dofs_is:
+            self.index_set_not_bc = restricted_dofs_is
+
+        if self.index_set_not_bc is not None:
+            try:
+                self.K = self.K.createSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
+                if a_m:
+                   self.M = self.M.createSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
+            except:
+                self.K = self.K.getSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
+                if a_m:
+                    self.M = self.M.getSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
+            self.projector = petsc4py.PETSc.Scatter()
+            self.projector.create(
+                vec_from=self.K.createVecRight(),
+                is_from=None,
+                vec_to=u.vector().vec(),
+                is_to=self.index_set_not_bc
+                )
+
+        # set up the eigensolver
+        if slepc_eigensolver:
+            self.E = slepc_eigensolver
+        else:
+            self.E = self.eigensolver_setup()
+
+        if a_m:
+            self.E.setOperators(self.K,self.M)       
+        else:
+            self.E.setOperators(self.K)
+
+    def get_interior_index_set(self, boundary_conditions, function_space):
+        """Returns the index set with free dofs"""
+        # Find dofs affected by boundary conditions
+        bc_dofs = []
+        for bc in boundary_conditions:
+            bc_dofs.extend(bc.get_boundary_values().keys()) 
+        ownership_range = function_space.dofmap().ownership_range()
+        interior_dofs = [x for x in range(ownership_range[0], ownership_range[1]) if x not in bc_dofs]    
+        # Create petsc4py.PETSc.IS object with interior degrees of freedom
+        index_set = petsc4py.PETSc.IS()
+        index_set.createGeneral(interior_dofs)  
+        return index_set
 
     def eigensolver_setup(self):
         E = SLEPc.EPS()
         E.create()
-        # E.setType(SLEPc.EPS.Type.ARNOLDI)
         E.setType(SLEPc.EPS.Type.KRYLOVSCHUR)
- # ARNOLDI          -
- # ARPACK           X 86
- # BLOPEX           X 86
- # BLZPACK          X 86
- # CISS 
- # FEAST            X 86
- # GD               X 56
- # JD               X petscerr 56
- # KRYLOVSCHUR      *
- # LANCZOS          -
- # LAPACK           - doesn't converge (cyl homog)
- # LOBPCG           X 56
- # POWER
- # PRIMME           X 86
- # RQCG             X petscerr 56
- # SUBSPACE
- # TRLAN            X 86
         E.setProblemType(SLEPc.EPS.ProblemType.HEP)
         E.setWhichEigenpairs(E.Which.TARGET_REAL)
         E.setTarget(-.1) 
         st = E.getST()
         st.setType('sinvert')
         st.setShift(-1.e-3)
-        # E.view()
         return E
 
-    def save_eigenvectors(self,n, file_name="output/modes.xdmf",save_imaginary=False):
-        eigenvalues = [] 
-        eigenvectors = []
-        if file_name[-4::] == 'xdmf': 
-            file = dolfin.XDMFFile(file_name)
-            file.parameters["functions_share_mesh"] = True
-            file.parameters["flush_output"] = True
-        else:
-            file = File(self.comm,file_name)
-        for i in range(n):
-            eig, w_r, w_im, err = self.get_eigenpair(i)
-            # print('norm w_r {} {}'.format(i, w_r.vector().norm('l2')))
-            v_r = w_r.sub(0)
-            beta_r = w_r.sub(1)
-            # print('norm v_r {} {}'.format(i, v_r.vector().norm('l2')))
-            # print('norm b_r {} {}'.format(i, beta_r.vector().norm('l2')))
-            v_r.rename("displacement mode real","displacement mode real")
-            beta_r.rename("damage mode real","mode real")
-            file.write(v_r, i)
-            file.write(beta_r, i)
-            if save_imaginary:
-                v_im = w_im.sub(0)
-                beta_im = w_im.sub(1)
-                v_im.rename("displacement mode imaginary","displacement mode imaginary")
-                beta_im.rename("damage mode imaginary","mode imaginary")
-                file.write(v_im, i)
-                file.write(beta_im, i)
-        print('saved eigenmodes in in {}'.format(file_name))
-        return file_name
+    def solve(self, n_eig):
+        E = self.E
+        E.setDimensions(n_eig)
+        self.set_options(self.slepc_options)
+        E.setFromOptions()
+        E.solve()
+        # print info
+        its = E.getIterationNumber()
+        eps_type = E.getType()
+        self.nev, ncv, mpd = E.getDimensions()
+        tol, maxit = E.getTolerances()
+        self.nconv = E.getConverged()
+        print("Solution method: {:s}, stopping condition: tol={:.4g}, maxit={:d}".format(eps_type,tol, maxit))
+        print("Number of converged/requested eigenvalues with {:d} iterations  : {:d}/{:d}".format(its,self.nconv,self.nev))
+        return self.nconv, its
 
+    def set_options(self,slepc_options):
+        print("---- setting additional slepc options -----")
+        for (opt, value) in slepc_options.items():
+            print("    ",opt,":",value)
+            PETScOptions.set(opt,value) 
+        print("-------------------------------------------")
+        self.E.setFromOptions()
+
+    def get_eigenpair(self,i):
+        u_r = Function(self.V)
+        u_im = Function(self.V)
+        v_r, v_i = self.K.createVecs()
+        eig = self.E.getEigenpair(i, v_r, v_i)
+        err = self.E.computeError(i)
+        if self.index_set_not_bc:
+            self.projector.scatter(vec_from=v_r, vec_to=u_r.vector().vec())
+            self.projector.scatter(vec_from=v_i, vec_to=u_im.vector().vec())
+            u_r.vector().vec().ghostUpdate()
+            u_im.vector().vec().ghostUpdate()
+        return eig, u_r, u_im, err
+
+    def get_eigenvalues(self,n):
+        eigenvalues = [] 
+        for i in range(n):
+            eig, u_r, u_im, err = self.get_eigenpair(i)
+            eigenvalues.append([eig.real, err])
+        return np.array(eigenvalues)
+
+    def get_eigenpairs(self,n):
+        eigenvalues = [] 
+        eigenvectors_real = [] 
+        eigenvectors_im = [] 
+        for i in range(n):
+            eig, u_r, u_im, err = self.get_eigenpair(i)
+            eigenvalues.append(eig)
+            eigenvectors_real.append(u_r)
+            eigenvectors_im.append(u_im)
+        return np.array(eigenvalues), [eigenvectors_real, eigenvectors_im]
 
 class StabilitySolver(object):
     """solves second order stability problem"""
     def __init__(self, mesh, energy, state, bcs, z, rayleigh=None,
         nullspace=None, parameters=None):
         self.i = 0
-        # import pdb; pdb.set_trace()
         self.parameters = self.default_parameters()
         if parameters is not None: self.parameters.update(parameters)                                                         # for debug purposes
-        # self.file_debug = dolfin.XDMFFile(os.path.join('output', "debug.xdmf"))            # for debug purposes
-        # self.file_debug.parameters["flush_output"] = True 
         self.u = state[0]
         self.alpha = state[1]
         self._u = dolfin.Vector(self.u.vector())
@@ -103,8 +188,6 @@ class StabilitySolver(object):
         cdm = dolfin.project(dolfin.CellDiameter(self.mesh)**2., dolfin.FunctionSpace(self.mesh, 'CG', 1))
         self.cellarea = dolfin.Function(z.function_space())
         self.cellarea.assign(cdm)
-        # self.Z = dolfin.FunctionSpace(mesh,
-                    # dolfin.MixedElement([self.u.ufl_element(), self.alpha.ufl_element()]))
         self.Z = z.function_space()
         self.ownership = self.Z.dofmap().ownership_range()
         self.assigner = dolfin.FunctionAssigner(
@@ -128,14 +211,12 @@ class StabilitySolver(object):
 
         self.stable = ''
         self.negev = -1
-        # self.z = dolfin.Function(self.Z)
         self.z = z
         self.z_old = dolfin.Function(self.Z)
         zeta = dolfin.TestFunction(self.Z)
         v, beta = dolfin.split(zeta)
 
         self.Ealpha = dolfin.derivative(energy, self.alpha, dolfin.TestFunction(self.alpha.ufl_function_space()))
-        # self.Ealpha = dolfin.derivative(energy, self.alpha, beta)
         self.energy = energy
 
         z_u, z_a = dolfin.split(self.z)
@@ -157,7 +238,7 @@ class StabilitySolver(object):
         # import pdb; pdb.set_trace()
         if len(bcs)>0:
             self.bcs = bcs
-            self.bc_dofs = self.get_bc_dofs2(bcs)
+            self.bc_dofs = self.get_bc_dofs(bcs)
         else:
             self.bcs = None
             self.bc_dofs = set()
@@ -170,7 +251,7 @@ class StabilitySolver(object):
         dolfin.PETScOptions.set("pc_factor_mat_solver_type", "mumps")
         dolfin.PETScOptions.set("mat_mumps_icntl_24", 1)
         dolfin.PETScOptions.set("mat_mumps_icntl_13", 1)
-        # dolfin.PETScOptions.set("eps_monitor")
+        dolfin.PETScOptions.set("eps_monitor")
 
     def default_parameters(self):
         return {'order': 3,
@@ -204,46 +285,28 @@ class StabilitySolver(object):
         return
 
     def linesearch(self, v_n, beta_n, m=3, mode=0):
-        debug = True
+        debug = False
         en0 = dolfin.assemble(self.energy)
         _u = self._u
         _alpha = self._alpha
 
-        # _u.set_local(self.u.vector()[:])
-        # _alpha.set_local(self.alpha.vector()[:])
-
         _u[:] = self.u.vector()[:]
         _alpha[:] = self.alpha.vector()[:]
-        tol = 5e-5
 
         one = max(1., max(self.alpha.vector()[:]))
-        # tol = 0.
-        # sanity check
-        if hasattr(self, 'bcs') and len(self.bcs[0])>0:
-            assert np.all([self.is_compatible2(bc, v_n, homogeneous = True) for bc in self.bcs[0]]), 'displacement test field is not kinematically admissible'
 
-        if debug:
-            print('||vn||_l2 = {}'.format(dolfin.norm(v_n, 'l2')))
-            print('||βn||_l2 = {}'.format(dolfin.norm(beta_n, 'l2')))
-            print('||vn||_h1 = {}'.format(dolfin.norm(v_n, 'h1')))
-            print('||βn||_h1 = {}'.format(dolfin.norm(beta_n, 'h1')))
-            # print(rank, mask)
-            # print(rank, 'beta_n', beta_n.vector()[:])
-            # print(rank, 'len(beta_n)', len(beta_n.vector()[:]))
-            # print(rank, 'len(mask)', len(mask))
+        if hasattr(self, 'bcs') and len(self.bcs[0])>0:
+            assert np.all([self.is_compatible(bc, v_n, homogeneous = True) for bc in self.bcs[0]]), \
+                'displacement test field is not kinematically admissible'
 
         # positive part
         mask = beta_n.vector()[:]>0.
-        # if np.all(~mask==True):
         hp2 = (one-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
         hp1 = (self.alpha_old.vector()[mask]-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [-np.inf]
         hp = (max(hp1), min(hp2))
 
         # negative part
         mask = beta_n.vector()[:]<0.
-        # print(rank, mask)
-        # print(rank, 'len(beta_n)', len(beta_n.vector()[:]))
-        # print(rank, 'len(mask)', len(mask))
 
         hn2 = (one-self.alpha.vector()[mask])/beta_n.vector()[mask] if len(np.where(mask==True)[0])>0 else [-np.inf]
         hn1 = (self.alpha_old.vector()[mask]-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
@@ -261,31 +324,6 @@ class StabilitySolver(object):
         self.hmax = float(hmax_glob)
         self.hmin = float(hmin_glob)
 
-
-        # np.set_printoptions(threshold=np.nan)
-
-        if debug and size == 1:
-            # ColorPrint.print_info('min(a + hmin beta)        = {:.3f}'.format(min(self.alpha.vector()[:] + self.hmin*beta_n.vector()[:])))
-            # ColorPrint.print_info('min(a + hmax beta)        = {:.3f}'.format(min(self.alpha.vector()[:] + self.hmax*beta_n.vector()[:])))
-            # ColorPrint.print_info('max(a + hmin beta)        = {:.3f}'.format(max(self.alpha.vector()[:] + self.hmin*beta_n.vector()[:])))
-            # ColorPrint.print_info('max(a + hmax beta)        = {:.3f}'.format(max(self.alpha.vector()[:] + self.hmax*beta_n.vector()[:])))
-            # rad = 1/2-dolfin.DOLFIN_EPS_LARGE
-            self.alpha.set_allow_extrapolation(True)
-            # rad = 1/2-.0000001
-            # plt.plot([self.alpha(rad*np.cos(t), rad*np.sin(t)) for t in np.linspace(0,2*np.pi)],
-            #     label='$\\alpha', lw=3, c='C1')
-            # plt.plot([beta_n(rad*np.cos(t), rad*np.sin(t)) for t in np.linspace(0,2*np.pi)],
-            #     label='$\\beta_n$', lw=3, c='C2')
-            X =self.alpha.function_space().tabulate_dof_coordinates()
-            plt.clf()
-            xs = np.linspace(min(X[:, 0]),max(X[:, 0]), 300)
-            plt.plot(xs, [self.alpha(x, 0) for x in xs], label='$\\alpha$', lw=3, c='C1')
-            plt.plot(xs, [beta_n(x, 0) for x in xs], label='$\\beta_{{{}}}$'.format(mode), lw=3, c='C2')
-            plt.axhline(one-1e-5, lw='.5', ls=':')
-            plt.legend(loc='best')
-            plt.savefig('data/prof.pdf')
-            plt.close()
-
         if self.hmin>0:
             ColorPrint.print_warn('Line search troubles: found hmin>0')
             # import pdb; pdb.set_trace()
@@ -300,46 +338,6 @@ class StabilitySolver(object):
             return 0., np.nan, (0., 0.), 0.
             # get next perturbation mode
 
-        # directional variations
-        if debug and size == 1:
-            fig = plt.figure(dpi=160)
-            ax = fig.gca()
-            fig2 = plt.figure(dpi=160)
-            ax2 = fig2.gca()
-            envsu = []
-            maxvar = max(abs(self.hmin), abs(self.hmax))
-            htest = np.linspace(-maxvar, maxvar, 2*m+1)
-            # htest = np.linspace(-1, 1, 2*m+1)
-
-            # directional variations. En vs uh
-            for h in htest:
-                uval = _u[:]     + h*v_n.vector()
-                self.u.vector().set_local(uval)
-                envsu.append(dolfin.assemble(self.energy)-en0)
-            ax.plot(htest, envsu, label='E(u+h $v$, $\\alpha$)')
-
-            ax.axvline(self.hmin, c='k')
-            ax.axvline(self.hmax, c='k')
-            # plt.savefig("en_vsu.png".format())
-
-            # restore original state
-            self.u.vector().set_local(_u[:])
-            self.alpha.vector().set_local(_alpha[:])
-
-            # directional variations. En vs ah
-            envsa = []
-            for h in htest:
-                aval = _alpha[:] + h*beta_n.vector()
-                self.alpha.vector().set_local(aval)
-                envsa.append(dolfin.assemble(self.energy)-en0)
-            ax.plot(htest, envsa, label='E(u, $\\alpha$+h $\\beta$)')
-
-            # restore original state
-
-        # self.u.vector()[:]  = _u[:]
-        # self.alpha.vector()[:]  = _alpha[:]
-
-
         en = []
 
         htest = np.linspace(self.hmin, self.hmax, m+1)
@@ -347,9 +345,7 @@ class StabilitySolver(object):
         for h in htest:
             uval = _u[:]     + h*v_n.vector()[:]
             aval = _alpha[:] + h*beta_n.vector()[:]
-            # import pdb; pdb.set_trace()
-            # assert np.all(aval>= self.alpha_old.vector()[:]), 'damage test field doesn\'t verify irrev from below'
-            # assert np.all(aval<= one), 'damage test field doesn\'t verify irrev from above'
+
             if not np.all(aval - self.alpha_old.vector()[:] + dolfin.DOLFIN_EPS_LARGE >= 0.):
                 print('damage test field doesn\'t verify sharp irrev from below')
                 import pdb; pdb.set_trace()
@@ -363,11 +359,6 @@ class StabilitySolver(object):
             en.append(dolfin.assemble(self.energy)-en0)
             if debug and size == 1:
                 ax2.plot(xs, [self.alpha(x, 0) for x in xs], label='$\\alpha+h \\beta_{{{}}}$, h={:.3f}'.format(mode, h), lw=.5, c='C1' if h>0 else 'C4')
-
-        # restore original state
-            # self.u.vector().set_local(_u[:])
-            # self.alpha.vector().set_local(_alpha[:])
-
 
         z = np.polyfit(htest, en, m)
         p = np.poly1d(z)
@@ -388,42 +379,11 @@ class StabilitySolver(object):
             '.format(hstar, self.hmin, self.hmax, hstar/self.hmax))
         ColorPrint.print_info('Line search approx =\n {}'.format(p))
         ColorPrint.print_info('h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
-        # ColorPrint.print_warn('Line search estimate en={:3e}'.format(p(hstar)))
-        ColorPrint.print_warn('Line search estimate, rel energy variation={:.5f}%'.format((p(hstar))/en0*100))
+        ColorPrint.print_warn('Line search estimate, relative energy variation={:.5f}%'.format((p(hstar))/en0*100))
 
-        if debug and size == 1:
-            ColorPrint.print_info('1 - max(a + hstar beta)        = {:.3f}'.format(one - max(self.alpha.vector()[:] + hstar*beta_n.vector()[:])))
-
-            ax2.plot(xs, [self.alpha(x, 0) for x in xs], label='$\\alpha$', lw=1, c='k')
-            ax3 = ax2.twinx()
-            ax3.axhline(0., lw=.5, c='k', ls='-')
-            ax2.axhline(one-tol, lw='.5', ls=':')
-            ax2.axhline(one, lw='.5', ls=':')
-            ax3.plot(xs, [beta_n(x, 0) for x in xs], label='$\\beta_{{{}}}$'.format(mode), ls=':')
-            ax2.plot(xs, [self.alpha_old(x, 0) for x in xs], label='$\\alpha_{old}$', c='k')
-            ax2.axhline(0., ls=':')
-            # ax2.set_xlim(0, 1.2*max([self.alpha(x, 0)+hstar*beta_n(x, 0) for x in xs]))
-            ax2.plot(xs, [self.alpha(x, 0)+hstar*beta_n(x, 0) for x in xs],
-                label='$\\alpha+\\bar h \\beta_{{{}}}$, \\bar h={:.3f}'.format(mode, hstar), lw=1, c='C2')
-            ax2.legend(fontsize='small', bbox_to_anchor=(1.04,0.5), loc="center left", borderaxespad=0)
-            ax3.legend(fontsize='small')
-            fig2.savefig("data/prof-{:.3f}-{}.png".format(max(self.u.vector()), mode), bbox_inches="tight")
-            plt.close(fig2)
-
-            ax.axvline(hstar)
-            ax.axvline(0., c='k', lw=.5, ls=':')
-            ax.plot(np.linspace(self.hmin, self.hmax, 10), p(np.linspace(self.hmin, self.hmax, 10)),
-                label='interp h star = {:.5e}'.format(hstar))
-            ax.legend()
-            fig.savefig("data/en-{:.3f}-{}.png".format(max(self.u.vector()), mode))
-            plt.close(fig)
-
-
-        # restore the solution
+        # restore solution
         self.u.vector()[:] = _u[:]
         self.alpha.vector()[:] = _alpha[:]
-        dolfin.plot(self.alpha, cmap='hot')
-        plt.savefig("data/alpha-{}.png".format(rank))
 
         return hstar, p(hstar)/en0, (self.hmin, self.hmax), en
 
@@ -434,66 +394,6 @@ class StabilitySolver(object):
         print('saved matrix in ', name)
 
     def get_bc_dofs(self, boundary_conditions):
-        """Returns the list of bc-constrained dofs in the mixed func space"""
-        # FIXME: order is critical
-        bcs_u = boundary_conditions[0]
-        bcs_alpha = boundary_conditions[1]
-
-        bc_Z = []
-        bc_dofs = []
-        dim = self.u.function_space().ufl_element().value_size()
-        # FIXME: what if there are bcs only on a subspace of displacements?
-        for bc in bcs_u:
-            # boundary condition on a subspace of V_u = Z.sub(0)
-            if bc.function_space().component():
-                component = bc.function_space().component()[0]
-                space = self.Z.sub(0).sub(component)
-                U0 = dolfin.Constant(0.)
-            # boundary condition on the entire space V_u = Z.sub(0)
-            else:
-                space = self.Z.sub(0)
-                U0 = dolfin.Constant([0.]*dim)
-
-            if hasattr(bc, 'sub_domain'):
-                newbc = dolfin.DirichletBC(space, U0, bc.sub_domain, bc.method())
-            elif hasattr(bc, 'domain_args'):
-                newbc = dolfin.DirichletBC(space, U0, bc.domain_args[0], bc.domain_args[1], bc.method())
-            # import pdb; pdb.set_trace()
-            bc_Z.append(newbc)
-
-        for bc in bcs_alpha:
-            if hasattr(bc, 'sub_domain'):
-                newbc = dolfin.DirichletBC(self.Z.sub(1), dolfin.Constant(0.), bc.sub_domain, bc.method())
-            elif hasattr(bc, 'domain_args'):
-                newbc = dolfin.DirichletBC(self.Z.sub(1), dolfin.Constant(0.), bc.domain_args[0], bc.domain_args[1], bc.method())
-            bc_Z.append(newbc)
-
-        self.bcs_Z = bc_Z
-        # bc_dofs = [set(bc.get_boundary_values().keys()) for bc in bc_Z]
-        # bc_dofs = reduce(lambda x,y: x|y, bc_dofs, set())
-        # constrained_dofs = [x for x in range(self.ownership_range[0], self.ownership_range[1]) if x in bc_dofs]
-
-        dofmap = self.Z.dofmap()
-        bc_dofs = [set(bc.get_boundary_values().keys()) for bc in bc_Z]
-        bc_dofs_glob = []
-        print(rank, ': ', 'bc_dofs: ', bc_dofs)
-        for bc in bc_dofs:
-            _bc_glob = [dofmap.local_to_global_index(x) for x in bc]
-            bc_dofs_glob.append(set(_bc_glob))
-
-        # flatten
-        # import pdb; pdb.set_trace()
-        bc_dofs_glob = reduce(lambda x,y: x|y, bc_dofs_glob, set())
-        bc_dofs = reduce(lambda x,y: x|y, bc_dofs, set())
-        print(rank, ': ', 'ownership: ', self.ownership_range)
-        print(rank, ': ', 'bc_dofs glob: ', bc_dofs_glob)
-        print(rank, ': ', 'bc_dofs: ', bc_dofs)
-        Xz = self.Z.tabulate_dof_coordinates()
-        print(rank, ': bc dof coords', [list(Xz[dof]) for dof in list(sorted(bc_dofs))])
-        # return set(constrained_dofs)
-        return bc_dofs_glob
-
-    def get_bc_dofs2(self, boundary_conditions):
         """
         Construct the blocked u-DOF's for the stability problem
         """
@@ -550,103 +450,7 @@ class StabilitySolver(object):
 
         return np.all(elastic_dofs)
 
-    def get_inactive_set3(self):
-        # returns list of dofs where constraints are inactive
-        # global numbering wrt the mixed vector z \in Z
-        tol = 1e-3
-        debug= True
-
-        # based on constraint: inactive set = {x: g(z)>0}
-
-        self.z_old.vector()[:]=0.
-        self.z.vector()[:] = .5
-        dolfin.assign(self.z_old.sub(1), self.alpha_old)
-        dolfin.assign(self.z.sub(1), self.alpha)
-        # import pdb; pdb.set_trace()
-
-        diff = self.z.vector()-self.z_old.vector()
-
-        one = self.z.vector().copy()
-        one[:]=1.
-
-        vec = dolfin.PETScVector(MPI.comm_self)
-
-        # non damaging dofs = elastic dofs
-        diff.gather(vec, np.array(range(self.Z.dim()), "intc"))
-        mask = vec < dolfin.DOLFIN_EPS_LARGE
-
-        if debug:
-            print('len vec damage', len(vec[:]))
-
-        # fracture dofs
-        diff2 = one - tol - self.z.vector()
-        diff2.gather(vec, np.array(range(self.Z.dim()), "intc"))
-        mask2 = vec < dolfin.DOLFIN_EPS_LARGE
-
-        dofset = set(np.where(mask == True)[0])
-        dofset2 = set(np.where(mask2 == True)[0])
-
-        active_set = dofset | dofset2
-        inactive_set = set(range(self.ownership[0], self.ownership[1]))-active_set
-
-        # -----------------------
-
-        Ealpha = dolfin.assemble(self.Ealpha)
-        vec = dolfin.PETScVector(MPI.comm_self)
-        Ealpha.gather(vec, np.array(range(self.Z.sub(1).dim()), "intc"))
-        if debug:
-            print('len vec grad', len(vec[:]))
-
-
-        tol = self.parameters['inactiveset_atol']
-        mask = Ealpha[:]/self.cellarea.vector() < tol
-        # Ealpha[:]/self.cellarea.vector()[mask3]
-        # mask3 = vec > 0.
-        # tol = 1.5*self.cellarea
-        # tol = 5.*self.cellarea.vector()
-        # mask3 = vec > tol
-
-        inactive_set_alpha = set(np.where(mask == True)[0])
-        # active_set2 = set(np.where(mask3 == True)[0])
-        # inactive_set2 = set(range(self.ownership[0], self.ownership[1]))-active_set2
-
-        # from subspace to global numbering
-        global_inactive_set = [self.mapa[k] for k in inactive_set_alpha]
-
-        # add displacement dofs
-        inactive_set2 = set(global_inactive_set) | set(self.Z.sub(0).dofmap().dofs())
-
-        if debug:
-            print('inactive set damage', len(inactive_set))
-            print('inactive set gradie', len(inactive_set2))
-            # print('tol', tol*(self.meshsize)**2.)
-            # print('mesh**2', (self.meshsize)**2.)
-            print('max Ealpha', max(Ealpha[:]))
-            print('min Ealpha', min(Ealpha[:]))
-
-            with open('test_mask.npz', 'wb') as f:
-                np.save(f, mask)
-
-            with open('test_cellarea.npz', 'wb') as f:
-                np.save(f, Ealpha[:]/self.cellarea.vector()[:])
-
-            with open('test_inactiveset.npz', 'wb') as f:
-                np.save(f, inactive_set2)
-
-            # with open('test_avgscale.npz', 'wb') as f:
-            #     np.save(f, Ealpha[:]/(self.meshsize)**2.)
-
-            # with open('test_carea.npz', 'wb') as f:
-                # np.save(f, self.cellarea.vector()[:])
-
-            # with open("test_maxJresc.txt", "a") as myfile:
-                # myfile.write('{} '.format(max(Ealpha[:]/(self.cellarea.vector()[:]))))
-
-        assert len(inactive_set) == len(inactive_set2)
-
-        return inactive_set2
-
-    def get_inactive_set4(self):
+    def get_inactive_set(self):
         tol = self.parameters['inactiveset_atol']
         debug= False
 
@@ -737,20 +541,6 @@ class StabilitySolver(object):
             return -1
 
     def is_compatible(self, bcs, v, homogeneous = False, tol=dolfin.DOLFIN_EPS_LARGE):
-        ret = True
-        if type(bcs) == list:
-            for bc in bcs:
-                ret &= self.is_compatible(bc, v, homogeneous)
-        elif type(bcs) == dolfin.fem.dirichletbc.DirichletBC:
-            bcdofs = list(bcs.get_boundary_values().keys())
-            if homogeneous:
-                values = [0]*len(bcdofs)
-            else:
-                values = list(bcs.get_boundary_values().values())
-            ret = np.all(np.isclose(v.vector()[bcdofs], values))
-        return ret
-
-    def is_compatible2(self, bcs, v, homogeneous = False, tol=dolfin.DOLFIN_EPS_LARGE):
         V = v.function_space()
         v_array = v.vector()[:]
         ret = True
@@ -788,7 +578,6 @@ class StabilitySolver(object):
             ColorPrint.print_warn('diff = {}'
                 .format(self.alpha.vector()[pd]-self.alpha_old.vector()[pd]))
             ColorPrint.print_warn('Continuing')
-            # import pdb; pdb.set_trace()
 
         self.assigner.assign(self.z_old, [self.u_zero, self.alpha_old])
         self.assigner.assign(self.z, [self.u_zero, self.alpha])
@@ -801,82 +590,49 @@ class StabilitySolver(object):
         else:
             ColorPrint.print_pass('Current state: not elastic')
 
-        # import pdb; pdb.set_trace()
-        inactive_dofs = self.get_inactive_set4()
-        # inactive_dofs = self.get_inactive_set4()
+        inactive_dofs = self.get_inactive_set()
         self.inactive_set = inactive_dofs
-        if debug and rank == 0:
-            print('#inactive dofs = {}'.format(len(inactive_dofs)))
 
-        # free_dofs = list(sorted(inactive_dofs - self.bc_dofs))
-        # import pdb; pdb.set_trace()
         free_dofs = list(sorted(inactive_dofs - self.bc_dofs))
-        # free_dofs = sorted(set(range(self.ownership[0], self.ownership[1]))-self.bc_dofs)
-        # free_dofs = sorted(set(range(self.ownership[0], self.ownership[1])))
-
-        print(rank, len(free_dofs))
-        print(rank, self.ownership)
-        print(rank, self.Z.dim())
 
         index_set = petsc4py.PETSc.IS()
         index_set.createGeneral(free_dofs)
 
-        # self.H
         if hasattr(self, 'rP') and hasattr(self, 'rN'):
             self.H2 = self.rP-self.rN
-
-        # self.H_reduced = self.reduce_Hessian(restricted_dofs_is = index_set)
 
         if hasattr(self, 'H2'):
             ColorPrint.print_pass('Inertia: Using user-provided Hessian')
             self.H_reduced = self.reduce_Hessian(self.H2, restricted_dofs_is = index_set)
-            # self.H_reduced = dolfin.as_backend_type(dolfin.assemble(self.H2)).mat()
-            # self.save_matrix(self.H_reduced,
-                            # 'data/Hessian-provided-{:d}.txt'.format(self.i))
         else:
             ColorPrint.print_pass('Inertia: Using computed Hessian')
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
-            # self.H_reduced = dolfin.as_backend_type(dolfin.assemble(self.H)).mat()
-
-        # import pdb; pdb.set_trace()
-
-        # self.save_matrix(self.H_reduced, 'data/Hessian-reduced.data')
-
-        # self.save_matrix(self.H_reduced,
-                        # 'data/Hessian-reduced-{:d}.txt'.format(self.i))
 
         self.pc_setup()
-        # negev = self.get_inertia(dolfin.as_backend_type(dolfin.assemble(self.H)).mat(), restricted_dof_is = index_set)
+
         negev = self.get_inertia(self.H_reduced)
 
-
-        # if negev > 0:
-        if True:
+        if negev > 0:
+        # if True:
             eigs = []
         # solve full eigenvalue problem
             eigen_tol = self.parameters['eig_rtol']
             if hasattr(self, 'H2'):
                 ColorPrint.print_pass('Full eig: Using user-provided Hessian')
                 ColorPrint.print_pass('Norm provided {}'.format(dolfin.assemble(self.H2).norm('frobenius')))
-                eigen = MyEigen(self.H2, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
+                eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
             else:
                 ColorPrint.print_pass('Full eig: Using computed Hessian')
-                eigen = MyEigen(self.H, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
+                eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
             ColorPrint.print_pass('Norm computed {}'.format(dolfin.assemble(self.H).norm('frobenius')))
             self.computed.append(dolfin.assemble(self.H).norm('frobenius'))
             if hasattr(self, 'H2'): self.provided.append(dolfin.assemble(self.H2).norm('frobenius'))
 
-            # Initialise with last step's (projected) perturbation direction
-            # dolfin.assign(self.z.sub(0), self.perturbation_v)
-            # dolfin.assign(self.z.sub(1), self.perturbation_beta)
-            # _z_vec = dolfin.as_backend_type(self.z.vector()).vec()
-            # _z_reduced = _z_vec.getSubVector(index_set)
-            # eigen.E.setInitialSpace(_z_reduced)
             maxmodes = self.parameters['maxmodes']
 
             nconv, it = eigen.solve(min(maxmodes, negev+7))
 
-            if nconv == 0: 
+            if nconv == 0:
                 ColorPrint.print_warn('Eigensolver did not converge')
                 self.stable = negev <= 0
                 self.eigs = []
@@ -888,14 +644,12 @@ class StabilitySolver(object):
             # sanity check
             if nconv and negconv != negev:
                 ColorPrint.print_bold('eigen solver found {} negative evs '.format(negconv))
-            # assert sum(eigs[:,0]<0) == negev, 'Inertia/eigenvalues mismatch'
             if nconv == 0 and negev>0:
                 ColorPrint.print_bold('Full eigensolver did not converge but inertia yields {} neg eigen'.format(negev))
                 return
 
-            eigen.save_eigenvectors(nconv)
-            # eigen.save_eigenvectors(negconv)
-            
+            # eigen.save_eigenvectors(nconv)
+
             if nconv > 0:
                 ColorPrint.print_pass('')
                 ColorPrint.print_pass("i        k      err     ")
@@ -906,30 +660,19 @@ class StabilitySolver(object):
 
             linsearch = []
 
-            if size == 1 and debug:
-                for n in range(nconv):
-                    eig, u_r, u_im, err = eigen.get_eigenpair(n)
-                    err2 = eigen.E.computeError(0, SLEPc.EPS.ErrorType.ABSOLUTE)
-                    v_n, beta_n = u_r.split(deepcopy=True)
-                    plt.clf()
-                    plt.colorbar(dolfin.plot(dot(v_n, v_n)**(.5)))
-                    plt.savefig('data/vn-{}-{}.pdf'.format(rank,n))
-
-            # import pdb; pdb.set_trace()
             if negconv > 0:
                 for n in range(negconv) if negconv < maxmodes else range(maxmodes):
                     ColorPrint.print_pass('Perturbation mode {}'.format(n))
                     eig, u_r, u_im, err = eigen.get_eigenpair(n)
                     err2 = eigen.E.computeError(0, SLEPc.EPS.ErrorType.ABSOLUTE)
                     v_n, beta_n = u_r.split(deepcopy=True)
-                    print(rank, [self.is_compatible2(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
+                    print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
 
                     if debug and size == 1:
                         plt.clf()
                         plt.colorbar(dolfin.plot(dot(v_n, v_n)**(.5)))
                         plt.savefig('data/vn-{}-{}.pdf'.format(rank, n))
-                    # import pdb;pdb.set_trace()
-                    # assert np.all([self.is_compatible2(bc, v_n, homogeneous = True) for bc in self.bcs[0]])
+
                     self.normalise_eigen(v_n, beta_n, mode='max')
                     beta_n = self.project(beta_n, mode=self.parameters['projection'])
                     eig, u_r, u_im, err = eigen.get_eigenpair(n)
@@ -945,17 +688,10 @@ class StabilitySolver(object):
 
             self.eigs = eigs[:,0]
             self.mineig = eig.real
-            # self.stable = eig.real + eigen_tol > 0  # based on eigensolve
             self.stable = negev <= 0  # based on inertia
             self.negev = negev  # based on inertia
-            # negev <= 0
-            # if abs(self.mineig) < eigen_tol:
-                # self.stable = True
-            # hx = conditional(ge(proj_beta_0, 0), , np.inf)
-            # self.stable = negev <= 0
-            # import pdb; pdb.set_trace()
+
             if eigs[0,0]<0:
-                # self.hstar, estimate = self.linesearch(v_0, beta_0)
                 self.perturbation_v = linsearch[0]['v_n']
                 self.perturbation_beta = linsearch[0]['beta_n']
                 self.hstar = linsearch[0]['hstar']

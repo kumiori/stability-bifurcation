@@ -21,7 +21,6 @@ import ufl
 petsc4py.init(sys.argv)
 from petsc4py import PETSc
 from hashlib import md5
-from slepc_eigensolver import EigenSolver
 from post_processing import plot_global_data
 from pathlib import Path
 import json
@@ -29,6 +28,10 @@ import hashlib
 from time_stepping import TimeStepping
 from copy import deepcopy
 import mpi4py
+
+from slepc4py import SLEPc
+from solver_stability import StabilitySolver
+
 
 comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -41,7 +44,6 @@ form_compiler_parameters = {
     "cpp_optimize": True,
 }
 
-# from default_parameters import alt_min_parameters, petsc_options_u, petsc_options_alpha_tao, petsc_options_alpha_snes
 
 timestepping_parameters = {"perturbation_choice": 1,
                             'savelag': 1}
@@ -76,15 +78,6 @@ petsc_options_alpha_tao = {"tao_type": "gpcg",
                            "tao_monitor": "",  # "tao_ls_type": "more-thuente"
                            # "ksp_type": "preonly"  # "tao_ls_type": "more-thuente"
                            }
-# vinewtonrsls
-petsc_options_alpha_snes = {
-    "alpha_snes_type": "vinewtonrsls",
-    "alpha_snes_stol": 1e-5,
-    "alpha_snes_atol": 1e-5,
-    "alpha_snes_rtol": 1e-5,
-    "alpha_snes_max_it": 500,
-    "alpha_ksp_type": "preonly",
-    "alpha_pc_type": "lu"}
 
 petsc_options_u = {
     "u_snes_type": "newtontr",
@@ -94,27 +87,20 @@ petsc_options_u = {
     "u_snes_max_it": 1000,
     "u_snes_monitor": ''}
 
-
 alt_min_parameters = {"max_it": 300,
                       "tol": 1.e-5,
                       "solver_alpha": "tao",
                       "solver_u": petsc_options_u,
-                      # "solver_alpha_snes": petsc_options_alpha_snes
                      "solver_alpha_tao": petsc_options_alpha_tao
                      }
 
-
 numerical_parameters = {"alt_min": alt_min_parameters,
-                      # "solver_u": petsc_options_u,
-                      # "solver_alpha_tao": petsc_options_alpha_tao, "solver_alpha_snes": petsc_options_alpha_snes,
                       "stability": stability_parameters,
                       "time_stepping": timestepping_parameters}
 
 versions = get_versions()
 versions.update({'filename': __file__})
 parameters = {"alt_min": alt_min_parameters,
-                # "solver_u": petsc_options_u,
-                # "solver_alpha_tao": petsc_options_alpha_tao, "solver_alpha_snes": petsc_options_alpha_snes,
                 "stability": stability_parameters,
                 "time_stepping": timestepping_parameters,
                 "material": {},
@@ -124,15 +110,8 @@ parameters = {"alt_min": alt_min_parameters,
                 }
 
 
-# from post_processing import make_figures, plot_global_data
-# set_log_level(100)
 dolfin.parameters["std_out_all_processes"] = False
 dolfin.parameters["form_compiler"].update(form_compiler_parameters)
-
-from slepc4py import SLEPc
-
-from solver_stability import StabilitySolver
-from solver_stability import MyEigen
 
 def traction_test(
     ell=0.1,
@@ -171,7 +150,6 @@ def traction_test(
     sigma_D0 = E0
     n = n
     continuation = continuation
-    # import pdb; pdb.set_trace()
     config = json.loads(configString) if configString != '' else ''
 
     cmd_parameters =  {
@@ -201,10 +179,8 @@ def traction_test(
         'savelag': savelag},
     'alt_min': {}, "code": {}
     }
-    # import pdb; pdb.set_trace()
 
     if config:
-        # import pdb; pdb.set_trace()
         for par in config: parameters[par].update(config[par])
     else:
         for par in parameters: parameters[par].update(cmd_parameters[par])
@@ -231,17 +207,13 @@ def traction_test(
 
 
     geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
-    # mesh = mshr.generate_mesh(geom, 200)
     mesh = mshr.generate_mesh(geom,  int(float(n * Lx / ell)))
-    # mesh = dolfin.Mesh("data/bar-15348f15e04fcbc0d8620fdfa9467b02.xml")
-    import pdb; pdb.set_trace()
 
     left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
     right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
     bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
     top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
     left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
-    # right_bottom_pt = dolfin.CompiledSubDomain("near(x[0], Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
 
     mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
     right.mark(mf, 1)
@@ -268,10 +240,6 @@ def traction_test(
              dolfin.DirichletBC(V_u.sub(0), ut, right),
              dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
 
-
-    # bcs_alpha = [dolfin.DirichletBC(V_alpha, 0.0, left),
-    #              dolfin.DirichletBC(V_alpha, 0.0, right)]
-
     bcs_alpha = []
 
     # Files for output
@@ -292,13 +260,14 @@ def traction_test(
     energy = model.total_energy_density(u, alpha)*model.dx
 
     # Alternate minimization solver
-    solver = solvers.AlternateMinimizationSolver(energy, [u, alpha], [bcs_u, bcs_alpha], parameters=parameters['alt_min'])
-
+    solver = solvers.AlternateMinimizationSolver(energy,
+        [u, alpha], [bcs_u, bcs_alpha], parameters=parameters['alt_min'])
 
     rP = model.rP(u, alpha, v, beta)*model.dx
     rN = model.rN(u, alpha, beta)*model.dx
 
-    stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
+    stability = StabilitySolver(mesh, energy,
+        [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
     # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
 
     # Time iterations
@@ -330,16 +299,13 @@ def traction_test(
             self.spacetime = pd.DataFrame(columns = self.load_steps, )
 
         def user_postprocess_stability(self, load):
-            # beta_n = self.stability.eigen
             from matplotlib.ticker import StrMethodFormatter
             outdir = self.parameters['outdir']
             alpha = self.solver.alpha
             if size > 1: return
 
             adm_pert = np.where(np.array([e['en_diff'] for e in stability.eigendata]) < 0)[0]
-            # import pdb; pdb.set_trace()
 
-            # if self.parameters[]
             fig = plt.figure(figsize=(4, 1.5), dpi=180,)
             ax = plt.gca()
             X =alpha.function_space().tabulate_dof_coordinates()
@@ -373,7 +339,6 @@ def traction_test(
             if size > 1: return
             alpha = self.solver.alpha
             alpha.set_allow_extrapolation(True)
-            
             parameters = self.parameters
             xresol = xresol
             X =alpha.function_space().tabulate_dof_coordinates()
@@ -404,20 +369,12 @@ def traction_test(
             fig.savefig(os.path.join(outdir, "spacetime.pdf".format(load)), bbox_inches="tight")
 
             self.spacetime.to_json(os.path.join(outdir + "/spacetime.json"))
-
-            # assert self.stability.stable
             pass
 
-    TS = TractionTS(model, solver, stability, ut, [file_out, file_con, file_eig], 
+    evo = TractionTS(model, solver, stability, ut, [file_out, file_con, file_eig], 
                 parameters=parameters['time_stepping'])
 
-    # import pdb; pdb.set_trace()
-    time_data_pd = TS.run()
-
-    # time_data_pd = time_stepping(load_steps, model, solver, stability, ut, u, alpha,
-    #     checkstability, continuation, outdir, savelag,
-    #     file_out, file_con, file_eig,
-    #     parameters=timestepping_parameters)
+    time_data_pd = evo.run()
 
     if size == 1:
         plt.figure()
@@ -427,15 +384,10 @@ def traction_test(
         dolfin.plot(u, mode="displacement")
         plt.savefig(os.path.join(outdir, "u.png"))
         plt.close('all')
-    if stability.parameters['checkstability']: pp.plot_spectrum(parameters, outdir, time_data_pd.sort_values('load'), 1.)
 
     print(time_data_pd)
-    # plot_global_data(time_data_pd, load, outdir)
-    print(stability.computed)
-    print(stability.provided)
 
     return time_data_pd
-
 
 if __name__ == "__main__":
 
@@ -463,7 +415,6 @@ if __name__ == "__main__":
     parser.add_argument("--parameters", type=str, default=None)
     parser.add_argument("--print", type=bool, default=False)
     parser.add_argument("--continuation", type=bool, default=False)
-    # import pdb; pdb.set_trace()
 
     args, unknown = parser.parse_known_args()
     if len(unknown):
@@ -471,9 +422,6 @@ if __name__ == "__main__":
         print(unknown)
         ColorPrint.print_warn('continuing in 3s')
         sleep(3)
-    # import pdb; pdb.set_trace()
-
-    # signature = md5().hexdigest()
 
     if args.outdir == None:
         args.postfix += '-cont' if args.continuation==True else ''
@@ -489,8 +437,6 @@ if __name__ == "__main__":
                 for c,u in v.items():
                     cmd = cmd + '--{} {} '.format(c, str(u))
         print(cmd)
-        # sys.exit()
-
 
     config = '{}'
     if args.config:
