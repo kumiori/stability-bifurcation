@@ -16,7 +16,6 @@ def take_last(dic):
             new_dic[key] = value
     return new_dic
 
-
 alt_min_parameters = {"max_it": 300,
                       "tol": 1.e-5,
                       "solver_alpha": "tao"
@@ -42,7 +41,6 @@ petsc_options_alpha_tao = {"tao_type": "gpcg",
                            "tao_monitor": "",  # "tao_ls_type": "more-thuente"
                            # "ksp_type": "preonly"  # "tao_ls_type": "more-thuente"
                            }
-# vinewtonrsls
 petsc_options_alpha_snes = {
     "alpha_snes_type": "vinewtonrsls",
     "alpha_snes_stol": 1e-5,
@@ -231,8 +229,7 @@ class AlternateMinimizationSolver(object):
         alt_min_data = {
             "iterations": [],
             "alpha_error": [],
-            "alpha_max": [],
-        }
+            "alpha_max": []}
 
         while criterion > par["tol"] and it < par["max_it"]:
             it = it + 1
@@ -249,8 +246,6 @@ class AlternateMinimizationSolver(object):
                 (alpha_it, alpha_reason) = self.solver_alpha.solve(
                     self.problem_alpha,
                     self.alpha.vector(),
-                    # self.problem_alpha.lb.vector(),
-                    # self.problem_alpha.ub.vector()
                     )
                 del self.solver_alpha
 
@@ -263,7 +258,6 @@ class AlternateMinimizationSolver(object):
                 )
                 irrev = alpha.vector()-self.problem_alpha.lb.vector()
                 if min(irrev[:]) >=0:
-                    # ColorPrint.print_pass('Pointwise irrev {}'.format(' OK'))
                     ColorPrint.print_pass('')
                 else: ColorPrint.print_warn('Pointwise irrev {}'.format(' NOK'))
 
@@ -290,3 +284,7 @@ class AlternateMinimizationSolver(object):
             alpha_old.assign(alpha)
 
         return (take_last(alt_min_data), alt_min_data)
+
+
+
+

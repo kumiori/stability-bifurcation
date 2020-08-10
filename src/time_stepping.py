@@ -127,32 +127,21 @@ class TimeStepping(object):
             self.load_param.t = load
             alpha_old.assign(alpha)
             print('')
-            print('')
-            print('')
             ColorPrint.print_warn('Solving load = {:.2f}'.format(load))
             self.time_data_i, am_iter = solver.solve()
 
             diff.vector()[:] = alpha.vector() - alpha_old.vector()
-            # assert all(alpha.vector()[:]>=solver.problem_alpha.lb.vector()[:])
             try:
                 assert all(alpha.vector()[:]>=alpha_old.vector()[:])
             except AssertionError:
                 print('check alpha.vector()[:]>=alpha_old.vector()')
-                #import pdb; pdb.set_trace()
 
             try:
                 assert all(solver.problem_alpha.lb.vector()[:]==alpha_old.vector()[:])
             except AssertionError:
                 print('check all(solver.problem_alpha.lb.vector()[:]==alpha_old.vector()[:])')
-                #import pdb; pdb.set_trace()
-
-            ColorPrint.print_pass('||α-α_old||_L2={}'.format(diff.vector().norm('l2')))
-            ColorPrint.print_pass('||α-α_old||_H1={}'.format(norm(diff, 'H1') ))
-            ColorPrint.print_pass('...')
-            ColorPrint.print_pass('||α||_H1={}'.format(norm(alpha, 'H1') ))
 
             if bool(strtobool(str(stability.parameters['checkstability']))):
-                # alpha.vector().copy()
                 (stable, negev) = stability.solve(solver.problem_alpha.lb)
                 ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' not '))
                 if hasattr(stability, 'eigs') and len(stability.eigs)>0 and min(stability.eigs)<0:
@@ -183,8 +172,6 @@ class TimeStepping(object):
                             mode = steepest
                         elif isinstance(self.parameters['perturbation_choice'], int):
                             mode = self.parameters['perturbation_choice']
-                        # stability.eigendata[adm_pert[mode]]
-                        # import pdb; pdb.set_trace()
 
                         perturbation_v = stability.eigendata[mode]['v_n']
                         perturbation_beta = stability.eigendata[mode]['beta_n']
@@ -196,8 +183,7 @@ class TimeStepping(object):
                         ColorPrint.print_pass('...... chosen mode {} vs. steepest {} Delta E={:.5%} (estimated)'.format(mode, steepest, stability.eigendata[mode]['en_diff']/stability.eigendata[steepest]['en_diff']))
                         ColorPrint.print_pass('...... steepest descent mode {} Delta E={:.5%} (estimated)'.format(steepest,stability.eigendata[steepest]['en_diff']))
 
-                        # perturb
-                        # compile_cont_data_pre()
+                        # perturb current state
                         self.compile_continuation_data(load, iteration, perturbed=False)
                         solver.alpha.copy(deepcopy=True)
 
@@ -205,17 +191,9 @@ class TimeStepping(object):
                         uval = u.vector()[:]     + hstar * perturbation_v.vector()[:]
                         aval = alpha.vector()[:] + hstar * perturbation_beta.vector()[:]
 
-# <<<<<<< HEAD
                         alpha.vector().vec().ghostUpdate()
                         u.vector().vec().ghostUpdate()
 
-# =======
-                        # u.vector()[:] = uval
-                        # alpha.vector()[:] = aval
-                        print(norm(alpha))
-                        # alpha.vector().vec().ghostUpdate()
-                        # u.vector().vec().ghostUpdate()
-# >>>>>>>
                         self.time_data_i, am_iter = solver.solve()
 
                         if self.file_con is not None:
@@ -233,8 +211,6 @@ class TimeStepping(object):
                         if np.mod(it, self.parameters['savelag']) == 0:
                             continuation_data_pd=pd.DataFrame(continuation_data)
                             continuation_data_pd.to_json(os.path.join(outdir + "/continuation_data.json"))
-        
-                        # import pdb; pdb.set_trace()
 
                         if self.continuation_data_i["total_energy_diff"]/self.continuation_data_i["total_energy"] < - self.stability.parameters['cont_rtol']:
                             ColorPrint.print_pass('Updating irreversibility')
@@ -251,8 +227,6 @@ class TimeStepping(object):
                                 f.write(perturbation_v, iteration)
 
                         iteration += 1
-
-            # import pdb; pdb.set_trace()
 
             time_data_pd = self.compile_time_data(load)
 

@@ -264,16 +264,9 @@ class StabilitySolver(object):
     def normalise_eigen(self, v, beta, mode='none'):
         if mode=='none':
             return
-        # if mode=='solution':
-        #     coef1 = v.vector().norm('l2')/self.u.vector().norm('l2') \
-        #          if self.u.vector().norm('l2')>0. else v.vector().norm('l2')
-        #     coef2 = beta.vector().norm('l2')/self.alpha.vector().norm('l2') \
-        #          if self.alpha.vector().norm('l2')>0. else beta.vector().norm('l2')
         elif mode=='one':
-            # coef1 = v.vector().norm('l2')
             coef = beta.vector().norm('l2')
         elif mode=='max':
-            # coef1 = v.vector().norm('l2')
             coef = max(abs(beta.vector()[:]))
 
         vval = v.vector()[:]/coef
@@ -433,14 +426,7 @@ class StabilitySolver(object):
             self.bc_dofs  = reduce(lambda x, y: x.union(y), bc_keys_glob)
         else:
             self.bc_dofs  = set()
-        if debug:
-            print(rank, ': ', 'ownership: ', self.ownership_range)
-            print(rank, ': ', 'bc_keys loc ', bc_keys)
-            print(rank, ': ', 'bc_dofs glob: ', bc_keys_glob)
-            print(rank, ': ', 'bc_dofs: ', self.bc_dofs)
-            print(rank, ': ', 'len bc_dofs: ', len(self.bc_dofs))
-            # Xz = self.Z.tabulate_dof_coordinates()
-            # print(rank, ': bc dof coords', [list(Xz[dof]) for dof in list(sorted(self.bc_dofs))])
+
         self.bcs_Z = bcs_Z
         return self.bc_dofs
 
@@ -558,7 +544,7 @@ class StabilitySolver(object):
         return ret
 
     def solve(self, alpha_old):
-        debug = True
+        debug = False
         self.alpha_old = alpha_old
         postfix = 'seq' if size == 1 else 'mpi'
 
