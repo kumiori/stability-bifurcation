@@ -1,7 +1,7 @@
 import sys
 sys.path.append("../src/")
 from utils import ColorPrint, get_versions
-from damage_elasticity_model import DamageElasticityModel, UnilateralDamageElasticityModel
+from damage_elasticity_model import DamageElasticityModel
 import solvers
 import matplotlib.pyplot as plt
 import matplotlib
@@ -76,7 +76,6 @@ petsc_options_alpha_tao = {"tao_type": "gpcg",
                            "tao_ls_stepmax": 1e6,  #
                            "pc_type": "bjacobi",
                            "tao_monitor": "",  # "tao_ls_type": "more-thuente"
-                           # "ksp_type": "preonly"  # "tao_ls_type": "more-thuente"
                            }
 
 petsc_options_u = {

@@ -5,27 +5,6 @@ import os
 from dolfin import MPI
 import numpy as np
 
-def plotMatrix(J, outdir='data', name='matrix'):
-    c = J.size(1)
-    r = J.size(0)
-    m = np.inf
-    M = -np.inf
-    data  = [ [0] * c for i in range(r) ]
-    for rr in range(J.size(0)):
-        m = min(J.getrow(rr)[1]) if min(J.getrow(rr)[1]) < m else m
-        M = max(J.getrow(rr)[1]) if max(J.getrow(rr)[1]) > M else M
-        for cc in J.getrow(rr)[0]:
-            idx = np.where(J.getrow(rr)[0]==cc)[0][0]
-            data[rr][cc]=J.getrow(rr)[1][idx]
-    fig = plt.figure()
-    ax = fig.add_subplot(1,1,1)
-    ax.set_aspect('equal')
-    plt.imshow(data, interpolation='nearest', cmap=plt.cm.RdGy,
-        vmin=-max(abs(m), abs(M)), vmax=max(abs(m), abs(M)))
-    plt.colorbar()
-    plt.savefig(os.path.join(outdir, name))
-    pass    
-
 def plot_global_data(time_data_pd, load, outdir):
     if MPI.size(MPI.comm_world):
         plt.figure()
