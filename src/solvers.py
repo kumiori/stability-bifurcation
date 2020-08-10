@@ -185,7 +185,7 @@ class AlternateMinimizationSolver(object):
         pc = ksp.getPC()
         pc.setType("lu")
 
-        # Namespace mismatch bw petsc4py 3.7 and 3.9.
+        # Namespace mismatch between petsc4py 3.7 and 3.9.
         if hasattr(pc, 'setFactorSolverType'):
             pc.setFactorSolverType("mumps")
         elif hasattr(pc, 'setFactorSolverPackage'):
@@ -203,7 +203,7 @@ class AlternateMinimizationSolver(object):
         for option, value in self.parameters["solver_alpha_tao"].items():
             PETScOptions.set(option, value)
             # PETScOptions.set('help', 1)
-            print('settiing {} {}'.format(option, value))
+            print('setting {} {}'.format(option, value))
         self.solver_alpha = solver
 
     def update(self):

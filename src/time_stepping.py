@@ -10,7 +10,7 @@ import json
 from distutils.util import strtobool
 
 class TimeStepping(object):
-    """docstring for TimeStepping"""
+    """This class performs the incremental time stepping to solve the evolution problem"""
     def __init__(self,
                 model,
                 solver,
