@@ -1,6 +1,7 @@
 import sys
 sys.path.append("../src/")
-from utils import ColorPrint, get_versions
+from utils import ColorPrint, get_versions, check_bool
+from linsearch import LineSearch
 from damage_elasticity_model import DamageElasticityModel
 import solvers
 import matplotlib.pyplot as plt
@@ -370,21 +371,97 @@ def traction_test(
             self.spacetime.to_json(os.path.join(outdir + "/spacetime.json"))
             pass
 
-    evo = TractionTS(model, solver, stability, ut, [file_out, file_con, file_eig], 
-                parameters=parameters['time_stepping'])
+    # evo = TractionTS(model, solver, stability, ut, [file_out, file_con, file_eig], 
+    #             parameters=parameters['time_stepping'])
 
-    time_data_pd = evo.run()
+    # time_data_pd = evo.run()
 
-    if size == 1:
-        plt.figure()
-        dolfin.plot(alpha)
-        plt.savefig(os.path.join(outdir, "alpha.png"))
-        plt.figure()
-        dolfin.plot(u, mode="displacement")
-        plt.savefig(os.path.join(outdir, "u.png"))
-        plt.close('all')
+    time_data = []
 
+    linesearch = LineSearch(energy, [u, alpha])
+    alpha_old = dolfin.Function(alpha.function_space())
+
+    for it, load in enumerate(load_steps):
+        ut.t = load
+        alpha_old.assign(alpha)
+
+        ColorPrint.print_warn('Solving load t = {:.2f}'.format(load))
+
+        # First order stability conditions
+        (time_data_i, am_iter) = solver.solve()
+
+        # Second order stability conditions
+        (stable, negev) = stability.solve(solver.problem_alpha.lb)
+        ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
+
+        if stable:
+            solver.update()
+
+        else:
+            iteration = 1
+            while stable == False:
+                # linesearch
+                # 
+                perturbation_v    = stability.perturbation_v
+                perturbation_beta = stability.perturbation_beta
+
+                h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
+                    [u, alpha, alpha_old],
+                    perturbation_v, perturbation_beta)
+                # import pdb; pdb.set_trace()
+
+                if h_opt > 0:
+                    # admissible
+                    uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
+                    aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
+
+                    u.vector()[:] = uval
+                    alpha.vector()[:] = aval
+
+                    u.vector().vec().ghostUpdate()
+                    alpha.vector().vec().ghostUpdate()
+
+                    (time_data_i, am_iter) = solver.solve()
+                    (stable, negev) = stability.solve(alpha_old)
+                    ColorPrint.print_pass('    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
+                    iteration += 1
+
+            else:
+                # warn
+                ColorPrint.print_warn('Zero increment, stuck in the matrix')
+                ColorPrint.print_warn('Continuing load program')
+                break
+
+
+        time_data_i["load"] = load
+        time_data_i["elastic_energy"] = dolfin.assemble(
+            model.elastic_energy_density(model.eps(u), alpha)*dx)
+        time_data_i["dissipated_energy"] = dolfin.assemble(
+            model.damage_dissipation_density(alpha)*dx)
+        ColorPrint.print_pass(
+            "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
+                time_data_i["load"],
+                time_data_i["iterations"],
+                time_data_i["alpha_error"]))
+        time_data.append(time_data_i)
+        time_data_pd = pd.DataFrame(time_data)
+        if np.mod(it, savelag) == 0:
+            with file_out as f:
+                f.write(alpha, load)
+                f.write(u, load)
+            time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
+
+    from post_processing import plot_global_data
     print(time_data_pd)
+
+    # if size == 1:
+    #     plt.figure()
+    #     dolfin.plot(alpha)
+    #     plt.savefig(os.path.join(outdir, "alpha.png"))
+    #     plt.figure()
+    #     dolfin.plot(u, mode="displacement")
+    #     plt.savefig(os.path.join(outdir, "u.png"))
+    #     plt.close('all')
 
     return time_data_pd
 
