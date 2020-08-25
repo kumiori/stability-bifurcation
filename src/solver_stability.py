@@ -497,10 +497,8 @@ class StabilitySolver(object):
         (neg, zero, pos) = Fm.getInertia()
         ColorPrint.print_info("#Eigenvalues of E'': (%s [neg], %s [zero], %s [pos])" % (neg, zero, pos))
         if neg:
-            ColorPrint.print_info('Unstable')
             self.stable = False
         else:
-            ColorPrint.print_info('Stable')
             self.stable = True
         return neg
 
