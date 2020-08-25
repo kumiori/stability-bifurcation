@@ -451,6 +451,9 @@ def traction_test(
 
     from post_processing import plot_global_data
     print(time_data_pd)
+    print()
+    print('Output in: '+outdir)
+
 
     # if size == 1:
     #     plt.figure()
