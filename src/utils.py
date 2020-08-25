@@ -2,6 +2,8 @@ import os
 import sys
 from dolfin import MPI
 from subprocess import check_output, CalledProcessError
+from distutils.util import strtobool
+
 # Colored printing functions for strings that use universal ANSI escape sequences.
 # fail: bold red, pass: bold green, warn: bold yellow,
 # info: bold blue, bold: bold white
@@ -38,6 +40,9 @@ def get_versions():
                          "dolfin": get_dolfin_ver(),
                          "mechanics": get_code_ver()}
     return versions
+
+def check_bool(parameter, bool_val = True):
+    return bool(strtobool(str(parameter))) == bool_val
 
 class ColorPrint:
     @staticmethod

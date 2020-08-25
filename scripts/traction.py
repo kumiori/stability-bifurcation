@@ -396,19 +396,17 @@ def traction_test(
 
         if stable:
             solver.update()
-
         else:
+            # Continuation
             iteration = 1
             while stable == False:
                 # linesearch
-                # 
                 perturbation_v    = stability.perturbation_v
                 perturbation_beta = stability.perturbation_beta
 
                 h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
                     [u, alpha, alpha_old],
                     perturbation_v, perturbation_beta)
-                # import pdb; pdb.set_trace()
 
                 if h_opt > 0:
                     # admissible
@@ -426,11 +424,11 @@ def traction_test(
                     ColorPrint.print_pass('    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
                     iteration += 1
 
-            else:
-                # warn
-                ColorPrint.print_warn('Zero increment, stuck in the matrix')
-                ColorPrint.print_warn('Continuing load program')
-                break
+                else:
+                    # warn
+                    ColorPrint.print_warn('Found zero increment, we are stuck in the matrix')
+                    ColorPrint.print_warn('Continuing load program')
+                    break
 
 
         time_data_i["load"] = load

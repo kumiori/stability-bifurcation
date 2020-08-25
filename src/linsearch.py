@@ -18,23 +18,10 @@ class LineSearch(object):
 
         self.energy = energy
 
-    def search(self, state, v_n, beta_n, m=3, mode=0):
-        # m: order of polynomial approximation
-        # mode: index of mode, for display purposes
-        debug = False
-        en0 = dolfin.assemble(self.energy)
-        u_0 = self.u_0
-        alpha_0 = self.alpha_0
-
-        u = state[0]
-        alpha = state[1]
-        alpha_old = state[2]
-
-        u_0[:] = u.vector()[:]
-        alpha_0[:] = alpha.vector()[:]
-
+    def admissible_interval(self, alpha, alpha_old, beta_n):
         one = max(1., max(alpha.vector()[:]))
-
+        self.upperbound = one
+        self.lowerbound = alpha_old
         # if hasattr(self, 'bcs') and len(self.bcs[0])>0:
         #     assert np.all([self.is_compatible(bc, v_n, homogeneous = True) for bc in self.bcs[0]]), \
         #         'displacement test field is not kinematically admissible'
@@ -62,24 +49,42 @@ class LineSearch(object):
         comm.Allreduce(hmax, hmax_glob, op=mpi4py.MPI.MIN)
         comm.Allreduce(hmin, hmin_glob, op=mpi4py.MPI.MAX)
 
-        self.hmax = float(hmax_glob)
-        self.hmin = float(hmin_glob)
+        hmax = float(hmax_glob)
+        hmin = float(hmin_glob)
 
-        if self.hmin>0:
+        if hmin>0:
             ColorPrint.print_warn('Line search troubles: found hmin>0')
-            # import pdb; pdb.set_trace()
             return 0., np.nan, (0., 0.), 0.
-        if self.hmax==0 and self.hmin==0:
+        if hmax==0 and hmin==0:
             ColorPrint.print_warn('Line search failed: found zero step size')
-            # import pdb; pdb.set_trace()
             return 0., np.nan, (0., 0.), 0.
-        if self.hmax < self.hmin:
+        if hmax < hmin:
             ColorPrint.print_warn('Line search failed: optimal h* not admissible')
-            # import pdb; pdb.set_trace()
             return 0., np.nan, (0., 0.), 0.
             # get next perturbation mode
 
+        return hmin, hmax
+
+    def search(self, state, v_n, beta_n, m=3, mode=0):
+        # m: order of polynomial approximation
+        # mode: index of mode, for display purposes
+        debug = False
+
         en = []
+        en0 = dolfin.assemble(self.energy)
+
+        u_0 = self.u_0
+        alpha_0 = self.alpha_0
+
+        u = state[0]
+        alpha = state[1]
+        alpha_old = state[2]
+
+        u_0[:] = u.vector()[:]
+        alpha_0[:] = alpha.vector()[:]
+
+        (self.hmin, self.hmax) = self.admissible_interval(alpha, alpha_old, beta_n)
+
 
         htest = np.linspace(self.hmin, self.hmax, m+1)
 
@@ -89,7 +94,7 @@ class LineSearch(object):
 
             if not np.all(aval - alpha_old.vector()[:] + dolfin.DOLFIN_EPS_LARGE >= 0.):
                 raise Exception('damage test field doesn\'t verify sharp irrev from below')
-            if not np.all(aval <= one):
+            if not np.all(aval <= self.upperbound):
                 raise Exception('damage test field doesn\'t verify irrev from above')
 
             u.vector()[:] = uval
