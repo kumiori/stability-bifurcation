@@ -187,7 +187,8 @@ def traction_test(
     print(parameters)
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir += '-{}{}'.format(signature, cmd_parameters['time_stepping']['postfix'])
+    # outdir += '-{}{}'.format(signature, cmd_parameters['time_stepping']['postfix'])
+    outdir += '-{}'.format(cmd_parameters['time_stepping']['postfix'])
     parameters['time_stepping']['outdir']=outdir
     Path(outdir).mkdir(parents=True, exist_ok=True)
     print('Outdir is: '+outdir)
@@ -243,6 +244,7 @@ def traction_test(
     bcs_alpha = []
 
     # Files for output
+    ColorPrint.print_warn('Outdir = {}'.format(outdir))
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True
     file_out.parameters["flush_output"] = True
@@ -259,7 +261,7 @@ def traction_test(
     model.ds = ds
     energy = model.total_energy_density(u, alpha)*model.dx
 
-    # Alternate minimization solver
+    # Alternate minimisation solver
     solver = solvers.AlternateMinimizationSolver(energy,
         [u, alpha], [bcs_u, bcs_alpha], parameters=parameters['alt_min'])
 
@@ -277,104 +279,6 @@ def traction_test(
         load_steps = loads
 
     stability.parameters['checkstability'] = True
-
-    class TractionTS(TimeStepping):
-        """docstring for Evolution"""
-        def __init__(self,
-                    model,
-                    solver,
-                    stability,
-                    load_param,
-                    outfiles,
-                    parameters,
-                    user_density=None):
-
-            super(TractionTS, self).__init__(model,
-                    solver,
-                    stability,
-                    load_param,
-                    outfiles,
-                    parameters,
-                    user_density)
-            self.spacetime = pd.DataFrame(columns = self.load_steps, )
-
-        def user_postprocess_stability(self, load):
-            from matplotlib.ticker import StrMethodFormatter
-            outdir = self.parameters['outdir']
-            alpha = self.solver.alpha
-            if size > 1: return
-
-            adm_pert = np.where(np.array([e['en_diff'] for e in stability.eigendata]) < 0)[0]
-
-            fig = plt.figure(figsize=(4, 1.5), dpi=180,)
-            ax = plt.gca()
-            X =alpha.function_space().tabulate_dof_coordinates()
-            xs = np.linspace(min(X[:, 0]),max(X[:, 0]), 300)
-            ax.plot(xs, [alpha(x, 0) for x in xs], label='$\\alpha$', lw=1, c='k')
-            ax.axhline(0., lw=.5, c='k', ls='-')
-            ax3 = ax.twinx()
-            ax.legend(fontsize='small')
-
-            for mode in adm_pert:
-                beta_n = stability.eigendata[adm_pert[mode]]['beta_n']
-                ax3.plot(xs, [beta_n(x, 0) for x in xs], label='$\\beta_{}$'.format(mode), ls=':')
-
-            for axi in [ax, ax3]:
-                axi.spines['top'].set_visible(False)
-                axi.spines['bottom'].set_visible(False)
-
-            ax.get_yaxis().get_major_formatter().set_useOffset(False)
-            ax.yaxis.set_major_formatter(StrMethodFormatter('{x:,.0f}')) # 2 decimal places
-            plt.xlabel('$x$')
-            ax.set_ylabel('$\\alpha$')
-            ax3.set_ylabel('$\\beta$')
-            ax.set_ylim(0., 1.)
-            ax.set_xlim(-.5, .5)
-            ax3.legend(bbox_to_anchor=(0,-.45,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=len(adm_pert), frameon=False)
-
-            fig.savefig(os.path.join(outdir, "profiles-{:.3f}.pdf".format(load)), bbox_inches="tight")
-
-        def user_postprocess_timestep(self, load, xresol = 100):
-            from matplotlib.ticker import FuncFormatter, MaxNLocator
-            if size > 1: return
-            alpha = self.solver.alpha
-            alpha.set_allow_extrapolation(True)
-            parameters = self.parameters
-            xresol = xresol
-            X =alpha.function_space().tabulate_dof_coordinates()
-            xs = np.linspace(min(X[:, 0]),max(X[:, 0]), xresol)
-
-            fig = plt.figure(figsize=(8, 6), dpi=180,)
-            alpha0 = [alpha(x, 0) for x in xs]
-
-            self.spacetime[load] = alpha0
-            self.spacetime = self.spacetime.fillna(0)
-            mat = np.matrix(self.spacetime)
-            plt.imshow(mat, cmap = 'Greys', vmin = 0., vmax = 1., aspect=.1)
-            plt.colorbar()
-
-            def format_space(x, pos):
-                return '$%1.1f$'%((-x+xresol/2)/xresol)
-
-            def format_time(t, pos):
-                return '$%1.1f$'%((t-parameters['load_min'])/parameters['nsteps']*parameters['load_max'])
-
-            ax = plt.gca()
-
-            ax.yaxis.set_major_formatter(FuncFormatter(format_space))
-            ax.xaxis.set_major_formatter(FuncFormatter(format_time))
-
-            plt.xlabel('$t$')
-            plt.ylabel('$x$')
-            fig.savefig(os.path.join(outdir, "spacetime.pdf".format(load)), bbox_inches="tight")
-
-            self.spacetime.to_json(os.path.join(outdir + "/spacetime.json"))
-            pass
-
-    # evo = TractionTS(model, solver, stability, ut, [file_out, file_con, file_eig], 
-    #             parameters=parameters['time_stepping'])
-
-    # time_data_pd = evo.run()
 
     time_data = []
 
@@ -408,7 +312,7 @@ def traction_test(
                     [u, alpha, alpha_old],
                     perturbation_v, perturbation_beta)
 
-                if h_opt > 0:
+                if h_opt != 0:
                     # admissible
                     uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
                     aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
@@ -419,6 +323,7 @@ def traction_test(
                     u.vector().vec().ghostUpdate()
                     alpha.vector().vec().ghostUpdate()
 
+                    # import pdb; pdb.set_trace()
                     (time_data_i, am_iter) = solver.solve()
                     (stable, negev) = stability.solve(alpha_old)
                     ColorPrint.print_pass('    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
@@ -430,17 +335,33 @@ def traction_test(
                     ColorPrint.print_warn('Continuing load program')
                     break
 
+        # per la clientela più esperta: eleviamo, esploriamo
+        # la passione piu compatta, esploriamo un mondo sotterraneo come lara in dr
+        # per questo me ne esco con gli stili più fuori
+        # mi ritengo esperto perché ricerco
+        # 
 
         time_data_i["load"] = load
+        time_data_i["stable"] = stable
         time_data_i["elastic_energy"] = dolfin.assemble(
             model.elastic_energy_density(model.eps(u), alpha)*dx)
         time_data_i["dissipated_energy"] = dolfin.assemble(
             model.damage_dissipation_density(alpha)*dx)
+        time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
+        time_data_i["stable"] = stability.stable
+        time_data_i["# neg ev"] = stability.negev
+        # import pdb; pdb.set_trace()
+
+        time_data_i["S(alpha)"] = dolfin.assemble(1./(model.a(alpha))*model.dx)
+        time_data_i["A(alpha)"] = dolfin.assemble((model.a(alpha))*model.dx)
+        time_data_i["avg_alpha"] = dolfin.assemble(alpha*model.dx)
+
         ColorPrint.print_pass(
             "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
                 time_data_i["load"],
                 time_data_i["iterations"],
                 time_data_i["alpha_error"]))
+
         time_data.append(time_data_i)
         time_data_pd = pd.DataFrame(time_data)
         if np.mod(it, savelag) == 0:
