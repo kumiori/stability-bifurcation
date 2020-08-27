@@ -596,8 +596,8 @@ class StabilitySolver(object):
 
         negev = self.get_inertia(self.H_reduced)
 
-        if negev > 0:
-        # if True:
+        # if negev > 0:
+        if True:
             eigs = []
         # solve full eigenvalue problem
             eigen_tol = self.parameters['eig_rtol']
@@ -669,11 +669,12 @@ class StabilitySolver(object):
                         'interval': interval, 'energy': energy})
 
             eig, u_r, u_im, err = eigen.get_eigenpair(0)
-
             self.eigs = eigs[:,0]
             self.mineig = eig.real
             self.stable = negev <= 0  # based on inertia
             self.negev = negev  # based on inertia
+            # print('*** *** *** mineig {:.2e}'.format(self.mineig))
+            self.linsearch = linsearch
 
             if eigs[0,0]<0:
                 self.perturbation_v = linsearch[0]['v_n']
@@ -683,6 +684,6 @@ class StabilitySolver(object):
                 self.eigendata = linsearch
 
             self.i +=1
-
+            print('*** mineig ', negev <= 0)
         return (self.stable, int(negev))
 
