@@ -127,7 +127,7 @@ class LineSearch(object):
             '.format(h_opt, self.hmin, self.hmax, h_opt/self.hmax))
         ColorPrint.print_info('Line search polynomial approximation =\n {}'.format(p))
         ColorPrint.print_info('h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
-        ColorPrint.print_warn('Line search estimate, relative energy variation={:.5f}%'.format((p(h_opt))/en0*100))
+        ColorPrint.print_warn('Line search estimate, relative energy variation={:.2f}%'.format((p(h_opt))/en0*100))
 
         # restore solution
         u.vector()[:] = u_0[:]
