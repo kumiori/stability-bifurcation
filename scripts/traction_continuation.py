@@ -209,6 +209,8 @@ def traction_test(
 
     geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
     mesh = mshr.generate_mesh(geom,  int(float(n * Lx / ell)))
+    meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
+    meshf << mesh
 
     left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
     right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
@@ -273,7 +275,7 @@ def traction_test(
     # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
 
     # Time iterations
-    load_steps = np.linspace(load_min, load_max, nsteps)
+    load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
 
     if loads:
         load_steps = loads
@@ -284,7 +286,13 @@ def traction_test(
 
     linesearch = LineSearch(energy, [u, alpha])
     alpha_old = dolfin.Function(alpha.function_space())
-
+    lmbda_min_prev = 0.000001
+    bifurcated = False
+    bifurcation_loads = []
+    save_current_bifurcation = False
+    bifurc_i = 0
+    alpha_bif = dolfin.Function(V_alpha)
+    alpha_bif_old = dolfin.Function(V_alpha)
     for it, load in enumerate(load_steps):
         ut.t = load
         alpha_old.assign(alpha)
@@ -297,6 +305,25 @@ def traction_test(
         # Second order stability conditions
         (stable, negev) = stability.solve(solver.problem_alpha.lb)
         ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
+
+
+        mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
+        print('lmbda min', lmbda_min_prev)
+        print('mineig', mineig)
+        Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
+
+        if (mineig + Deltav)*(lmbda_min_prev+dolfin.DOLFIN_EPS) < 0 and not bifurcated:
+            bifurcated = True
+
+            # save 3 bif modes
+            print('About to bifurcate load ', load, 'step', it)
+            bifurcation_loads.append(load)
+            print('DEBUG: decide what to do')
+            # save_current_bifurcation = True
+            bifurc_i += 1
+
+        lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
+
 
         if stable:
             solver.update()
@@ -313,6 +340,9 @@ def traction_test(
                     perturbation_v, perturbation_beta)
 
                 if h_opt != 0:
+                    save_current_bifurcation = True
+                    alpha_bif.assign(alpha)
+                    alpha_bif_old.assign(alpha_old)
                     # admissible
                     uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
                     aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
@@ -335,11 +365,8 @@ def traction_test(
                     ColorPrint.print_warn('Continuing load program')
                     break
 
-        # per la clientela più esperta: eleviamo, esploriamo
-        # la passione piu compatta, esploriamo un mondo sotterraneo come lara in dr
-        # per questo me ne esco con gli stili più fuori
-        # mi ritengo esperto perché ricerco
-        # 
+            solver.update()
+            # stable == True    
 
         time_data_i["load"] = load
         time_data_i["stable"] = stable
@@ -364,10 +391,47 @@ def traction_test(
 
         time_data.append(time_data_i)
         time_data_pd = pd.DataFrame(time_data)
+
         if np.mod(it, savelag) == 0:
             with file_out as f:
                 f.write(alpha, load)
                 f.write(u, load)
+            with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
+                f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
+                print('DEBUG: written step ', it)
+
+        if save_current_bifurcation:
+            # modes = np.where(stability.eigs < 0)[0]
+            time_data_i['h_opt'] = h_opt
+            time_data_i['max_h'] = hmax
+            time_data_i['min_h'] = hmin
+            with dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf")) as file:
+                # leneigs = len(modes)
+                # maxmodes = min(3, leneigs)
+                beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
+                print('DEBUG: irrev ', alpha.vector()-alpha_old.vector())
+                file.write_checkpoint(beta0v, 'beta0', 0, append = True)
+                file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
+                file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
+                file.write_checkpoint(alpha, 'alpha', 0, append=True)
+
+                np.save(os.path.join(outdir, 'energy_perturbations'), energy_perturbations, allow_pickle=True, fix_imports=True)
+                # import pdb; pdb.set_trace()
+
+                # maxmodes = 2
+                # for n in range(maxmodes):
+                #     mode = dolfin.project(linsearch[n]['beta_n'], V_alpha)
+                #     modename = 'beta-%d'%n
+                #     print(modename)
+                #     file.write_checkpoint(mode, modename, 0, append=True)
+                #     import pdb; pdb.set_trace()
+
+        # if np.mod(it, 10) == 0:
+        #     alphatest = dolfin.Function(V_alpha)
+        #     with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
+        #         f.read_checkpoint(alphatest, "alpha-{}".format(it), 0)
+        #         print('DEBUG: read step ', it)
+
             time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
     from post_processing import plot_global_data

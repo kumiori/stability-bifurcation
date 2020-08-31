@@ -122,7 +122,7 @@ def traction_test(
 	load_min=0,
 	load_max=2,
 	loads=None,
-	nsteps=20,
+	nsteps=30,
 	Lx=1,
 	Ly=0.1,
 	outdir="outdir",
@@ -131,7 +131,8 @@ def traction_test(
 	sigma_D0=1.,
 	continuation=False,
 	checkstability=True,
-	configString=''
+	configString='',
+	breakifunstable=False,
 ):
 	# constants
 	ell = ell
@@ -151,6 +152,7 @@ def traction_test(
 	n = n
 	continuation = continuation
 	config = json.loads(configString) if configString != '' else ''
+	print('DEBUG: nss', nsteps)
 
 	cmd_parameters =  {
 	'material': {
@@ -164,7 +166,8 @@ def traction_test(
 		'n': n,
 		},
 	'experiment': {
-		'signature': ''
+		'signature': '',
+		'break-if-unstable': breakifunstable
 		},
 	'stability': {
 		'checkstability' : checkstability,
@@ -285,7 +288,7 @@ def traction_test(
 	# stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
 
 	# Time iterations
-	load_steps = np.linspace(load_min, load_max, nsteps)
+	load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
 	dt = (load_max-load_min)/nsteps
 
 	if loads:
@@ -318,6 +321,8 @@ def traction_test(
 	# alpha = dolfin.Function(V_alpha)
 	# with dolfin.XDMFFile(mesh.mpi_comm(), "test.xdmf") as file:
 	# 	file.read_checkpoint(alpha, "alpha")
+
+	parameters['experiment']['break-if-unstable'] = True
 
 
 
@@ -395,9 +400,18 @@ def traction_test(
 				f.write(alpha, load)
 				f.write(u, load)
 			with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
-				# f.write_checkpoint(alpha, "alpha", load, append=False)
-				f.write_checkpoint(alpha, "alpha", load)
-			time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
+				f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
+				print('DEBUG: written step ', it)
+
+		if np.mod(it, 10) == 0:
+			alphatest = dolfin.Function(V_alpha)
+			with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
+				f.read_checkpoint(alphatest, "alpha-{}".format(it), 0)
+
+		time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
+
+		if stable == False and parameters['experiment']['break-if-unstable'] == True: break
+
 
 	from post_processing import plot_global_data
 	print(time_data_pd)
@@ -442,6 +456,7 @@ if __name__ == "__main__":
 	parser.add_argument("--savelag", type=int, default=1)
 	parser.add_argument("--parameters", type=str, default=None)
 	parser.add_argument("--print", type=bool, default=False)
+	parser.add_argument("--breakifunstable", type=bool, default=False)
 	parser.add_argument("--continuation", type=bool, default=False)
 
 	args, unknown = parser.parse_known_args()
@@ -483,7 +498,7 @@ if __name__ == "__main__":
 		config = config.replace('True', '"True"')
 		config = config.replace('"load"', '"time_stepping"')
 		config = config.replace('"experiment"', '"stability"')
-		print(config)
+		print('passing config string')
 		traction_test(outdir=outdir, configString=config)
 	else:
 		traction_test(
@@ -498,5 +513,6 @@ if __name__ == "__main__":
 			outdir=outdir,
 			savelag=args.savelag,
 			continuation=args.continuation,
-			configString=config
+			configString=config,
+			breakifunstable=args.breakifunstable,
 		)
