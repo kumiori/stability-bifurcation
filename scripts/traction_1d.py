@@ -253,7 +253,6 @@ def traction_test(
     file_eig.parameters["functions_share_mesh"] = True
     file_eig.parameters["flush_output"] = True
 
-    import pdb; pdb.set_trace()
     # Problem definition
     model = DamageElasticityModel1D(state, E0, ell, sigma_D0)
     model.dx = dx
@@ -303,6 +302,7 @@ def traction_test(
         (stable, negev) = stability.solve(solver.problem_alpha.lb)
         ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
 
+        import pdb; pdb.set_trace()
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
         print('lmbda min', lmbda_min_prev)
@@ -350,7 +350,6 @@ def traction_test(
                     u.vector().vec().ghostUpdate()
                     alpha.vector().vec().ghostUpdate()
 
-                    # import pdb; pdb.set_trace()
                     (time_data_i, am_iter) = solver.solve()
                     (stable, negev) = stability.solve(alpha_old)
                     ColorPrint.print_pass('    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
@@ -368,7 +367,7 @@ def traction_test(
         time_data_i["load"] = load
         time_data_i["stable"] = stable
         time_data_i["elastic_energy"] = dolfin.assemble(
-            model.elastic_energy_density(model.eps(u), alpha)*dx)
+            model.elastic_energy_density(u.dx(), alpha)*dx)
         time_data_i["dissipated_energy"] = dolfin.assemble(
             model.damage_dissipation_density(alpha)*dx)
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
