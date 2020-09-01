@@ -104,6 +104,92 @@ class DamageElasticityModel(object):
 
         return -(1./2.*(dda - da**2./a(alpha))*inner(sigma(u), eps(u)) +1./2.*ddw)*beta**2.
 
+class DamageElasticityModel1D(DamageElasticityModel):
+    def __init__(
+        self,
+        state,
+        E0,
+        ell,
+        sigma_D0,
+        k_ell=Constant(1.0e-8),
+        user_functional=None,
+    ):
+
+        self.u = state[0]
+        self.alpha = state[1]
+        self.E0 = E0
+        self.ell = ell
+        self.sigma_D0 = sigma_D0
+        self.k_ell = k_ell
+        self.mu_0 = self.mu(0)
+        assert state[0].function_space().ufl_element().value_size() == 1
+        self.dim = state[0].function_space().ufl_element().value_size()
+        self.user_functional = user_functional
+
+    def mu(self, alpha):
+        # plane stress
+        return self.E0/2.*self.a(alpha)
+        # return self.E0*self.a(alpha) / (2.0 * (1.0 + self.nu))
+
+    def w(self, alpha):
+        """Dissipated energy function as a function of the damage """
+        return alpha * self.sigma_D0 ** 2 / self.E0
+
+        ## Sigma_D0 = sigma_c Material's critical stress
+        ## for AT1 model sigma_c = sqrt(3GcE/8l) --> sigma_c **2/E = 3Gc/8l
+
+    def a(self, alpha):
+        """Stiffness modulation as a function of the damage """
+        return (1 - alpha) ** 2 + self.k_ell
+
+    def elastic_energy_density(self, eps, alpha):
+        mu = self.mu(alpha)
+        return  mu * eps**2.
+
+    def damage_dissipation_density(self, alpha):
+        w_1 = self.w(1)
+        return self.w(alpha) + w_1 * self.ell ** 2 * alpha.dx()**2
+
+    def total_energy_density(self, u, alpha):
+        # + self.user_energy()
+        energy = self.elastic_energy_density(u.dx(), alpha) + self.damage_dissipation_density(alpha)
+        if self.user_functional:
+           energy += self.user_functional
+        return energy
+
+    def user_energy(self, **args):
+        return self.user_functional
+
+    def stress(self, eps, alpha):
+        eps_ = variable(eps)
+        sigma = diff(self.elastic_energy_density(eps_, alpha), eps_)
+        return sigma
+
+    def sigma(self, u):
+        mu = self.mu(0)
+        return 2*mu * u.dx()
+
+    # # def rP(self, u, alpha, v, beta):
+    # #     w_1 = self.w(1)
+    # #     a = self.a
+    # #     sigma = self.sigma
+    # #     eps = self.eps
+    # #     return inner(sqrt(a(alpha))*sigma(v) + diff(a(alpha), alpha)/sqrt(a(alpha))*sigma(u)*beta,
+    # #                 sqrt(a(alpha))*eps(v) + diff(a(alpha), alpha)/sqrt(a(alpha))*eps(u)*beta) + \
+    # #                 2*w_1*self.ell ** 2 * dot(grad(beta), grad(beta))
+
+    # # def rN(self, u, alpha, beta):
+    # #     a = self.a
+    # #     w = self.w
+    # #     sigma = self.sigma
+    # #     eps = self.eps
+    # #     da = diff(a(alpha), alpha)
+    # #     dda = diff(diff(a(alpha), alpha), alpha)
+    # #     ddw = diff(diff(w(alpha), alpha), alpha)
+
+    #     return -(1./2.*(dda - da**2./a(alpha))*inner(sigma(u), eps(u)) +1./2.*ddw)*beta**2.
+
+
 class DamagePrestrainedElasticityModel(DamageElasticityModel):
     def __init__(
         self,

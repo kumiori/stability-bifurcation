@@ -394,7 +394,14 @@ class StabilitySolver(object):
         # Construct homogeneous BCs
         bcs_Z = []
         zero = dolfin.Constant(0.0)
-        zeros = dolfin.Constant([0.0,]*self.u.geometric_dimension())
+
+        if self.u.geometric_dimension()>1:
+            # vector
+            zeros = dolfin.Constant([0.0,]*self.u.geometric_dimension())
+        elif self.u.geometric_dimension()==1:
+            # scalar
+            zeros = dolfin.Constant(0.)
+
         for bc in self.bcs[0]:
             if hasattr(bc, 'sub_domain'):
                 new_bc = dolfin.DirichletBC(self.Z.sub(0), zeros, bc.sub_domain, bc.method())
