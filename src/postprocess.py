@@ -64,8 +64,8 @@ def plot_spectrum(params, data, tc, ax=None):
 	ax2.set_ylabel('max $\\alpha$')
 	ax2.set_ylim(0, 1)
 	ax = plt.gca()
-	ax.axvline(t_stab(ell), c='k', ls='dashed', lw=2, label='$t^{cr}_s$')
-	ax.axvline(t_bif(ell), c='k', ls='-', lw=2, label=r'$t^{cr}_b$')
+	ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
+	ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
 	ax.set_xlim(params['time_stepping']['load_min'], params['time_stepping']['load_max'])
 	plt.legend(loc="upper left")
 
@@ -88,19 +88,21 @@ def plot_sigmaeps(params, dataf, tc):
 	plt.xlabel('$$t$$')
 
 	plt.plot(dataf['load'].values,
-		dataf['load'].values*pow(dataf['S(alpha)'].values, -1), label='$$\sigma$$')
+		dataf['load'].values*pow(dataf['S(alpha)'].values, -1), marker='o', label='$$\sigma$$')
 	
 	stable = dataf['stable'].values
 
-	plt.scatter(dataf['load'].values[stable], -.1-.3-1+dataf['stable'].values[stable], c='k', marker='s', s=1000)
-	plt.scatter(dataf['load'].values[~stable], -.1-dataf['stable'].values[~stable], c='red', marker='s', s=1000)
 
 	ax = plt.gca()
 	ax.axvline(tc, c='k', lw=.5, label='$t^{cr}$')
-	ax.axvline(t_stab(ell), c='k', ls='dashed', lw=2, label='$t^{cr}_s$')
-	ax.axvline(t_bif(ell), c='k', ls='-', lw=2, label=r'$t^{cr}_b$')
+	ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
+	ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
 	ax.set_xlim(params['time_stepping']['load_min'], params['time_stepping']['load_max'])
+	plt.scatter(dataf['load'].values[stable], -.8+dataf['stable'].values[stable], c='k', marker='s', s=70, label='stable')
+	plt.scatter(dataf['load'].values[~stable], +.2+dataf['stable'].values[~stable], c='red', marker='s', s=70, label='unstable')
+
 	plt.legend(loc="upper left")
+
 	return fig, ax
 
 def plot_energy(params, dataf, tc):
@@ -115,13 +117,13 @@ def plot_energy(params, dataf, tc):
 	plt.xlabel('$$t$$')
 
 	plt.plot(dataf['load'].values,
-		dataf['dissipated_energy'].values, label='dissipated')
+		dataf['dissipated_energy'].values, marker='o', label='dissipated')
 
 	plt.plot(dataf['load'].values,
-		dataf['elastic_energy'].values, label='elastic')
+		dataf['elastic_energy'].values, marker='o', lw=2, label='elastic')
 
 	plt.plot(dataf['load'].values,
-		(dataf['elastic_energy'].values+dataf['dissipated_energy'].values), label='total')
+		(dataf['elastic_energy'].values+dataf['dissipated_energy'].values), marker='o', label='total')
 	ax = plt.gca()
 	ax.axvline(tc, c='k', lw=.5, label='$t^{cr}$')
 	print(t_stab(ell))

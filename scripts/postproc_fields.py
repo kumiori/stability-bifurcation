@@ -50,8 +50,9 @@ def load_data(rootdir):
 # outdir = 'test-'
 
 # rootdir = '/Users/kumiori/Documents/WIP/paper_stability_code/output/traction-047c3f35cb3e998158cc243504ffd36a'
-rootdir = '/Users/kumiori/Documents/WIP/paper_stability_code/output/traction-9c1720ed3a8527baf2c8825d8a7c6ae6'
-rootdir = '/Users/kumiori/Documents/WIP/paper_stability_code/output/traction-5aaa21494f72a6ffe6415f97808bc653'
+# rootdir = '/Users/kumiori/Documents/WIP/paper_stability_code/output/traction-9c1720ed3a8527baf2c8825d8a7c6ae6'
+rootdir = '/Users/kumiori/Documents/WIP/paper_stability_code/output/traction-longbar-1f11d5cf5b3ae17a5062991bf39faeb5'
+
 params, data, signature = load_data(rootdir)
 
 mesh = dolfin.Mesh(comm, os.path.join(rootdir, 'mesh.xml'))
@@ -77,32 +78,40 @@ Ly = params['geometry']['Ly']
 xs = np.linspace(-Lx/2, Lx/2, 100)
 h0 = 0.
 
-with dolfin.XDMFFile(os.path.join(rootdir, "bifurcation_postproc.xdmf")) as file:
-	file.read_checkpoint(beta0, 'beta0')
-	file.read_checkpoint(alpha, 'alpha')
-	file.read_checkpoint(alpha_old, 'alpha-old')
-	file.read_checkpoint(alpha_bif, 'alpha-bif')
+try:
+	with dolfin.XDMFFile(os.path.join(rootdir, "bifurcation_postproc.xdmf")) as file:
+		file.read_checkpoint(beta0, 'beta0')
+		file.read_checkpoint(alpha, 'alpha')
+		file.read_checkpoint(alpha_old, 'alpha-old')
+		file.read_checkpoint(alpha_bif, 'alpha-bif')
+
+	for field, name in zip(fields, ['beta0', 'alpha_old', 'alpha_bif', 'alpha']):
+		fieldv = [field(x, h0) for x in xs]
+		np.save(os.path.join(rootdir, name), fieldv,
+			allow_pickle=True, fix_imports=True)
+
+	fields = [beta0, alpha_old, alpha_bif, alpha]
+		# for n in range(maxmodes):
+		# 	modename = 'beta-%d'%n
+		# 	print(modename)
+		# 	file.read_checkpoint(betan, modename)
+
+		# 	perturbations.append(betan)
+		# 	betanv = [betan(x, h0) for x in xs]
+		# 	np.save(os.path.join(rootdir, "beta-{}".format(n)), betanv,
+		# 		allow_pickle=True, fix_imports=True)
 
 
-fields = [beta0, alpha_old, alpha_bif, alpha]
+except:
+	print('no bifurcation data found')
+# else:
+# 	pass
+# finally:
+# 	pass
 
-for field, name in zip(fields, ['beta0', 'alpha_old', 'alpha_bif', 'alpha']):
-	fieldv = [field(x, h0) for x in xs]
-	np.save(os.path.join(rootdir, name), fieldv,
-		allow_pickle=True, fix_imports=True)
 
-	# for n in range(maxmodes):
-	# 	modename = 'beta-%d'%n
-	# 	print(modename)
-	# 	file.read_checkpoint(betan, modename)
 
-	# 	perturbations.append(betan)
-	# 	betanv = [betan(x, h0) for x in xs]
-	# 	np.save(os.path.join(rootdir, "beta-{}".format(n)), betanv,
-	# 		allow_pickle=True, fix_imports=True)
-
-nmodes = len(perturbations)
-import pdb; pdb.set_trace()
+# nmodes = len(perturbations)
 
 
 alpha = dolfin.Function(V_alpha)
@@ -112,10 +121,10 @@ for (step, load) in enumerate(load_steps):
 		with dolfin.XDMFFile(os.path.join(rootdir, "output_postproc.xdmf")) as file:
 			print('reading step', step)
 			file.read_checkpoint(alpha, 'alpha-{}'.format(step), 0)
-			dolfin.plot(alpha, vmin=0, vmax=1)
-			plt.savefig('_alpha_{}.pdf'.format(step))
+			# dolfin.plot(alpha, vmin=0, vmax=1)
+			# plt.savefig('_alpha_{}.pdf'.format(step))
 			alphav = [alpha(x, h0) for x in xs]
-			print(alphav)
+			# print(alphav)
 			alphas.append(alphav)
 
 np.save(os.path.join(rootdir, "alpha"), alphas,
@@ -125,6 +134,7 @@ data = np.load(os.path.join(rootdir, "alpha.npy".format(0)))
 
 # ------------
 
+import pdb; pdb.set_trace()
 
 z = np.polyfit(htest, en, m)
 p = np.poly1d(z)

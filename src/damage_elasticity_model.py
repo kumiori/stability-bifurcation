@@ -29,10 +29,14 @@ class DamageElasticityModel(object):
         self.user_functional = user_functional
 
     def lmbda3D(self, alpha):
-        return self.E0*self.a(alpha) * self.nu / ((1.0 + self.nu) * (1.0 - 2.0 * self.nu))
+        # plane stress
+        return self.E0*self.a(alpha) * self.nu /(1. - self.nu)**2.  
+        # return self.E0*self.a(alpha) * self.nu / ((1.0 + self.nu) * (1.0 - 2.0 * self.nu))
 
     def mu3D(self, alpha):
-        return self.E0*self.a(alpha) / (2.0 * (1.0 + self.nu))
+        # plane stress
+        return self.E0/2.*self.a(alpha) / (1.0 + self.nu)
+        # return self.E0*self.a(alpha) / (2.0 * (1.0 + self.nu))
 
     def eps(self, u):
         """Strain tensor as a function of the displacement"""

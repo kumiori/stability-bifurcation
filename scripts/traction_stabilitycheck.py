@@ -132,7 +132,7 @@ def traction_test(
 	continuation=False,
 	checkstability=True,
 	configString='',
-	breakifunstable=False,
+	breakifunstable = False,
 ):
 	# constants
 	ell = ell
@@ -153,7 +153,7 @@ def traction_test(
 	continuation = continuation
 	config = json.loads(configString) if configString != '' else ''
 	print('DEBUG: nss', nsteps)
-
+	print('DEBUG: breakifunstable',breakifunstable)
 	cmd_parameters =  {
 	'material': {
 		"ell": ell.values()[0],
@@ -322,10 +322,6 @@ def traction_test(
 	# with dolfin.XDMFFile(mesh.mpi_comm(), "test.xdmf") as file:
 	# 	file.read_checkpoint(alpha, "alpha")
 
-	parameters['experiment']['break-if-unstable'] = True
-
-
-
 	bifurcation_loads = []
 	for it, load in enumerate(load_steps):
 		ut.t = load
@@ -410,10 +406,12 @@ def traction_test(
 
 		time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
-		if stable == False and parameters['experiment']['break-if-unstable'] == True: break
+		# if not stable and parameters['experiment']['break-if-unstable']: 
+			# print('point, break')
+			# print(parameters['experiment']['break-if-unstable'])
+			# break
 
 
-	from post_processing import plot_global_data
 	print(time_data_pd)
 	print(time_data_pd['stable'])
 	print('Output in: '+outdir)
@@ -458,6 +456,7 @@ if __name__ == "__main__":
 	parser.add_argument("--print", type=bool, default=False)
 	parser.add_argument("--breakifunstable", type=bool, default=False)
 	parser.add_argument("--continuation", type=bool, default=False)
+	parser.add_argument("--test", type=bool, default=False)
 
 	args, unknown = parser.parse_known_args()
 	if len(unknown):
@@ -480,6 +479,8 @@ if __name__ == "__main__":
 				for c,u in v.items():
 					cmd = cmd + '--{} {} '.format(c, str(u))
 		print(cmd)
+	if args.test:
+		outdir = '../output/traction/test'
 
 	config = '{}'
 	if args.config:
