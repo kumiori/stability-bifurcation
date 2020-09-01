@@ -678,9 +678,8 @@ class StabilitySolver(object):
             eig, u_r, u_im, err = eigen.get_eigenpair(0)
             self.eigs = eigs[:,0]
             self.mineig = eig.real
-            self.stable = negev <= 0  # based on inertia
+            # self.stable = negev <= 0  # based on inertia
             self.negev = negev  # based on inertia
-            # print('*** *** *** mineig {:.2e}'.format(self.mineig))
             self.linsearch = linsearch
 
             if eigs[0,0]<0:
@@ -691,6 +690,9 @@ class StabilitySolver(object):
                 self.eigendata = linsearch
 
             self.i +=1
-            print('*** mineig ', negev <= 0)
+            print('*** negev  ', negev)
+            print('*** negev  unstable ', negev < 0)
+            print('*** mineig stable ', eig.real > 0)
+            self.stable = eig.real > 0  # based on eigenvalue
         return (self.stable, int(negev))
 

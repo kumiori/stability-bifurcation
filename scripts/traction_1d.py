@@ -113,7 +113,7 @@ parameters = {"alt_min": alt_min_parameters,
 dolfin.parameters["std_out_all_processes"] = False
 dolfin.parameters["form_compiler"].update(form_compiler_parameters)
 
-def traction_test(
+def traction_1d(
     ell=0.1,
     degree=1,
     n=3,
@@ -129,7 +129,8 @@ def traction_test(
     sigma_D0=1.,
     continuation=False,
     checkstability=True,
-    configString=''
+    configString='',
+    breakifunstable = False,
 ):
     # constants
     ell = ell
@@ -158,7 +159,8 @@ def traction_test(
         'n': n,
         },
     'experiment': {
-        'signature': ''
+        'signature': '',
+        'break-if-unstable': breakifunstable
         },
     'stability': {
         'checkstability' : checkstability,
@@ -235,9 +237,7 @@ def traction_test(
     # BCs (homogenous version needed for residual evaluation)
     ut = dolfin.Expression("t", t=0.0, degree=0)
     bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant(0), left),
-             dolfin.DirichletBC(V_u, ut, right)
-             # dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")
-             ]
+             dolfin.DirichletBC(V_u, ut, right)]
 
     bcs_alpha = []
 
@@ -263,12 +263,12 @@ def traction_test(
     solver = solvers.AlternateMinimizationSolver(energy,
         [u, alpha], [bcs_u, bcs_alpha], parameters=parameters['alt_min'])
 
-    # rP = model.rP(u, alpha, v, beta)*model.dx
-    # rN = model.rN(u, alpha, beta)*model.dx
+    rP = model.rP(u, alpha, v, beta)*model.dx
+    rN = model.rN(u, alpha, beta)*model.dx
 
-    # stability = StabilitySolver(mesh, energy,
-        # [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
-    stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
+    stability = StabilitySolver(mesh, energy,
+        [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
+    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
 
     # Time iterations
     load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
@@ -289,6 +289,12 @@ def traction_test(
     bifurc_i = 0
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
+
+    lmbda_min_prev = 0.000001
+    bifurcated = False
+
+    bifurcation_loads = []
+
     for it, load in enumerate(load_steps):
         ut.t = load
         alpha_old.assign(alpha)
@@ -302,8 +308,9 @@ def traction_test(
         (stable, negev) = stability.solve(solver.problem_alpha.lb)
         ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
 
-        import pdb; pdb.set_trace()
+        solver.update()
 
+        #
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
         print('lmbda min', lmbda_min_prev)
         print('mineig', mineig)
@@ -315,59 +322,27 @@ def traction_test(
             # save 3 bif modes
             print('About to bifurcate load ', load, 'step', it)
             bifurcation_loads.append(load)
-            print('DEBUG: decide what to do')
-            # save_current_bifurcation = True
+            modes = np.where(stability.eigs < 0)[0]
+
+            with dolfin.XDMFFile(os.path.join(outdir, "postproc.xdmf")) as file:
+                leneigs = len(modes)
+                maxmodes = min(3, leneigs)
+                for n in range(maxmodes):
+                    mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
+                    modename = 'beta-%d'%n
+                    print(modename)
+                    file.write_checkpoint(mode, modename, 0, append=True)
+
             bifurc_i += 1
 
         lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
 
-
-        if stable:
-            solver.update()
-        else:
-            # Continuation
-            iteration = 1
-            while stable == False:
-                # linesearch
-                perturbation_v    = stability.perturbation_v
-                perturbation_beta = stability.perturbation_beta
-
-                h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
-                    [u, alpha, alpha_old],
-                    perturbation_v, perturbation_beta)
-
-                if h_opt != 0:
-                    save_current_bifurcation = True
-                    alpha_bif.assign(alpha)
-                    alpha_bif_old.assign(alpha_old)
-                    # admissible
-                    uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
-                    aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
-
-                    u.vector()[:] = uval
-                    alpha.vector()[:] = aval
-
-                    u.vector().vec().ghostUpdate()
-                    alpha.vector().vec().ghostUpdate()
-
-                    (time_data_i, am_iter) = solver.solve()
-                    (stable, negev) = stability.solve(alpha_old)
-                    ColorPrint.print_pass('    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
-                    iteration += 1
-
-                else:
-                    # warn
-                    ColorPrint.print_warn('Found zero increment, we are stuck in the matrix')
-                    ColorPrint.print_warn('Continuing load program')
-                    break
-
-            solver.update()
             # stable == True    
 
         time_data_i["load"] = load
         time_data_i["stable"] = stable
         time_data_i["elastic_energy"] = dolfin.assemble(
-            model.elastic_energy_density(u.dx(), alpha)*dx)
+            model.elastic_energy_density(u.dx(0), alpha)*dx)
         time_data_i["dissipated_energy"] = dolfin.assemble(
             model.damage_dissipation_density(alpha)*dx)
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
@@ -396,53 +371,28 @@ def traction_test(
                 f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
                 print('DEBUG: written step ', it)
 
-        if save_current_bifurcation:
-            # modes = np.where(stability.eigs < 0)[0]
-            time_data_i['h_opt'] = h_opt
-            time_data_i['max_h'] = hmax
-            time_data_i['min_h'] = hmin
-            with dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf")) as file:
-                # leneigs = len(modes)
-                # maxmodes = min(3, leneigs)
-                beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
-                print('DEBUG: irrev ', alpha.vector()-alpha_old.vector())
-                file.write_checkpoint(beta0v, 'beta0', 0, append = True)
-                file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
-                file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
-                file.write_checkpoint(alpha, 'alpha', 0, append=True)
 
-                np.save(os.path.join(outdir, 'energy_perturbations'), energy_perturbations, allow_pickle=True, fix_imports=True)
-                # import pdb; pdb.set_trace()
+        time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
-                # maxmodes = 2
-                # for n in range(maxmodes):
-                #     mode = dolfin.project(linsearch[n]['beta_n'], V_alpha)
-                #     modename = 'beta-%d'%n
-                #     print(modename)
-                #     file.write_checkpoint(mode, modename, 0, append=True)
-                #     import pdb; pdb.set_trace()
+        # if size == 1:
+        #     plt.figure()
+        #     dolfin.plot(alpha, marker='o')
+        #     plt.savefig(os.path.join(outdir, "alpha-{}.png".format(it)))
+        #     plt.figure()
+        #     dolfin.plot(u, marker='o')
+        #     plt.savefig(os.path.join(outdir, "u-{}.png".format(it)))
+        #     plt.clf()
 
-        # if np.mod(it, 10) == 0:
-        #     alphatest = dolfin.Function(V_alpha)
-        #     with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
-        #         f.read_checkpoint(alphatest, "alpha-{}".format(it), 0)
-        #         print('DEBUG: read step ', it)
+        if not stable and parameters['experiment']['break-if-unstable']: 
+            print('Unstable state, breaking', parameters['experiment']['break-if-unstable'])
+            break
 
-            time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
-    from post_processing import plot_global_data
     print(time_data_pd)
     print()
+    print(time_data_pd['stable'])
     print('Output in: '+outdir)
 
-
-    # if size == 1:
-    #     plt.figure()
-    #     dolfin.plot(alpha)
-    #     plt.savefig(os.path.join(outdir, "alpha.png"))
-    #     plt.figure()
-    #     dolfin.plot(u, mode="displacement")
-    #     plt.savefig(os.path.join(outdir, "u.png"))
     #     plt.close('all')
 
     return time_data_pd
@@ -471,6 +421,7 @@ if __name__ == "__main__":
     parser.add_argument("--parameters", type=str, default=None)
     parser.add_argument("--print", type=bool, default=False)
     parser.add_argument("--continuation", type=bool, default=False)
+    parser.add_argument("--breakifunstable", type=bool, default=False)
 
     args, unknown = parser.parse_known_args()
     if len(unknown):
@@ -481,7 +432,7 @@ if __name__ == "__main__":
 
     if args.outdir == None:
         args.postfix += '-cont' if args.continuation==True else ''
-        outdir = "../output/{:s}{}".format('traction',args.postfix)
+        outdir = "../output/{:s}{}".format('1d-traction',args.postfix)
     else:
         outdir = args.outdir
 
@@ -512,9 +463,9 @@ if __name__ == "__main__":
         config = config.replace('"load"', '"time_stepping"')
         config = config.replace('"experiment"', '"stability"')
         print(config)
-        traction_test(outdir=outdir, configString=config)
+        traction_1d(outdir=outdir, configString=config)
     else:
-        traction_test(
+        traction_1d(
             ell=args.ell,
             load_min=args.load_min,
             load_max=args.load_max,
@@ -524,5 +475,6 @@ if __name__ == "__main__":
             outdir=outdir,
             savelag=args.savelag,
             continuation=args.continuation,
-            configString=config
+            configString=config,
+            breakifunstable=args.breakifunstable,
         )

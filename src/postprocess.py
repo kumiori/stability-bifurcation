@@ -37,7 +37,7 @@ def load_data(rootdir):
 
 	return params, dataf, signature 
 
-def plot_spectrum(params, data, tc, ax=None):
+def plot_spectrum(params, data, tc, ax=None, tol=1e-12):
 	E0 = params['material']['E']
 	w1 = params['material']['sigma_D0']**2/E0
 	ell = params['material']['ell']
@@ -46,13 +46,14 @@ def plot_spectrum(params, data, tc, ax=None):
 		if d is not (None and np.inf and np.nan):
 			lend = len(d) if isinstance(d, list) else 1
 			plt.scatter([(data['load'].values)[i]]*lend, d,
-					   c=np.where(np.array(d)<-1e-8, 'C1', 'C2'))
+					   c=np.where(np.array(d)<tol, 'red', 'C2'))
+					   # c=np.where(np.array(d)<tol, 'C1', 'C2'))
 
 	plt.ylim(-6e-4, 3e-4)
 	plt.axhline(0, c='k', lw=1.)
 	plt.xlabel('$t$')
 	plt.ylabel('Eigenvalues')
-#     plt.ylabel('$$\\lambda_m$$')
+	#     plt.ylabel('$$\\lambda_m$$')
 	plt.axvline(tc, lw=.5, c='k')
 	ax1 = plt.gca()
 	ax1.yaxis.set_major_formatter(FormatStrFormatter('%.0e'))
@@ -67,7 +68,15 @@ def plot_spectrum(params, data, tc, ax=None):
 	ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
 	ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
 	ax.set_xlim(params['time_stepping']['load_min'], params['time_stepping']['load_max'])
+
+	stable = data['stable'].values
+
+	ax2.scatter(data['load'].values[stable],  -1.+data['stable'].values[stable], c='k', marker='s', s=70, label='stable')
+	ax2.scatter(data['load'].values[~stable],     data['stable'].values[~stable], c='red', marker='s', s=70, label='unstable')
+
+
 	plt.legend(loc="upper left")
+
 
 	# ax1.get_yaxis().set_major_formatter(ScalarFormatter())
 
@@ -141,6 +150,8 @@ def plot_energy(params, dataf, tc):
 
 
 def plot_stability(prefix, tol=1e-5):
+	import matplotlib.patches as patches
+
 	# dirtree = os.path.join(dirroot, signature)
 	fig = plt.figure()
 	stab_diag = []
@@ -152,7 +163,6 @@ def plot_stability(prefix, tol=1e-5):
 			continue
 		with open(subdir + '/parameters.pkl', 'r') as f: 
 			params = json.load(f)
-#             print(params)
 			ell = params['material']['ell']
 		if not os.path.isfile(subdir + "/time_data.json"):
 			print('file not found {}'.format(subdir + "/time_data.json"))
@@ -162,16 +172,14 @@ def plot_stability(prefix, tol=1e-5):
 			df = pd.DataFrame(data).sort_values('load')
 			mineig = [min(eigs) if isinstance(eigs, (list,)) else 100 for eigs in df['eigs']]
 
-#           nonunique
 			tol = tol
+			# print(mineig)
+			# print(np.array(mineig) < tol)
 			loads = df['load'][np.where(np.array(mineig) < tol)[0]].values
 			plt.plot(loads, [1/ell]*len(loads), c='C1', marker='+')
 			# label='$\\lambda_{min}<\\eta_{tol}$')
-#           unstable 
 			loads = df['load'][np.where(np.array(mineig) < 0)[0]].values
 			plt.plot(loads, [1/ell]*len(loads), c='C1', marker='X')
-#           stable 
-# , 
 			loads = df['load'][np.where(np.array(mineig) > tol)[0]].values
 			plt.plot(loads, [1/ell]*len(loads), c='C2', marker='.')
 			if debug:
@@ -180,44 +188,43 @@ def plot_stability(prefix, tol=1e-5):
 				print(1/ell, np.where(np.array(mineig) < tol)[0])
 				print('unstable')
 				print(1/ell, np.where(np.array(mineig) < 0)[0])
-# , label='stable, unique'
 
-	plt.plot((20, 20), (20, 20), ls='-', c='C1', marker='+', label='$\\lambda_{min}<\\eta_{tol}$')
+	plt.plot((20, 20), (20, 20), ls='-', c='C1', marker='+', label='$\\lambda_0<{}$'.format(tol))
 	plt.plot((20, 20), (20, 20), ls='', c='C1', marker='X', label='incr. unstable')
 	plt.plot((20, 20), (20, 20), ls='', c='C2', marker='.', label='stable, unique')
-	plt.legend()
-	return fig
 
-def stab_threshold(prefix, tol=1e-5):
-	# dirtree = os.path.join(dirroot, signature)
-	stab_diag = []
-	global_dfs = []
-	debug = False
-	for subdir, dirs, files in os.walk(prefix):
-#         print(subdir)
-		if not os.path.isfile(subdir + "/parameters.pkl"):
-			print('file not found {}'.format(subdir + "/parameters.pkl"))
-			continue
-		with open(subdir + '/parameters.pkl', 'r') as f: 
-			params = json.load(f)
-			ell = params['material']['ell']
-		if not os.path.isfile(subdir + "/time_data.json"):
-			print('file not found {}'.format(subdir + "/time_data.json"))
-			continue
-		with open(subdir + "/time_data.json") as f:
-			data = json.load(f)
-			df = pd.DataFrame(data).sort_values('load')
-			mineig = [min(eigs) if isinstance(eigs, (list,)) else 100 for eigs in df['eigs']]
-#             print('mineig', mineig[0])
-#             print(df['load'][np.where(np.array(mineig) < tol)[0]])
-#             print(df['load'][np.where(np.array(mineig) < tol)[0]].values)
-#             print(subdir)
-#             print(np.array(mineig) < tol)
-			t_crit = df['load'][np.where(np.array(mineig) < tol)[0]].values
-#             if len(t_crit) ==1:  print('ell,tcrit', ell, t_crit)
-		stab_diag.append([ell, t_crit[0]])
-		
-	return stab_diag
+	q=2
+	coeff_sta = 2.*np.pi*q/(q+1)**(3./2.)*np.sqrt(2)
+	coeff_bif = coeff_sta*(q+1)/(2.*q)
+	loads = np.linspace(1., 10., 100)
+
+	ax = plt.gca()
+	# ax.plot(loads, [2.*2.*np.pi*q/(q+1)**(3./2.)*np.sqrt(2)/i for i in loads], lw=3, c='k's)
+	ax.plot(loads, [coeff_sta/i for i in loads], '-', c='k', label='$$t_s^{cr}(\ell)$$')
+	ax.plot(loads, [coeff_bif/i for i in loads], '-.', c='k', label='$$t^{cr}_b(\ell)$$')
+	plt.axvline(1.0, c='k')
+
+	ax.fill_betweenx([coeff_sta/i for i in loads], loads, 20., alpha=.3)
+	ax.fill_betweenx([coeff_bif/i for i in loads], 0, loads, alpha=.3)
+
+	ax.add_patch(patches.Rectangle((0, coeff_bif), 1, 7, facecolor = 'C1',fill=True, alpha=.3))
+	ax.add_patch(patches.Rectangle((1, coeff_sta), 10, 5, facecolor = 'C0',fill=True, alpha=.3))
+	ax.add_patch(patches.Rectangle((0, 0), 10, 1./loads[-2]*coeff_bif, facecolor = 'C1',fill=True, alpha=.3))
+
+	ax.text(1.1, .1, r'Stable\\\hspace{1em}unique', fontsize=25)
+	ax.text(4.5, 2.8, r'Unstable', fontsize=25)
+	plt.legend(loc='upper right')
+	
+	plt.xlabel('$t$')
+	plt.ylabel('$$L/\ell$$')
+	plt.ylim(0., 1.5*coeff_sta)
+	plt.xlim(0., max(loads))
+
+	ax.set_yticks([0, 1, 1/.5, 1/.25, coeff_sta, coeff_bif])
+	ax.set_yticklabels(['0','1','2','4', '$$\\ell_s$$', '$$\\ell_b$$'])
+	
+	visuals.setspines()
+	return fig
 
 def load_cont(prefix):
 	with open(prefix + '/continuation_data.json', 'r') as f:
