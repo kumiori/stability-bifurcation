@@ -38,12 +38,12 @@ for ell in ell_list:
 	print('tstab, tbif', tstab, tbif)
 	# sys.exit(//z)
 	# tstab = 1.
-	lmin = tstab - 1.
+	# lmin = tstab - 1.
 	# load_min = load_min if lmin > 0. else 0.
-	load_min = tstab - 1. - tstab/10 
-	# load_min = .5 
-	load_max = tstab + 1. + tstab/5
-	# load_max = 5.
+	# load_min = tstab - 1. - tstab/10 
+	load_min = .5 
+	# load_max = tstab + 1. + tstab/5
+	load_max = 5.
 	# loads = [tstab-2*eps, tstab+2*eps]
 	ColorPrint.print_info('Solving ell {}'.format(ell))
 	ColorPrint.print_info('Load: [{} {}]'.format(load_min, load_max))

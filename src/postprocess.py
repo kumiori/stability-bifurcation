@@ -50,7 +50,7 @@ def plot_spectrum(params, data, tc, ax=None, tol=1e-12):
 					   # c=np.where(np.array(d)<tol, 'C1', 'C2'))
 
 	plt.ylim(-6e-4, 3e-4)
-	plt.axhline(0, c='k', lw=1.)
+	plt.axhline(0, c='k', lw=2.)
 	plt.xlabel('$t$')
 	plt.ylabel('Eigenvalues')
 	#     plt.ylabel('$$\\lambda_m$$')

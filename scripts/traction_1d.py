@@ -254,17 +254,31 @@ def traction_1d(
     file_eig.parameters["flush_output"] = True
 
     # Problem definition
-    model = DamageElasticityModel1D(state, E0, ell, sigma_D0)
-    model.dx = dx
-    model.ds = ds
-    energy = model.total_energy_density(u, alpha)*model.dx
+    # model = DamageElasticityModel1D(state, E0, ell, sigma_D0)
+    k_ell = 1e-8
+    a = (1 - alpha) ** 2. + k_ell
+    w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
+    w = w_1 * alpha
+    eps = u.dx(0)
+    sigma = parameters['material']['E']*eps
+
+    energy = 1./2.* parameters['material']['E']*a*eps**2. * dx + (w + w_1 * parameters['material']['ell'] ** 2. * alpha.dx(0)**2.)*dx
+
+    # Rayleigh Ratio
+    rP = (dolfin.sqrt(a)*sigma + dolfin.diff(a, alpha)/dolfin.sqrt(a)*sigma*beta)*(dolfin.sqrt(a)*v.dx(0) + dolfin.diff(a, alpha)/dolfin.sqrt(a)*eps*beta)*dx + \
+                    2*w_1*parameters['material']['ell'] ** 2 * beta.dx(0)**2*dx
+
+    da = dolfin.diff(a, alpha)
+    dda = dolfin.diff(dolfin.diff(a, alpha), alpha)
+    ddw = dolfin.diff(dolfin.diff(w, alpha), alpha)
+
+    rN = -(1./2.*(dda - da**2./a)*sigma*eps +1./2.*ddw)*beta**2.*dx
+    # import pdb; pdb.set_trace()
+
 
     # Alternate minimisation solver
     solver = solvers.AlternateMinimizationSolver(energy,
         [u, alpha], [bcs_u, bcs_alpha], parameters=parameters['alt_min'])
-
-    rP = model.rP(u, alpha, v, beta)*model.dx
-    rN = model.rN(u, alpha, beta)*model.dx
 
     stability = StabilitySolver(mesh, energy,
         [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
@@ -342,17 +356,17 @@ def traction_1d(
         time_data_i["load"] = load
         time_data_i["stable"] = stable
         time_data_i["elastic_energy"] = dolfin.assemble(
-            model.elastic_energy_density(u.dx(0), alpha)*dx)
+            1./2.* parameters['material']['E']*a*eps**2. *dx)
         time_data_i["dissipated_energy"] = dolfin.assemble(
-            model.damage_dissipation_density(alpha)*dx)
+            (w + w_1 * parameters['material']['ell'] ** 2. * alpha.dx(0)**2.)*dx)
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
         # import pdb; pdb.set_trace()
 
-        time_data_i["S(alpha)"] = dolfin.assemble(1./(model.a(alpha))*model.dx)
-        time_data_i["A(alpha)"] = dolfin.assemble((model.a(alpha))*model.dx)
-        time_data_i["avg_alpha"] = dolfin.assemble(alpha*model.dx)
+        time_data_i["S(alpha)"] = dolfin.assemble(1./(a)*dx)
+        time_data_i["a(alpha)"] = dolfin.assemble(a*dx)
+        time_data_i["avg_alpha"] = dolfin.assemble(alpha*dx)
 
         ColorPrint.print_pass(
             "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
@@ -395,7 +409,7 @@ def traction_1d(
 
     #     plt.close('all')
 
-    return time_data_pd
+    return time_data_pd, outdir
 
 if __name__ == "__main__":
 
@@ -463,9 +477,9 @@ if __name__ == "__main__":
         config = config.replace('"load"', '"time_stepping"')
         config = config.replace('"experiment"', '"stability"')
         print(config)
-        traction_1d(outdir=outdir, configString=config)
+        data, location = traction_1d(outdir=outdir, configString=config)
     else:
-        traction_1d(
+        data, location = traction_1d(
             ell=args.ell,
             load_min=args.load_min,
             load_max=args.load_max,
@@ -478,3 +492,57 @@ if __name__ == "__main__":
             configString=config,
             breakifunstable=args.breakifunstable,
         )
+
+
+
+    print('Postprocess')
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import FormatStrFormatter, ScalarFormatter
+    import numpy as np
+    import sympy as sp
+    import sys, os, sympy, shutil, math
+    # import xmltodict
+    # import pickle
+    import json
+    # import pandas
+    import pylab
+    from os import listdir
+    import pandas as pd
+    import visuals
+    import postprocess as pp
+
+    experiment = location
+
+    params, data, signature = pp.load_data(experiment)
+    # E0 = params['material']['E']
+    w1 = params['material']['sigma_D0'] ** 2 / params['material']['E']
+    tc = np.sqrt(2*w1/2*params['material']['E'])
+    ell = params['material']['ell']
+    lab = '\\ell={}, E={}, \\sigma_D = {}'.format(params['material']['ell'], params['material']['E'],params['material']['sigma_D0'])
+    fig1, ax1 =pp.plot_energy(params, data, tc)
+    visuals.setspines2()
+    mu = params['material']['E']/2.
+    # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
+    elast_en = [1./2.*params['material']['E']*eps**2 for eps in data['load']]
+    plt.plot(data['load'], elast_en, c='k')
+    ax1.get_yaxis().set_major_formatter(ScalarFormatter())
+    ax1.ticklabel_format(axis='both', style='plain', useOffset=True)
+    plt.title('${}$'.format(lab))
+
+    (fig2, ax1, ax2) =pp.plot_spectrum(params, data, tc)
+    # ax1.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    ax1.get_yaxis().set_major_formatter(ScalarFormatter())
+    ax1.yaxis.set_major_formatter(FormatStrFormatter('%0.0e'))
+    # ax1.ticklabel_format(axis='y', style='sci', useOffset=True)
+    plt.plot(np.linspace(1, params['time_stepping']['load_max'], 30),
+             [1- (t/params['material']['sigma_D0']/params['material']['E'])**(2/(1-2)) for t in np.linspace(1, params['time_stepping']['load_max'], 30)],
+            c='k', lw=.5)
+    plt.title('${}$'.format(lab))
+
+    visuals.setspines2()
+    ax1.set_ylim(-1., .000002)
+
+    # fig1.savefig("/Users/kumiori/Documents/WIP/paper_stability/fig/energy-traction-{}.pdf".format(signature), bbox_inches='tight')
+    # fig2.savefig("/Users/kumiori/Documents/WIP/paper_stability/fig/energy-spectrum-{}.pdf", bbox_inches='tight')
+    fig1.savefig(os.path.join(location, "energy-traction-{}.pdf".format(signature)), bbox_inches='tight')
+    fig2.savefig(os.path.join(location, "energy-spectrum-{}.pdf".format(signature)), bbox_inches='tight')
