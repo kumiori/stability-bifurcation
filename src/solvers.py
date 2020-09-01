@@ -93,11 +93,13 @@ class DamageProblemTAO(OptimisationProblem):
         """Gradient (first derivative)"""
         self.alpha.vector()[:] = x
         assemble(self.denergy, b)
+        [bc.apply(b) for bc in self.bcs]
 
     def J(self, A, x):
         """Hessian (second derivative)"""
         self.alpha.vector()[:] = x
         assemble(self.ddenergy, A)
+        [bc.apply(A) for bc in self.bcs]
 
     def bc_apply(self):
         """Apply the bcs"""
