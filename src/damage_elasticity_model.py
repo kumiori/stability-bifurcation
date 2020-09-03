@@ -102,7 +102,7 @@ class DamageElasticityModel(object):
         dda = diff(diff(a(alpha), alpha), alpha)
         ddw = diff(diff(w(alpha), alpha), alpha)
 
-        return -(1./2.*(dda - da**2./a(alpha))*inner(sigma(u), eps(u)) +1./2.*ddw)*beta**2.
+        return -(1./2.*(dda - 2.*da**2./a(alpha))*inner(sigma(u), eps(u)) +1./2.*ddw)*beta**2.
 
 class DamageElasticityModel1D(DamageElasticityModel):
     def __init__(
@@ -173,9 +173,9 @@ class DamageElasticityModel1D(DamageElasticityModel):
         a = self.a
         sigma = self.sigma
         eps = u.dx(0)
-        return inner(sqrt(a(alpha))*sigma(v) + diff(a(alpha), alpha)/sqrt(a(alpha))*sigma(u)*beta,
-                    sqrt(a(alpha))*v.dx(0) + diff(a(alpha), alpha)/sqrt(a(alpha))*eps*beta) + \
-                    2*w_1*self.ell ** 2 * dot(grad(beta), grad(beta))
+        return (sqrt(a(alpha))*sigma(v) + diff(a(alpha), alpha)/sqrt(a(alpha))*sigma(u)*beta)* \
+                    (sqrt(a(alpha))*v.dx(0) + diff(a(alpha), alpha)/sqrt(a(alpha))*eps*beta) + \
+                    2*w_1*self.ell ** 2 * beta.dx(0)*beta.dx(0)
 
     def rN(self, u, alpha, beta):
         a = self.a
@@ -186,7 +186,7 @@ class DamageElasticityModel1D(DamageElasticityModel):
         dda = diff(diff(a(alpha), alpha), alpha)
         ddw = diff(diff(w(alpha), alpha), alpha)
 
-        return -(1./2.*(dda - da**2./a(alpha))*inner(sigma(u), eps) +1./2.*ddw)*beta**2.
+        return -(1./2.*(dda - 2*da**2./a(alpha))*inner(sigma(u), eps))*beta**2.
 
 
 class DamagePrestrainedElasticityModel(DamageElasticityModel):

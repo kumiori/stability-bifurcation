@@ -5,7 +5,7 @@ from utils import ColorPrint
 # ell_list = np.linspace(.1, .5, 20)
 # ell_min = 0.1
 #ell_max = 2.
-ell_list = np.logspace(np.log10(.1), np.log10(1.5), 10)
+ell_list = np.logspace(np.log10(.2), np.log10(1.5), 10)
 
 def t_stab(ell, q=2):
 	coeff_stab = 2.*np.pi*q/(q+1)**(3./2.)*np.sqrt(2)

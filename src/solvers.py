@@ -83,6 +83,7 @@ class DamageProblemTAO(OptimisationProblem):
         self.lb = lb
         self.ub = ub
         self.bcs = bcs
+        self.update_lb()
 
     def f(self, x):
         """Function to be minimised"""
@@ -93,13 +94,11 @@ class DamageProblemTAO(OptimisationProblem):
         """Gradient (first derivative)"""
         self.alpha.vector()[:] = x
         assemble(self.denergy, b)
-        [bc.apply(b) for bc in self.bcs]
 
     def J(self, A, x):
         """Hessian (second derivative)"""
         self.alpha.vector()[:] = x
         assemble(self.ddenergy, A)
-        [bc.apply(A) for bc in self.bcs]
 
     def bc_apply(self):
         """Apply the bcs"""
@@ -161,7 +160,6 @@ class AlternateMinimizationSolver(object):
             self.u_init = self.u.copy(deepcopy=True)
             self.alpha_init = self.alpha.copy(deepcopy=True)
 
-        self.V_u = self.u.function_space()
         self.V_alpha = self.alpha.function_space()
         # import pdb; pdb.set_trace()
         self.parameters = parameters
@@ -173,6 +171,7 @@ class AlternateMinimizationSolver(object):
             self.set_solver_alpha_snes2()
         elif self.parameters["solver_alpha"] == "tao":
             self.set_solver_alpha_tao()
+
 
     def set_solver_u(self):
         for option, value in self.parameters["solver_u"].items():

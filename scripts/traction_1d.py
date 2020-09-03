@@ -203,6 +203,7 @@ def traction_1d(
         f.write(signature)
 
 
+    print('experiment = {}'.format(os.path.join('~/Documents/WIP/paper_stability_code', outdir)))
     # geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
     # mesh = mshr.generate_mesh(geom,  int(float(n * Lx / ell)))
     mesh = dolfin.IntervalMesh(int(float(n * Lx / ell)), -Lx/2., Lx/2.)
@@ -241,6 +242,8 @@ def traction_1d(
 
     bcs_alpha = []
 
+    # bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(1.), right)]
+
     # Files for output
     ColorPrint.print_warn('Outdir = {}'.format(outdir))
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
@@ -255,28 +258,38 @@ def traction_1d(
 
     # Problem definition
     # model = DamageElasticityModel1D(state, E0, ell, sigma_D0)
+    # 
     k_ell = 1e-8
     a = (1 - alpha) ** 2. + k_ell
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
     w = w_1 * alpha
     eps = u.dx(0)
-    sigma = parameters['material']['E']*eps
 
-    energy = 1./2.* parameters['material']['E']*a*eps**2. * dx + (w + w_1 * parameters['material']['ell'] ** 2. * alpha.dx(0)**2.)*dx
+    # sigma = parameters['material']['E']*eps
+    # energy = 1./2.* parameters['material']['E']*a*eps**2. * dx + (w + w_1 * parameters['material']['ell'] ** 2. * alpha.dx(0)**2.)*dx
 
-    # Rayleigh Ratio
-    rP = (dolfin.sqrt(a)*sigma + dolfin.diff(a, alpha)/dolfin.sqrt(a)*sigma*beta)*(dolfin.sqrt(a)*v.dx(0) + dolfin.diff(a, alpha)/dolfin.sqrt(a)*eps*beta)*dx + \
-                    2*w_1*parameters['material']['ell'] ** 2 * beta.dx(0)**2*dx
+    # # Rayleigh Ratio
+    # rP = (dolfin.sqrt(a)*sigma + dolfin.diff(a, alpha)/dolfin.sqrt(a)*sigma*beta)*(dolfin.sqrt(a)*v.dx(0) + dolfin.diff(a, alpha)/dolfin.sqrt(a)*eps*beta)*dx + \
+    #                 2*w_1*parameters['material']['ell'] ** 2 * beta.dx(0)**2*dx
 
-    da = dolfin.diff(a, alpha)
-    dda = dolfin.diff(dolfin.diff(a, alpha), alpha)
-    ddw = dolfin.diff(dolfin.diff(w, alpha), alpha)
+    # da = dolfin.diff(a, alpha)
+    # dda = dolfin.diff(dolfin.diff(a, alpha), alpha)
+    # ddw = dolfin.diff(dolfin.diff(w, alpha), alpha)
 
-    rN = -(1./2.*(dda - da**2./a)*sigma*eps +1./2.*ddw)*beta**2.*dx
+    # rN = -(1./2.*(dda - da**2./a)*sigma*eps +1./2.*ddw)*beta**2.*dx
     # import pdb; pdb.set_trace()
 
+    # ------------------------------
+
+    model = DamageElasticityModel1D(state, E0, ell, sigma_D0)
+    model.dx = dx
+    # energy = model.total_energy_density(u, alpha)*model.dx
+    energy = 1./2.* parameters['material']['E']*a*eps**2. * dx + (w + w_1 * parameters['material']['ell'] ** 2. * alpha.dx(0)**2.)*dx
+    rP = model.rP(u, alpha, v, beta)*model.dx
+    rN = model.rN(u, alpha, beta)*model.dx
 
     # Alternate minimisation solver
+    # import pdb; pdb.set_trace()
     solver = solvers.AlternateMinimizationSolver(energy,
         [u, alpha], [bcs_u, bcs_alpha], parameters=parameters['alt_min'])
 
@@ -308,7 +321,7 @@ def traction_1d(
     bifurcated = False
 
     bifurcation_loads = []
-
+    time_data_pd = []
     for it, load in enumerate(load_steps):
         ut.t = load
         alpha_old.assign(alpha)
@@ -317,13 +330,13 @@ def traction_1d(
 
         # First order stability conditions
         (time_data_i, am_iter) = solver.solve()
+        # import pdb; pdb.set_trace()
 
         # Second order stability conditions
         (stable, negev) = stability.solve(solver.problem_alpha.lb)
         ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
 
         solver.update()
-
         #
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
         print('lmbda min', lmbda_min_prev)
@@ -355,18 +368,25 @@ def traction_1d(
 
         time_data_i["load"] = load
         time_data_i["stable"] = stable
+
         time_data_i["elastic_energy"] = dolfin.assemble(
             1./2.* parameters['material']['E']*a*eps**2. *dx)
         time_data_i["dissipated_energy"] = dolfin.assemble(
             (w + w_1 * parameters['material']['ell'] ** 2. * alpha.dx(0)**2.)*dx)
+
+        time_data_i["elastic_energy"] = dolfin.assemble(
+            model.elastic_energy_density(u.dx(0), alpha)*dx)
+        time_data_i["dissipated_energy"] = dolfin.assemble(
+            model.damage_dissipation_density(alpha)*dx)
+
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
         # import pdb; pdb.set_trace()
 
-        time_data_i["S(alpha)"] = dolfin.assemble(1./(a)*dx)
-        time_data_i["a(alpha)"] = dolfin.assemble(a*dx)
-        time_data_i["avg_alpha"] = dolfin.assemble(alpha*dx)
+        # time_data_i["S(alpha)"] = dolfin.assemble(1./(a)*dx)
+        # time_data_i["a(alpha)"] = dolfin.assemble(a*dx)
+        # time_data_i["avg_alpha"] = dolfin.assemble(alpha*dx)
 
         ColorPrint.print_pass(
             "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
@@ -402,12 +422,50 @@ def traction_1d(
             break
 
 
-    print(time_data_pd)
+    # print(time_data_pd)
     print()
-    print(time_data_pd['stable'])
+    # print(time_data_pd['stable'])
     print('Output in: '+outdir)
 
-    #     plt.close('all')
+
+
+    # # solve optimal profile
+    #   # Alternate minimisation solver
+    # beta = dolfin.TestFunction(V_alpha)
+    # dalpha = dolfin.TrialFunction(V_alpha)
+
+    # F = (ell*alpha.dx(0)*alpha.dx(0) + w/ell*alpha)*dx
+    # dF = dolfin.derivative(F,alpha,beta); ddF = dolfin.derivative(dF,alpha,dalpha)
+    # # bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant(0.), 'on_boundary')]
+    alpha = dolfin.Function(V_alpha)
+    u = dolfin.Function(V_u)
+    bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(1.), right), dolfin.DirichletBC(V_alpha, dolfin.Constant(0.), left)]
+    solver = solvers.AlternateMinimizationSolver(energy, [u, alpha], [[], bcs_alpha], parameters=parameters['alt_min'])
+    solver.solve()
+    print('DEBUG: h1 norm alpha profile {}'.format(dolfin.norm(alpha, 'h1')))
+    # ub = dolfin.interpolate(dolfin.Constant(1.), V_alpha); lb = dolfin.interpolate(dolfin.Constant(0.), V_alpha)
+    # profile = dolfin.NonlinearVariationalProblem(dF, alpha, bcs_alpha, J = ddF)
+    # profile.set_bounds(lb, ub)
+    # solver_nl = dolfin.NonlinearVariationalSolver(profile)
+    # snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
+    #                       "snes_solver": {"linear_solver": "cg",
+    #                                       "maximum_iterations": 100,
+    #                                       "report": True,
+    #                                       "line_search": "basic",
+    #                                       "method":"vinewtonrsls",
+    #                                       "absolute_tolerance":1e-6,
+    #                                       "relative_tolerance":1e-6,
+    #                                       "solution_tolerance":1e-6}}
+    # solver_nl.parameters.update(snes_solver_parameters_bounds)
+    # solver_nl.solve()
+
+    xs = np.linspace(-Lx/2., Lx/2., 100)
+    profile = np.array([alpha(x) for x in xs])
+    plt.figure()
+    plt.plot(xs, profile, marker='o')
+    # plt.plot(xs, np.array([u(x) for x in xs]))
+    plt.savefig(os.path.join(outdir, 'profile.pdf'))
+    # import pdb; pdb.set_trace()
 
     return time_data_pd, outdir
 
@@ -525,11 +583,23 @@ if __name__ == "__main__":
     # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
     elast_en = [1./2.*params['material']['E']*eps**2 for eps in data['load']]
     plt.plot(data['load'], elast_en, c='k')
+    ax1.axvline(pp.t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
+    ax1.axvline(pp.t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
+
+
+
     ax1.get_yaxis().set_major_formatter(ScalarFormatter())
     ax1.ticklabel_format(axis='both', style='plain', useOffset=True)
+
+
     plt.title('${}$'.format(lab))
 
+
+
     (fig2, ax1, ax2) =pp.plot_spectrum(params, data, tc)
+    ax1.axvline(pp.t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
+    ax1.axvline(pp.t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
+
     # ax1.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
     ax1.get_yaxis().set_major_formatter(ScalarFormatter())
     ax1.yaxis.set_major_formatter(FormatStrFormatter('%0.0e'))
@@ -538,11 +608,17 @@ if __name__ == "__main__":
              [1- (t/params['material']['sigma_D0']/params['material']['E'])**(2/(1-2)) for t in np.linspace(1, params['time_stepping']['load_max'], 30)],
             c='k', lw=.5)
     plt.title('${}$'.format(lab))
-
     visuals.setspines2()
-    ax1.set_ylim(-1., .000002)
+    ax1.set_ylim(-1., .2)
 
     # fig1.savefig("/Users/kumiori/Documents/WIP/paper_stability/fig/energy-traction-{}.pdf".format(signature), bbox_inches='tight')
     # fig2.savefig("/Users/kumiori/Documents/WIP/paper_stability/fig/energy-spectrum-{}.pdf", bbox_inches='tight')
     fig1.savefig(os.path.join(location, "energy-traction-{}.pdf".format(signature)), bbox_inches='tight')
     fig2.savefig(os.path.join(location, "energy-spectrum-{}.pdf".format(signature)), bbox_inches='tight')
+
+
+    mesh = dolfin.Mesh(comm, os.path.join(experiment, 'mesh.xml'))
+    fig = plt.figure()
+    dolfin.plot(mesh)
+    visuals.setspines2()
+    fig.savefig(os.path.join(location, "mesh.pdf"), bbox_inches='tight')

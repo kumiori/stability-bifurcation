@@ -140,6 +140,7 @@ def plot_energy(params, dataf, tc):
 	ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
 	ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
 	ax.set_xlim(params['time_stepping']['load_min'], params['time_stepping']['load_max'])
+	ax.set_ylim(0, w1*params['geometry']['Lx'])
 	plt.legend()
 
 	
@@ -206,13 +207,15 @@ def plot_stability(prefix, tol=1e-5):
 
 	ax.fill_betweenx([coeff_sta/i for i in loads], loads, 20., alpha=.3)
 	ax.fill_betweenx([coeff_bif/i for i in loads], 0, loads, alpha=.3)
+	ax.fill_betweenx([coeff_bif/i for i in loads], 1, loads, alpha=.3, facecolor='C0')
 
-	ax.add_patch(patches.Rectangle((0, coeff_bif), 1, 7, facecolor = 'C1',fill=True, alpha=.3))
-	ax.add_patch(patches.Rectangle((1, coeff_sta), 10, 5, facecolor = 'C0',fill=True, alpha=.3))
+	ax.add_patch(patches.Rectangle((0, coeff_bif), 1, 10, facecolor = 'C1',fill=True, alpha=.3))
+	ax.add_patch(patches.Rectangle((1, coeff_sta), 10, 10, facecolor = 'C0',fill=True, alpha=.3))
 	ax.add_patch(patches.Rectangle((0, 0), 10, 1./loads[-2]*coeff_bif, facecolor = 'C1',fill=True, alpha=.3))
 
-	ax.text(1.1, .1, r'Stable\\\hspace{1em}unique', fontsize=25)
-	ax.text(4.5, 2.8, r'Unstable', fontsize=25)
+	ax.text(.17, .15, r'Purely elastic', fontsize=25)
+	ax.text(1.2, .15, r'Homogeneous (unique)', fontsize=25)
+	ax.text(3.5, 2.5, r'Unstable', fontsize=25)
 	plt.legend(loc='upper right')
 	
 	plt.xlabel('$t$')
@@ -224,6 +227,9 @@ def plot_stability(prefix, tol=1e-5):
 	ax.set_yticklabels(['0','1','2','4', '$$\\ell_s$$', '$$\\ell_b$$'])
 	
 	visuals.setspines()
+	plt.loglog()
+	plt.ylim(0.5, 3*coeff_sta)
+	plt.xlim(0.5, max(loads))
 	return fig
 
 def load_cont(prefix):
