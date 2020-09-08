@@ -298,7 +298,8 @@ def traction_1d(
     # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
 
     # Time iterations
-    load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
+    # load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
+    load_steps = np.logspace(np.log10(load_min), np.log10(load_max), parameters['time_stepping']['nsteps'])
 
     if loads:
         load_steps = loads

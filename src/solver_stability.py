@@ -222,7 +222,7 @@ class StabilitySolver(object):
         z_u, z_a = dolfin.split(self.z)
         energy = ufl.replace(energy, {self.u: z_u, self.alpha: z_a})
         self.J = dolfin.derivative(energy, self.z, dolfin.TestFunction(self.Z))
-        self.H  = dolfin.derivative(self.J, self.z, dolfin.TrialFunction(self.Z))
+        self.H = dolfin.derivative(self.J, self.z, dolfin.TrialFunction(self.Z))
 
         self.nullspace = nullspace
 

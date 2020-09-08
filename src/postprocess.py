@@ -88,6 +88,7 @@ def plot_sigmaeps(params, dataf, tc):
 	w1 = params['material']['sigma_D0']**2/E0
 	ell = params['material']['ell']
 	L = params['geometry']['Lx']
+	Ly = params['geometry']['Ly']
 	
 	fig = plt.figure()
 
@@ -96,9 +97,12 @@ def plot_sigmaeps(params, dataf, tc):
 	plt.ylabel('$$\sigma$$')
 	plt.xlabel('$$t$$')
 
+	# plt.plot(dataf['load'].values,
+		# dataf['load'].values*pow(dataf['S(alpha)'].values, -1), marker='o', label='$$\sigma$$')
+
 	plt.plot(dataf['load'].values,
-		dataf['load'].values*pow(dataf['S(alpha)'].values, -1), marker='o', label='$$\sigma$$')
-	
+		dataf['load'].values*dataf['A(alpha)'].values*E0/Ly, marker='o', label='$$\sigma$$')
+
 	stable = dataf['stable'].values
 
 
@@ -106,9 +110,9 @@ def plot_sigmaeps(params, dataf, tc):
 	ax.axvline(tc, c='k', lw=.5, label='$t^{cr}$')
 	ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
 	ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
-	ax.set_xlim(params['time_stepping']['load_min'], params['time_stepping']['load_max'])
-	plt.scatter(dataf['load'].values[stable], -.8+dataf['stable'].values[stable], c='k', marker='s', s=70, label='stable')
-	plt.scatter(dataf['load'].values[~stable], +.2+dataf['stable'].values[~stable], c='red', marker='s', s=70, label='unstable')
+	ax.set_xlim(params['time_stepping']['load_min'], params['time_stepping']['load_max'])	
+	plt.scatter(dataf['load'].values[stable], -1.+dataf['stable'].values[stable], c='k', marker='s', s=70, label='stable')
+	plt.scatter(dataf['load'].values[~stable], dataf['stable'].values[~stable], c='red', marker='s', s=70, label='unstable')
 
 	plt.legend(loc="upper left")
 
@@ -212,10 +216,11 @@ def plot_stability(prefix, tol=1e-5):
 	ax.add_patch(patches.Rectangle((0, coeff_bif), 1, 10, facecolor = 'C1',fill=True, alpha=.3))
 	ax.add_patch(patches.Rectangle((1, coeff_sta), 10, 10, facecolor = 'C0',fill=True, alpha=.3))
 	ax.add_patch(patches.Rectangle((0, 0), 10, 1./loads[-2]*coeff_bif, facecolor = 'C1',fill=True, alpha=.3))
+	ax.add_patch(patches.Rectangle((1, 0), loads[-1], coeff_bif/(loads[-1]), facecolor = 'C0',fill=True, alpha=.3))
 
-	ax.text(.17, .15, r'Purely elastic', fontsize=25)
-	ax.text(1.2, .15, r'Homogeneous (unique)', fontsize=25)
-	ax.text(3.5, 2.5, r'Unstable', fontsize=25)
+	# ax.text(.55, .15, r'Elastic', fontsize=25)
+	# ax.text(1.2, .15, r'Homogeneous (unique)', fontsize=25)
+	# (?# ax.text(3.5, 2.5, r'Unstable', fontsize=25))
 	plt.legend(loc='upper right')
 	
 	plt.xlabel('$t$')

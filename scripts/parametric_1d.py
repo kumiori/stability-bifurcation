@@ -5,7 +5,7 @@ from utils import ColorPrint
 # ell_list = np.linspace(.1, .5, 20)
 # ell_min = 0.1
 #ell_max = 2.
-ell_list = np.logspace(np.log10(.2), np.log10(1.5), 10)
+ell_list = np.logspace(np.log10(.15), np.log10(1.5), 20)
 
 def t_stab(ell, q=2):
 	coeff_stab = 2.*np.pi*q/(q+1)**(3./2.)*np.sqrt(2)
@@ -49,6 +49,7 @@ for ell in ell_list:
 	ColorPrint.print_info('Load: [{} {}]'.format(load_min, load_max))
 	ColorPrint.print_info('stab limit: {} '.format(tstab))
 	ColorPrint.print_info('uniq limit: {} '.format(tbif))
+	loads = np.logspace(load_min, load_max, 50)
 	try:
 		traction_1d(
 			ell=ell,
@@ -56,10 +57,11 @@ for ell in ell_list:
 			load_max=load_max,
 			# loads = loads,
 			nsteps=50,
-			n=5,
+			n=7,
 			# Lx=Lx,
 			# outdir='../output/parametric-traction-plane-stress/ell-{:2f}'.format(ell),
-			outdir='../output/parametric-traction-1d/ell-{:2f}'.format(ell),
+			outdir='../output/parametric-traction-1d-validation-paper/ell-{:2f}'.format(ell),
+			# outdir='../output/parametric-traction-1d-validation-paper-auto/ell-{:2f}'.format(ell),
 			# outdir='../output/parametric-traction-n-10/ell-{:2f}'.format(ell),
 			breakifunstable = True
 		)
