@@ -228,10 +228,10 @@ class StabilitySolver(object):
         self.Ealpha = dolfin.derivative(energy, self.alpha, dolfin.TestFunction(self.alpha.ufl_function_space()))
         self.energy = energy
 
-        z_u, z_a = dolfin.split(self.z)
-        # z_u, z_a = z.split()
-        import pdb; pdb.set_trace()
-        energy = ufl.replace(energy, {self.u: z_u, self.alpha: z_a})
+        (z_u, z_a) = dolfin.split(self.z)
+        # import pdb; pdb.set_trace()
+        # energy = ufl.replace(energy, {self.u: z_u, self.alpha: z_a})
+        energy = ufl.replace(energy, {state[0]: z_u, state[1]: z_a})
         self.J = dolfin.derivative(energy, self.z, dolfin.TestFunction(self.Z))
         self.H = dolfin.derivative(self.J, self.z, dolfin.TrialFunction(self.Z))
 
@@ -572,7 +572,6 @@ class StabilitySolver(object):
         if debug and rank == 0:
             print('#bc dofs = {}'.format(int(numbcs)))
 
-
         if not np.all(self.alpha.vector()[:] >=self.alpha_old.vector()[:]):
             pd = np.where(self.alpha.vector()[:]-self.alpha_old.vector()[:] < 0)[0]
             ColorPrint.print_warn('Pointwise irreversibility issues on dofs {}'.format(pd))
@@ -600,7 +599,7 @@ class StabilitySolver(object):
         index_set.createGeneral(free_dofs)
 
         if hasattr(self, 'rP') and hasattr(self, 'rN'):
-            self.H2 = self.rP-self.rN
+            self.H2 = self.rP - self.rN
 
         if hasattr(self, 'H2'):
             ColorPrint.print_pass('Inertia: Using user-provided Hessian')
@@ -610,6 +609,7 @@ class StabilitySolver(object):
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
 
         self.pc_setup()
+        # import pdb; pdb.set_trace()
 
         negev = self.get_inertia(self.H_reduced)
 

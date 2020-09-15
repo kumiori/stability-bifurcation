@@ -50,7 +50,7 @@ load_max = params['time_stepping']['load_max']
 nsteps = params['time_stepping']['nsteps']
 Lx = params['geometry']['Lx']
 
-onedim = True
+onedim = False
 if not onedim:
 	Ly = params['geometry']['Ly']
 
@@ -63,6 +63,9 @@ beta0 = dolfin.Function(V_alpha)
 alpha = dolfin.Function(V_alpha)
 alpha_old = dolfin.Function(V_alpha)
 alpha_bif = dolfin.Function(V_alpha)
+
+file_bif = dolfin.XDMFFile(os.path.join(rootdir, "bifurcation_postproc.xdmf"))
+file_out = dolfin.XDMFFile(os.path.join(rootdir, "output.xdmf"))
 
 maxmodes = 2
 
@@ -102,8 +105,9 @@ fields = []
 h0=0
 fields = [beta0, alpha_old, alpha_bif, alpha]
 try:
-	with dolfin.XDMFFile(os.path.join(rootdir, "bifurcation_postproc.xdmf")) as file:
+	with file_bif as file:
 	# with dolfin.XDMFFile(os.path.join(rootdir, "postproc.xdmf")) as file:
+		import pdb; pdb.set_trace()
 		file.read_checkpoint(beta0, 'beta0')
 		file.read_checkpoint(alpha, 'alpha')
 		file.read_checkpoint(alpha_old, 'alpha-old')
@@ -120,7 +124,7 @@ try:
 
 	for n in range(maxmodes):
 		modename = 'beta-%d'%n
-		print(modename)
+		print('Reading mode: ', modename)
 		file.read_checkpoint(betan, modename)
 
 		perturbations.append(betan)

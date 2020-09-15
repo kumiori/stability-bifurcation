@@ -442,6 +442,8 @@ def traction_test(
                 # import pdb; pdb.set_trace()
                 file.write(_v, load)
                 file.write(_beta, load)
+                file.write_checkpoint(_v, 'perturbation_v', 0, append=True)
+                file.write_checkpoint(_beta, 'perturbation_beta', 0, append=True)
 
             save_current_bifurcation = False
 

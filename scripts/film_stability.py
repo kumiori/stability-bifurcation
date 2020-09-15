@@ -330,9 +330,10 @@ def traction_test(
     # Files for output
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_eig = dolfin.XDMFFile(os.path.join(outdir, "perturbations.xdmf"))
-    file_con = dolfin.XDMFFile(os.path.join(outdir, "cont.xdmf"))
+    file_con = dolfin.XDMFFile(os.path.join(outdir, "continuation.xdmf"))
+    file_bif = dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf"))
 
-    for f in [file_out, file_eig, file_con]:
+    for f in [file_out, file_eig, file_con, file_bif]:
         f.parameters["functions_share_mesh"] = True
         f.parameters["flush_output"] = True
 
@@ -353,9 +354,9 @@ def traction_test(
     rP =model.rP(u, alpha, v, beta)*dx + 1/ell_e**2.*dot(v, v)*dx
     rN =model.rN(u, alpha, beta)*dx
 
+    stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
+    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'], rayleigh=[rP, rN])
 
-    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN])
-    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = stability_parameters)
     # if isPeriodic:
     #     stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z,
     #         parameters = stability_parameters,
@@ -363,48 +364,11 @@ def traction_test(
     # else:
     #     stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
 
-    stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
-    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
-
     load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
     if loads:
         load_steps = loads
 
     time_data = []
-
-
-    # class TractionTS(TimeStepping):
-    #     """docstring for Evolution"""
-    #     def __init__(self,
-    #                 model,
-    #                 solver,
-    #                 stability,
-    #                 load_param,
-    #                 outfiles,
-    #                 parameters,
-    #                 user_density=None):
-
-    #         super(TractionTS, self).__init__(model,
-    #                 solver,
-    #                 stability,
-    #                 load_param,
-    #                 outfiles,
-    #                 parameters,
-    #                 user_density)
-    #         self.spacetime = pd.DataFrame(columns = self.load_steps, )
-
-
-    # TS = TractionTS(model, solver, stability, model.eps0t, [file_out, file_con, file_eig], 
-        # user_density = foundation_density,
-        # parameters=parameters['time_stepping'])
-
-    # TS = TimeStepping(model, solver, stability, model.eps0t, [file_out, None, None], 
-    #     user_density = foundation_density,
-    #     parameters=parameters['time_stepping'])
-
-
-    # time_data_pd = TS.run()
-
 
     linesearch = LineSearch(energy, [u, alpha])
     alpha_old = dolfin.Function(alpha.function_space())
@@ -412,7 +376,7 @@ def traction_test(
     bifurcated = False
     bifurcation_loads = []
     save_current_bifurcation = False
-    bifurc_i = 0
+    bifurc_count = 0
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
     bifurcation_loads = []
@@ -444,7 +408,7 @@ def traction_test(
             bifurcation_loads.append(load)
             modes = np.where(stability.eigs < 0)[0]
 
-            with dolfin.XDMFFile(os.path.join(outdir, "postproc.xdmf")) as file:
+            with file_bif as file:
                 leneigs = len(modes)
                 maxmodes = min(3, leneigs)
                 for n in range(maxmodes):
@@ -453,7 +417,7 @@ def traction_test(
                     print(modename)
                     file.write_checkpoint(mode, modename, 0, append=True)
 
-            bifurc_i += 1
+            bifurc_count += 1
 
         lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
 
@@ -493,7 +457,7 @@ def traction_test(
             with file_out as f:
                 f.write(alpha, load)
                 f.write(u, load)
-            with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
+            # with file_out as f:
                 f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
                 print('DEBUG: written step ', it)
 
@@ -504,7 +468,7 @@ def traction_test(
             time_data_i['max_h'] = hmax
             time_data_i['min_h'] = hmin
 
-            with dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf")) as file:
+            with file_bif as file:
                 # leneigs = len(modes)
                 # maxmodes = min(3, leneigs)
                 beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
@@ -524,6 +488,8 @@ def traction_test(
                 # import pdb; pdb.set_trace()
                 f.write(_v, load)
                 f.write(_beta, load)
+                file.write_checkpoint(_v, 'perturbation_v', 0, append=True)
+                file.write_checkpoint(_beta, 'perturbation_beta', 0, append=True)
 
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
         # user_postprocess_timestep(alpha, parameters, load, xresol = 100)
