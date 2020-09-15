@@ -14,6 +14,8 @@ from utils import ColorPrint, get_versions
 from post_processing import make_figures, plot_global_data
 # set_log_level(100)
 dolfin.parameters["std_out_all_processes"] = False
+
+
 dolfin.parameters["linear_algebra_backend"] = "PETSc"
 from functools import reduce
 from petsc4py import PETSc
@@ -33,9 +35,17 @@ from solver_stability import StabilitySolver
 # from solver_stability_periodic import StabilitySolver
 from time_stepping import TimeStepping
 from copy import deepcopy
+from linsearch import LineSearch
 
 import os.path
 import os
+
+import mpi4py
+
+comm = mpi4py.MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
 
 
 form_compiler_parameters = {
@@ -156,7 +166,8 @@ def traction_test(
     periodic=False,
     continuation=False,
     checkstability=True,
-    configString=''
+    configString='',
+    test=True
 ):
     # constants
     # ell = ell
@@ -196,6 +207,7 @@ def traction_test(
         'n': n,
         },
     'experiment': {
+        'test': test,
         'periodic': isPeriodic,
         'signature': ''
         },
@@ -213,13 +225,17 @@ def traction_test(
     'alt_min': {}, "code": {}
 
     }
-# --------------------
+
+
+
+    # --------------------
+
+    for par in parameters: parameters[par].update(cmd_parameters[par])
 
     if config:
         # import pdb; pdb.set_trace()
         for par in config: parameters[par].update(config[par])
-    else:
-        for par in parameters: parameters[par].update(cmd_parameters[par])
+    # else:
 
     # parameters['material']['ell_e'] = 
 
@@ -232,10 +248,12 @@ def traction_test(
     fname="film"
     print(BASE_DIR)
     os.path.isfile(fname)
-    # import pdb; pdb.set_trace()
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir += '-{}{}'.format(signature, cmd_parameters['time_stepping']['postfix'])
+    
+    if parameters['experiment']['test'] == True: outdir += '-{}'.format(cmd_parameters['time_stepping']['postfix'])
+    else: outdir += '-{}{}'.format(signature, cmd_parameters['time_stepping']['postfix'])
+    
     parameters['time_stepping']['outdir']=outdir
     Path(outdir).mkdir(parents=True, exist_ok=True)
     print('Outdir is: '+outdir)
@@ -244,7 +262,7 @@ def traction_test(
         configuration = deepcopy(parameters)
         configuration['time_stepping'].pop('outdir')
         str(configuration).replace("\'True\'", "True").replace("\'False\'", "False")
-        rerun_cmd = 'python3 film_stability.py --config="{}"'.format(configuration)
+        rerun_cmd = 'python3 {} --config="{}"'.format(os.path.basename(__file__), configuration)
         f.write(rerun_cmd)
 
     with open(os.path.join(outdir, 'parameters.pkl'), 'w') as f:
@@ -259,7 +277,7 @@ def traction_test(
     # boundary_meshfunction = dolfin.MeshFunction("size_t", mesh, "meshes/%s-%s_facet_region.xml"%(fname, signature))
     # cells_meshfunction = dolfin.MeshFunction("size_t", mesh, "meshes/%s-%s_physical_region.xml"%(fname, signature))
 
-# ------------------
+    # ------------------
     geometry_parameters = parameters['geometry']
 
     geom_signature = hashlib.md5(str(geometry_parameters).encode('utf-8')).hexdigest()
@@ -271,48 +289,16 @@ def traction_test(
         mesh = dolfin.Mesh("meshes/%s-%s.xml"%(fname, geom_signature))
     else:
         print("Creating meshfile: %s"%meshfile)
-
+        print(('DEBUG: (-Lx/2. ={} , -Ly/2.={})'.format(Lx/2., -Ly/2.)))
         geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
         mesh = mshr.generate_mesh(geom, n * int(float(Lx / ell)))
     print(meshfile)
 
     mesh_xdmf = dolfin.XDMFFile("meshes/%s-%s.xdmf"%(fname, geom_signature))
     mesh_xdmf.write(mesh)
-
-# ------------------
-    class PeriodicBoundary(SubDomain):
-        def __init__(self, Lx):
-            super(PeriodicBoundary, self).__init__()
-            self.Lx = Lx
-
-        # Left boundary is "target domain" G
-        def inside(self, x, on_boundary):
-            return bool(x[0] < -self.Lx/2 + DOLFIN_EPS and x[0] >-self.Lx/2 + -DOLFIN_EPS and on_boundary)
-
-        # Map right boundary (H) to left boundary (G)
-        def map(self, x, y):
-            y[0] = x[0] - self.Lx
-            y[1] = x[1]
-
-# ------------------
-
-    # Function Spaces
-    # if isPeriodic:
-    #     import pdb; pdb.set_trace()
-    #     V_u = dolfin.VectorFunctionSpace(mesh, "CG", 1, constrained_domain = PeriodicBoundary(Lx))
-    #     V_alpha = dolfin.FunctionSpace(mesh, "CG", 1, constrained_domain = PeriodicBoundary(Lx))
-    #     u = dolfin.Function(V_u, name="Total displacement")
-    #     alpha = dolfin.Function(V_alpha, name="Damage")
-    #     Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]), constrained_domain = PeriodicBoundary(Lx))
-    #     bcs_u = []
-    # else:
-    #     V_u = dolfin.VectorFunctionSpace(mesh, "CG", 1)
-    #     V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
-    #     # bcs_u = [DirichletBC(V_u, Constant((0., 0)), '(near(x[0], %f) or near(x[0], %f))'%(-Lx/2., Lx/2.))]
-    #     u = dolfin.Function(V_u, name="Total displacement")
-    #     alpha = dolfin.Function(V_alpha, name="Damage")
-    #     Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
-    #     bcs_u = [DirichletBC(V_u.sub(1), Constant(0.), '(near(x[0], %f) or near(x[0], %f))'%(-Lx/2., Lx/2.))]
+    if rank == 0: 
+        meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
+        meshf << mesh
 
     V_u = dolfin.VectorFunctionSpace(mesh, "CG", 1)
     V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
@@ -322,6 +308,16 @@ def traction_test(
     bcs_alpha = []
     bcs_u = [DirichletBC(V_u, Constant((0., 0)), '(near(x[0], %f) or near(x[0], %f))'%(-Lx/2., Lx/2.))]
 
+    left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
+    right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
+    bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
+    top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
+
+    mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
+    right.mark(mf, 1)
+    left.mark(mf, 2)
+    bottom.mark(mf, 3)
+
     state = [u, alpha]
 
     Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
@@ -329,17 +325,7 @@ def traction_test(
 
     v, beta = dolfin.split(z)
     dx = dolfin.Measure("dx", metadata=form_compiler_parameters, domain=mesh)
-
-    # bcs_u = [DirichletBC(V_u.sub(0), Constant(0.), "on_boundary and near(x[0], {})".format(-Lx/2)),
-    #          DirichletBC(V_u.sub(0), Constant(0.), "on_boundary and near(x[0], {})".format(Lx/2)),
-    #             DirichletBC(V_u, Constant([0., 0.]),
-    #                 '(near(x[0], %f) and near(x[1], %f))'%(-Lx/2., -Ly/2.), method='pointwise')]
-
-
-    # bcs_alpha = [dolfin.DirichletBC(V_alpha, 0.0, left),
-    #              dolfin.DirichletBC(V_alpha, 0.0, right)]
-    # bcs_u = []
-    # bcs_alpha = [DirichletBC(V_alpha, Constant(0.), '(near(x[0], %f) or near(x[0], %f))'%(-Lx/2., Lx/2.))]
+    ds = dolfin.Measure("ds", subdomain_data=mf)
 
     # Files for output
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
@@ -351,13 +337,14 @@ def traction_test(
         f.parameters["flush_output"] = True
 
     # Problem definition
-    e1 = Constant((1., 0))
+
     foundation_density = 1./2.*1./ell_e**2.*dot(u, u)
     model = DamagePrestrainedElasticityModel(state, E, nu, ell, sigma_D0,
         user_functional=foundation_density, 
         eps0t=Expression([['t', 0.],[0.,0.]], t=0., degree=0))
     # import pdb; pdb.set_trace()
     model.dx = dx
+    model.ds = ds
     energy = model.total_energy_density(u, alpha)*dx
     # Alternate minimization solver
     solver = solvers.AlternateMinimizationSolver(
@@ -377,117 +364,169 @@ def traction_test(
     #     stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
 
     stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
+    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
+
+    load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
+    if loads:
+        load_steps = loads
+
+    time_data = []
 
 
-    class TractionTS(TimeStepping):
-        """docstring for Evolution"""
-        def __init__(self,
-                    model,
-                    solver,
-                    stability,
-                    load_param,
-                    outfiles,
-                    parameters,
-                    user_density=None):
+    # class TractionTS(TimeStepping):
+    #     """docstring for Evolution"""
+    #     def __init__(self,
+    #                 model,
+    #                 solver,
+    #                 stability,
+    #                 load_param,
+    #                 outfiles,
+    #                 parameters,
+    #                 user_density=None):
 
-            super(TractionTS, self).__init__(model,
-                    solver,
-                    stability,
-                    load_param,
-                    outfiles,
-                    parameters,
-                    user_density)
-            self.spacetime = pd.DataFrame(columns = self.load_steps, )
-
-        def user_postprocess(self, load):
-            # beta_n = self.stability.eigen
-            from matplotlib.ticker import StrMethodFormatter
-            outdir = self.parameters['outdir']
-            alpha = self.solver.alpha
-
-            adm_pert = np.where(np.array([e['en_diff'] for e in stability.eigendata]) < 0)[0]
-
-            fig = plt.figure(figsize=(4, 1.5), dpi=180,)
-            ax = plt.gca()
-            X =alpha.function_space().tabulate_dof_coordinates()
-            xs = np.linspace(min(X[:, 0]),max(X[:, 0]), 300)
-            ax.plot(xs, [alpha(x, 0) for x in xs], label='$\\alpha$', lw=1, c='k')
-            ax.axhline(0., lw=.5, c='k', ls='-')
-            ax3 = ax.twinx()
-            ax.legend(fontsize='small')
-            # print(stability.eigendata)
-            # import pdb; pdb.set_trace()
-
-            for mode in adm_pert:
-                beta_n = stability.eigendata[mode]['beta_n']
-                ax3.plot(xs, [beta_n(x, 0) for x in xs], label='$\\beta_{}$'.format(mode), ls=':')
-
-            for axi in [ax, ax3]:
-                axi.spines['top'].set_visible(False)
-                axi.spines['bottom'].set_visible(False)
-
-            ax.get_yaxis().get_major_formatter().set_useOffset(False)
-            ax.set_yticks(np.linspace(0, 1, 3))
-            ax.yaxis.set_major_formatter(StrMethodFormatter('{x:.1f}')) # 2 decimal places
-            plt.xlabel('$x$')
-            ax.set_ylabel('$\\alpha$')
-            ax3.set_ylabel('$\\beta$')
-            ax.set_ylim(0., 1.)
-            # ax.set_xlim(-.5, .5)
-            ax3.legend(bbox_to_anchor=(0,-.45,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=len(adm_pert), frameon=False)
-
-            fig.savefig(os.path.join(outdir, "profiles-{:.3f}.pdf".format(load)), bbox_inches="tight")
+    #         super(TractionTS, self).__init__(model,
+    #                 solver,
+    #                 stability,
+    #                 load_param,
+    #                 outfiles,
+    #                 parameters,
+    #                 user_density)
+    #         self.spacetime = pd.DataFrame(columns = self.load_steps, )
 
 
-        def user_postprocess_timestep(self, load, xresol = 100):
-            from matplotlib.ticker import FuncFormatter, MaxNLocator
-
-            alpha = self.solver.alpha
-            parameters = self.parameters
-            xresol = xresol
-            X =alpha.function_space().tabulate_dof_coordinates()
-            xs = np.linspace(min(X[:, 0]),max(X[:, 0]), xresol)
-            # import pdb; pdb.set_trace()
-
-            fig = plt.figure(figsize=(8, 6), dpi=180,)
-            alpha0 = [alpha(x, 0) for x in xs]
-            self.spacetime[load] = alpha0
-            self.spacetime = self.spacetime.fillna(0)
-            mat = np.matrix(self.spacetime)
-            plt.imshow(mat, cmap = 'Greys', vmin = 0., vmax = 1., aspect=.1)
-            plt.colorbar()
-
-            def format_space(x, pos):
-                return '$%1.1f$'%((-x+xresol/2)/xresol)
-
-            def format_time(t, pos):
-                return '$%1.1f$'%((t-parameters['load_min'])/parameters['nsteps']*parameters['load_max'])
-
-            ax = plt.gca()
-
-            ax.yaxis.set_major_formatter(FuncFormatter(format_space))
-            ax.xaxis.set_major_formatter(FuncFormatter(format_time))
-
-            plt.xlabel('$t$')
-            plt.ylabel('$x$')
-            fig.savefig(os.path.join(outdir, "spacetime.pdf".format(load)), bbox_inches="tight")
-
-            self.spacetime.to_json(os.path.join(outdir + "/spacetime.json"))
-            pass
-
-    TS = TractionTS(model, solver, stability, model.eps0t, [file_out, file_con, file_eig], 
-        user_density = foundation_density,
-        parameters=parameters['time_stepping'])
+    # TS = TractionTS(model, solver, stability, model.eps0t, [file_out, file_con, file_eig], 
+        # user_density = foundation_density,
+        # parameters=parameters['time_stepping'])
 
     # TS = TimeStepping(model, solver, stability, model.eps0t, [file_out, None, None], 
     #     user_density = foundation_density,
     #     parameters=parameters['time_stepping'])
 
 
-    time_data_pd = TS.run()
+    # time_data_pd = TS.run()
 
 
+    linesearch = LineSearch(energy, [u, alpha])
+    alpha_old = dolfin.Function(alpha.function_space())
+    lmbda_min_prev = 0.000001
+    bifurcated = False
+    bifurcation_loads = []
+    save_current_bifurcation = False
+    bifurc_i = 0
+    alpha_bif = dolfin.Function(V_alpha)
+    alpha_bif_old = dolfin.Function(V_alpha)
+    bifurcation_loads = []
+    for it, load in enumerate(load_steps):
+        model.eps0t.t = load
+        alpha_old.assign(alpha)
+        ColorPrint.print_warn('Solving load t = {:.2f}'.format(load))
 
+        # First order stability conditions
+        (time_data_i, am_iter) = solver.solve()
+
+        # Second order stability conditions
+        (stable, negev) = stability.solve(solver.problem_alpha.lb)
+        ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
+
+        solver.update()
+
+        #
+        mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
+        print('lmbda min', lmbda_min_prev)
+        print('mineig', mineig)
+        Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
+
+        if (mineig + Deltav)*(lmbda_min_prev+dolfin.DOLFIN_EPS) < 0 and not bifurcated:
+            bifurcated = True
+
+            # save 3 bif modes
+            print('About to bifurcate load ', load, 'step', it)
+            bifurcation_loads.append(load)
+            modes = np.where(stability.eigs < 0)[0]
+
+            with dolfin.XDMFFile(os.path.join(outdir, "postproc.xdmf")) as file:
+                leneigs = len(modes)
+                maxmodes = min(3, leneigs)
+                for n in range(maxmodes):
+                    mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
+                    modename = 'beta-%d'%n
+                    print(modename)
+                    file.write_checkpoint(mode, modename, 0, append=True)
+
+            bifurc_i += 1
+
+        lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
+
+        time_data_i["load"] = load
+        time_data_i["stable"] = stable
+        time_data_i["dissipated_energy"] = dolfin.assemble(
+            model.damage_dissipation_density(alpha)*dx)
+        time_data_i["foundation_energy"] = dolfin.assemble(
+            1./2.*1/ell_e**2. * dot(u, u)*dx)
+        time_data_i["membrane_energy"] = dolfin.assemble(
+            model.elastic_energy_density(model.eps(u), alpha)*dx)
+        time_data_i["elastic_energy"] = time_data_i["membrane_energy"]+time_data_i["foundation_energy"]
+        time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
+        time_data_i["stable"] = stability.stable
+        time_data_i["# neg ev"] = stability.negev
+        # import pdb; pdb.set_trace()
+
+        _sigma = model.stress(model.eps(u), alpha)
+        e1 = dolfin.Constant([1, 0])
+        _snn = dolfin.dot(dolfin.dot(_sigma, e1), e1)
+        time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*model.ds(1))
+
+        time_data_i["S(alpha)"] = dolfin.assemble(1./(model.a(alpha))*model.dx)
+        time_data_i["A(alpha)"] = dolfin.assemble((model.a(alpha))*model.dx)
+        time_data_i["avg_alpha"] = dolfin.assemble(alpha*model.dx)
+
+        ColorPrint.print_pass(
+            "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
+                time_data_i["load"],
+                time_data_i["iterations"],
+                time_data_i["alpha_error"]))
+
+        time_data.append(time_data_i)
+        time_data_pd = pd.DataFrame(time_data)
+
+        if np.mod(it, savelag) == 0:
+            with file_out as f:
+                f.write(alpha, load)
+                f.write(u, load)
+            with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
+                f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
+                print('DEBUG: written step ', it)
+
+        if save_current_bifurcation:
+            # modes = np.where(stability.eigs < 0)[0]
+
+            time_data_i['h_opt'] = h_opt
+            time_data_i['max_h'] = hmax
+            time_data_i['min_h'] = hmin
+
+            with dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf")) as file:
+                # leneigs = len(modes)
+                # maxmodes = min(3, leneigs)
+                beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
+                print('DEBUG: irrev ', alpha.vector()-alpha_old.vector())
+                file.write_checkpoint(beta0v, 'beta0', 0, append = True)
+                file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
+                file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
+                file.write_checkpoint(alpha, 'alpha', 0, append=True)
+
+                np.save(os.path.join(outdir, 'energy_perturbations'), energy_perturbations, allow_pickle=True, fix_imports=True)
+
+            with file_eig as file:
+                _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
+                _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
+                _v.rename('perturbation displacement', 'perturbation displacement')
+                _beta.rename('perturbation damage', 'perturbation damage')
+                # import pdb; pdb.set_trace()
+                f.write(_v, load)
+                f.write(_beta, load)
+
+        time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
+        # user_postprocess_timestep(alpha, parameters, load, xresol = 100)
 
     plt.figure()
     dolfin.plot(alpha)
@@ -495,13 +534,16 @@ def traction_test(
     plt.figure()
     dolfin.plot(u, mode="displacement")
     plt.savefig(os.path.join(outdir, "u.png"))
+    _nu = parameters['material']['nu']
+    _E = parameters['material']['E']
+    _w1 = parameters['material']['sigma_D0']**2. / parameters['material']['E']
+
+    tc = np.sqrt(2*_w1/(_E*(1.-2.*_nu)*(1.+_nu)))
     if parameters['stability']['checkstability']=='True':
-        pp.plot_spectrum(parameters, outdir, time_data_pd.sort_values('load'), 1.)
+        pp.plot_spectrum(parameters, outdir, time_data_pd.sort_values('load'), tc)
     # plt.show()
     print(time_data_pd)
     return time_data_pd
-
-
 
 def plot_trace_spectrum(eigendata, parameters, load, outdir):
     nmodes = len(eigendata)
@@ -649,6 +691,81 @@ def plot_energy_slices(eigendata, parameters, u, alpha, model, load, outdir):
     plt.savefig(os.path.join(outdir, "en-{:3.4f}.pdf".format(load)))
     plt.close(fig)
 
+def user_postprocess(self, load):
+    # beta_n = self.stability.eigen
+    from matplotlib.ticker import StrMethodFormatter
+    outdir = self.parameters['outdir']
+    alpha = self.solver.alpha
+
+    adm_pert = np.where(np.array([e['en_diff'] for e in stability.eigendata]) < 0)[0]
+
+    fig = plt.figure(figsize=(4, 1.5), dpi=180,)
+    ax = plt.gca()
+    X =alpha.function_space().tabulate_dof_coordinates()
+    xs = np.linspace(min(X[:, 0]),max(X[:, 0]), 300)
+    ax.plot(xs, [alpha(x, 0) for x in xs], label='$\\alpha$', lw=1, c='k')
+    ax.axhline(0., lw=.5, c='k', ls='-')
+    ax3 = ax.twinx()
+    ax.legend(fontsize='small')
+    # print(stability.eigendata)
+    # import pdb; pdb.set_trace()
+
+    for mode in adm_pert:
+        beta_n = stability.eigendata[mode]['beta_n']
+        ax3.plot(xs, [beta_n(x, 0) for x in xs], label='$\\beta_{}$'.format(mode), ls=':')
+
+    for axi in [ax, ax3]:
+        axi.spines['top'].set_visible(False)
+        axi.spines['bottom'].set_visible(False)
+
+    ax.get_yaxis().get_major_formatter().set_useOffset(False)
+    ax.set_yticks(np.linspace(0, 1, 3))
+    ax.yaxis.set_major_formatter(StrMethodFormatter('{x:.1f}')) # 2 decimal places
+    plt.xlabel('$x$')
+    ax.set_ylabel('$\\alpha$')
+    ax3.set_ylabel('$\\beta$')
+    ax.set_ylim(0., 1.)
+    # ax.set_xlim(-.5, .5)
+    ax3.legend(bbox_to_anchor=(0,-.45,1,0.2), loc="lower left", mode="expand", borderaxespad=0, ncol=len(adm_pert), frameon=False)
+
+    fig.savefig(os.path.join(outdir, "profiles-{:.3f}.pdf".format(load)), bbox_inches="tight")
+
+def user_postprocess_timestep(alpha, parameters, load, xresol = 100):
+    from matplotlib.ticker import FuncFormatter, MaxNLocator
+
+    # alpha = self.solver.alpha
+    # parameters = self.parameters
+    xresol = xresol
+    X =alpha.function_space().tabulate_dof_coordinates()
+    xs = np.linspace(min(X[:, 0]),max(X[:, 0]), xresol)
+    # import pdb; pdb.set_trace()
+
+    fig = plt.figure(figsize=(8, 6), dpi=180,)
+    alpha0 = [alpha(x, 0) for x in xs]
+    spacetime[load] = alpha0
+    spacetime = spacetime.fillna(0)
+    mat = np.matrix(spacetime)
+    plt.imshow(mat, cmap = 'Greys', vmin = 0., vmax = 1., aspect=.1)
+    plt.colorbar()
+
+    def format_space(x, pos):
+        return '$%1.1f$'%((-x+xresol/2)/xresol)
+
+    def format_time(t, pos):
+        return '$%1.1f$'%((t-parameters['load_min'])/parameters['nsteps']*parameters['load_max'])
+
+    ax = plt.gca()
+
+    ax.yaxis.set_major_formatter(FuncFormatter(format_space))
+    ax.xaxis.set_major_formatter(FuncFormatter(format_time))
+
+    plt.xlabel('$t$')
+    plt.ylabel('$x$')
+    fig.savefig(os.path.join(outdir, "spacetime.pdf".format(load)), bbox_inches="tight")
+
+    spacetime.to_json(os.path.join(outdir + "/spacetime.json"))
+    pass
+
 if __name__ == "__main__":
 
     import argparse
@@ -660,7 +777,7 @@ if __name__ == "__main__":
                         help="JSON configuration string for this experiment")
     parser.add_argument("--ell", type=float, default=0.1)
     parser.add_argument("--ell_e", type=float, default=.3)
-    parser.add_argument("--load_max", type=float, default=2.0)
+    parser.add_argument("--load_max", type=float, default=3.0)
     parser.add_argument("--load_min", type=float, default=0.)
     parser.add_argument("--Lx", type=float, default=1)
     parser.add_argument("--Ly", type=float, default=0.1)
@@ -675,6 +792,7 @@ if __name__ == "__main__":
     parser.add_argument("--parameters", type=str, default=None)
     parser.add_argument("--print", type=bool, default=False)
     parser.add_argument("--continuation", type=bool, default=False)
+    parser.add_argument("--test", type=bool, default=True)
     parser.add_argument("--periodic", action='store_true')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
@@ -729,7 +847,8 @@ if __name__ == "__main__":
             savelag=args.savelag,
             continuation=args.continuation,
             periodic=args.periodic,
-            configString=config
+            configString=config,
+            test=args.test
         )
 
 

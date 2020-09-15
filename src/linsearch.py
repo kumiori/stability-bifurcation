@@ -10,7 +10,7 @@ size = comm.Get_size()
 
 
 class LineSearch(object):
-    """docstring for LineSearch"""
+    """Given an energy, a state, and a perturbation, performs returns optimal step and """
     def __init__(self, energy, state):
         super(LineSearch, self).__init__()
         self.u_0 = dolfin.Vector(state[0].vector())

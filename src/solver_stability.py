@@ -185,10 +185,22 @@ class StabilitySolver(object):
         self.meshsize = (mesh.hmax()+mesh.hmax())/2.
         self.mesh = mesh
 
+        self.Z = z.function_space()
+        self.z = z
+
+        # self.Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([state[0].ufl_element(), state[1].ufl_element()]))
+        # self.z = dolfin.Function(self.Z)
+
+        self.z_old = dolfin.Function(self.Z)
+        zeta = dolfin.TestFunction(self.Z)
+        v, beta = dolfin.split(zeta)
+
         cdm = dolfin.project(dolfin.CellDiameter(self.mesh)**2., dolfin.FunctionSpace(self.mesh, 'CG', 1))
         self.cellarea = dolfin.Function(z.function_space())
         self.cellarea.assign(cdm)
-        self.Z = z.function_space()
+
+
+
         self.ownership = self.Z.dofmap().ownership_range()
         self.assigner = dolfin.FunctionAssigner(
             self.Z,            # receiving space
@@ -211,15 +223,14 @@ class StabilitySolver(object):
 
         self.stable = ''
         self.negev = -1
-        self.z = z
-        self.z_old = dolfin.Function(self.Z)
-        zeta = dolfin.TestFunction(self.Z)
-        v, beta = dolfin.split(zeta)
+
 
         self.Ealpha = dolfin.derivative(energy, self.alpha, dolfin.TestFunction(self.alpha.ufl_function_space()))
         self.energy = energy
 
         z_u, z_a = dolfin.split(self.z)
+        # z_u, z_a = z.split()
+        import pdb; pdb.set_trace()
         energy = ufl.replace(energy, {self.u: z_u, self.alpha: z_a})
         self.J = dolfin.derivative(energy, self.z, dolfin.TestFunction(self.Z))
         self.H = dolfin.derivative(self.J, self.z, dolfin.TrialFunction(self.Z))
@@ -235,7 +246,6 @@ class StabilitySolver(object):
                                                               self.z, dolfin.TrialFunction(self.Z))
 
         self.ownership_range = self.Z.dofmap().ownership_range()
-        # import pdb; pdb.set_trace()
         if len(bcs)>0:
             self.bcs = bcs
             self.bc_dofs = self.get_bc_dofs(bcs)

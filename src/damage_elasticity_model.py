@@ -188,7 +188,6 @@ class DamageElasticityModel1D(DamageElasticityModel):
 
         return -(1./2.*(dda - 2*da**2./a(alpha))*inner(sigma(u), eps))*beta**2.
 
-
 class DamagePrestrainedElasticityModel(DamageElasticityModel):
     def __init__(
         self,
@@ -227,6 +226,7 @@ class DamagePrestrainedElasticityModel(DamageElasticityModel):
 
     def elastic_energy_density(self, eps, alpha):
         lmbda = self.lmbda3D(alpha)
+        # lmbda = self.lmbda2D(alpha)
         mu = self.mu3D(alpha)
         return 1.0 / 2.0 * lmbda * tr(eps-self.eps0()) ** 2 + mu * inner(eps-self.eps0(), eps-self.eps0())
 
@@ -257,7 +257,8 @@ class DamagePrestrainedElasticityModel(DamageElasticityModel):
         ddw = diff(diff(w(alpha), alpha), alpha)
         eps0 = self.eps0
         sigma0 = self.sigma0
-        return -(1./2.*(dda - da**2./a(alpha))*inner(sigma(u)-sigma0(), eps(u)-eps0()) + 1./2.*ddw)*beta**2.
+        Wt = 1./2.*inner(sigma(u)-sigma0(), eps(u)-eps0())
+        return -((dda - 2.*da**2.)/a(alpha)*Wt)*beta**2.
 
 class ElasticityModel(object):
     def __init__(

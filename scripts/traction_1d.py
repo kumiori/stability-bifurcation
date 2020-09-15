@@ -99,7 +99,7 @@ numerical_parameters = {"alt_min": alt_min_parameters,
                       "time_stepping": timestepping_parameters}
 
 versions = get_versions()
-versions.update({'filename': __file__})
+versions.update({'filename': os.path.basename(__file__)})
 parameters = {"alt_min": alt_min_parameters,
                 "stability": stability_parameters,
                 "time_stepping": timestepping_parameters,
@@ -193,7 +193,7 @@ def traction_1d(
         configuration = deepcopy(parameters)
         configuration['time_stepping'].pop('outdir')
         str(configuration).replace("\'True\'", "True").replace("\'False\'", "False")
-        rerun_cmd = 'python3 {} --config="{}"'.format(__file__, configuration)
+        rerun_cmd = 'python3 {} --config="{}"'.format(os.path.basename(__file__), configuration)
         f.write(rerun_cmd)
 
     with open(os.path.join(outdir, 'parameters.pkl'), 'w') as f:
@@ -204,17 +204,12 @@ def traction_1d(
 
 
     print('experiment = {}'.format(os.path.join('~/Documents/WIP/paper_stability_code', outdir)))
-    # geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
-    # mesh = mshr.generate_mesh(geom,  int(float(n * Lx / ell)))
     mesh = dolfin.IntervalMesh(int(float(n * Lx / ell)), -Lx/2., Lx/2.)
     meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
     meshf << mesh
 
     left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
     right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
-    # bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
-    # top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
-    # left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
 
     mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
     right.mark(mf, 1)
@@ -298,8 +293,8 @@ def traction_1d(
     # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
 
     # Time iterations
-    # load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
-    load_steps = np.logspace(np.log10(load_min), np.log10(load_max), parameters['time_stepping']['nsteps'])
+    load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
+    # load_steps = np.logspace(np.log10(load_min), np.log10(load_max), parameters['time_stepping']['nsteps'])
 
     if loads:
         load_steps = loads
@@ -324,6 +319,7 @@ def traction_1d(
     bifurcation_loads = []
     time_data_pd = []
     for it, load in enumerate(load_steps):
+        # import pdb; pdb.set_trace()
         ut.t = load
         alpha_old.assign(alpha)
 
@@ -480,7 +476,7 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--config", required=False,
                         help="JSON configuration string for this experiment")
     parser.add_argument("--ell", type=float, default=0.1)
-    parser.add_argument("--load_max", type=float, default=2.0)
+    parser.add_argument("--load_max", type=float, default=3.0)
     parser.add_argument("--load_min", type=float, default=0.0)
     parser.add_argument("--E", type=float, default=1)
     parser.add_argument("--sigma_D0", type=float, default=1)
@@ -578,20 +574,15 @@ if __name__ == "__main__":
     tc = np.sqrt(2*w1/2*params['material']['E'])
     ell = params['material']['ell']
     lab = '\\ell={}, E={}, \\sigma_D = {}'.format(params['material']['ell'], params['material']['E'],params['material']['sigma_D0'])
+    params['geometry']['Ly'] =1
     fig1, ax1 =pp.plot_energy(params, data, tc)
-    visuals.setspines2()
+    # visuals.setspines2()
     mu = params['material']['E']/2.
     # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
     elast_en = [1./2.*params['material']['E']*eps**2 for eps in data['load']]
     plt.plot(data['load'], elast_en, c='k')
     ax1.axvline(pp.t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
     ax1.axvline(pp.t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
-
-
-
-    ax1.get_yaxis().set_major_formatter(ScalarFormatter())
-    ax1.ticklabel_format(axis='both', style='plain', useOffset=True)
-
 
     plt.title('${}$'.format(lab))
 
@@ -601,15 +592,11 @@ if __name__ == "__main__":
     ax1.axvline(pp.t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
     ax1.axvline(pp.t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
 
-    # ax1.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
-    ax1.get_yaxis().set_major_formatter(ScalarFormatter())
-    ax1.yaxis.set_major_formatter(FormatStrFormatter('%0.0e'))
-    # ax1.ticklabel_format(axis='y', style='sci', useOffset=True)
     plt.plot(np.linspace(1, params['time_stepping']['load_max'], 30),
              [1- (t/params['material']['sigma_D0']/params['material']['E'])**(2/(1-2)) for t in np.linspace(1, params['time_stepping']['load_max'], 30)],
             c='k', lw=.5)
     plt.title('${}$'.format(lab))
-    visuals.setspines2()
+    # visuals.setspines2()
     ax1.set_ylim(-1., .2)
 
     # fig1.savefig("/Users/kumiori/Documents/WIP/paper_stability/fig/energy-traction-{}.pdf".format(signature), bbox_inches='tight')
@@ -621,5 +608,5 @@ if __name__ == "__main__":
     mesh = dolfin.Mesh(comm, os.path.join(experiment, 'mesh.xml'))
     fig = plt.figure()
     dolfin.plot(mesh)
-    visuals.setspines2()
+    # visuals.setspines2()
     fig.savefig(os.path.join(location, "mesh.pdf"), bbox_inches='tight')

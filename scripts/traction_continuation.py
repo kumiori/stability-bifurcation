@@ -197,7 +197,7 @@ def traction_test(
         configuration = deepcopy(parameters)
         configuration['time_stepping'].pop('outdir')
         str(configuration).replace("\'True\'", "True").replace("\'False\'", "False")
-        rerun_cmd = 'python3 traction.py --config="{}"'.format(configuration)
+        rerun_cmd = 'python3 {} --config="{}"'.format(__file__, configuration)
         f.write(rerun_cmd)
 
     with open(os.path.join(outdir, 'parameters.pkl'), 'w') as f:
@@ -256,6 +256,12 @@ def traction_test(
     file_eig = dolfin.XDMFFile(os.path.join(outdir, "modes.xdmf"))
     file_eig.parameters["functions_share_mesh"] = True
     file_eig.parameters["flush_output"] = True
+    file_postproc = dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf"))
+    file_postproc.parameters["functions_share_mesh"] = True
+    file_postproc.parameters["flush_output"] = True
+    file_bif = dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf"))
+    file_bif.parameters["functions_share_mesh"] = True
+    file_bif.parameters["flush_output"] = True
 
     # Problem definition
     model = DamageElasticityModel(state, E0, nu, ell, sigma_D0)
@@ -379,6 +385,11 @@ def traction_test(
         time_data_i["# neg ev"] = stability.negev
         # import pdb; pdb.set_trace()
 
+        _sigma = model.stress(model.eps(u), alpha)
+        e1 = dolfin.Constant([1, 0])
+        _snn = dolfin.dot(dolfin.dot(_sigma, e1), e1)
+        time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*model.ds(1))
+
         time_data_i["S(alpha)"] = dolfin.assemble(1./(model.a(alpha))*model.dx)
         time_data_i["A(alpha)"] = dolfin.assemble((model.a(alpha))*model.dx)
         time_data_i["avg_alpha"] = dolfin.assemble(alpha*model.dx)
@@ -393,19 +404,25 @@ def traction_test(
         time_data_pd = pd.DataFrame(time_data)
 
         if np.mod(it, savelag) == 0:
-            with file_out as f:
-                f.write(alpha, load)
-                f.write(u, load)
-            with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
-                f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
+            with file_out as file:
+                file.write(alpha, load)
+                file.write(u, load)
+
+            with file_postproc as file:
+                file.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
                 print('DEBUG: written step ', it)
+                file.read_checkpoint(alpha, 'alpha-{}'.format(it), 0)
+                print('DEBUG: read step {}, load {}'.format(it, load))
+                print('DEBUG: file {}'.format(os.path.join(outdir, "output_postproc.xdmf")))
+                # import pdb; pdb.set_trace()
 
         if save_current_bifurcation:
             # modes = np.where(stability.eigs < 0)[0]
             time_data_i['h_opt'] = h_opt
             time_data_i['max_h'] = hmax
             time_data_i['min_h'] = hmin
-            with dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf")) as file:
+
+            with file_bif as file:
                 # leneigs = len(modes)
                 # maxmodes = min(3, leneigs)
                 beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
@@ -416,15 +433,18 @@ def traction_test(
                 file.write_checkpoint(alpha, 'alpha', 0, append=True)
 
                 np.save(os.path.join(outdir, 'energy_perturbations'), energy_perturbations, allow_pickle=True, fix_imports=True)
-                # import pdb; pdb.set_trace()
 
-                # maxmodes = 2
-                # for n in range(maxmodes):
-                #     mode = dolfin.project(linsearch[n]['beta_n'], V_alpha)
-                #     modename = 'beta-%d'%n
-                #     print(modename)
-                #     file.write_checkpoint(mode, modename, 0, append=True)
-                #     import pdb; pdb.set_trace()
+            with file_eig as file:
+                _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
+                _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
+                _v.rename('perturbation displacement', 'perturbation displacement')
+                _beta.rename('perturbation damage', 'perturbation damage')
+                # import pdb; pdb.set_trace()
+                file.write(_v, load)
+                file.write(_beta, load)
+
+            save_current_bifurcation = False
+
 
         # if np.mod(it, 10) == 0:
         #     alphatest = dolfin.Function(V_alpha)
@@ -432,7 +452,7 @@ def traction_test(
         #         f.read_checkpoint(alphatest, "alpha-{}".format(it), 0)
         #         print('DEBUG: read step ', it)
 
-            time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
+        time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
     from post_processing import plot_global_data
     print(time_data_pd)
@@ -460,15 +480,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", required=False,
                         help="JSON configuration string for this experiment")
-    parser.add_argument("--ell", type=float, default=0.1)
-    parser.add_argument("--load_max", type=float, default=2.0)
+    parser.add_argument("--ell", type=float, default=float(1/1.7))
+    parser.add_argument("--load_max", type=float, default=3.0)
     parser.add_argument("--load_min", type=float, default=0.0)
     parser.add_argument("--E", type=float, default=1)
     parser.add_argument("--sigma_D0", type=float, default=1)
     parser.add_argument("--Lx", type=float, default=1)
     parser.add_argument("--Ly", type=float, default=0.1)
     parser.add_argument("--nu", type=float, default=0.0)
-    parser.add_argument("--n", type=int, default=2)
+    parser.add_argument("--n", type=int, default=6)
     parser.add_argument("--nsteps", type=int, default=30)
     parser.add_argument("--degree", type=int, default=2)
     parser.add_argument("--outdir", type=str, default=None)
@@ -476,7 +496,7 @@ if __name__ == "__main__":
     parser.add_argument("--savelag", type=int, default=1)
     parser.add_argument("--parameters", type=str, default=None)
     parser.add_argument("--print", type=bool, default=False)
-    parser.add_argument("--continuation", type=bool, default=False)
+    parser.add_argument("--continuation", type=bool, default=True)
 
     args, unknown = parser.parse_known_args()
     if len(unknown):

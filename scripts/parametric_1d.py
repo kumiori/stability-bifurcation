@@ -60,7 +60,9 @@ for ell in ell_list:
 			n=7,
 			# Lx=Lx,
 			# outdir='../output/parametric-traction-plane-stress/ell-{:2f}'.format(ell),
-			outdir='../output/parametric-traction-1d-validation-paper/ell-{:2f}'.format(ell),
+			# outdir='../output/parametric-traction-1d-validation-paper/ell-{:2f}'.format(ell),
+			# outdir='../output/parametric-traction-1d-validation-paperdoublecheck/ell-{:2f}'.format(ell),
+			outdir='../output/parametric-traction-1d-validation-auto/ell-{:2f}'.format(ell),
 			# outdir='../output/parametric-traction-1d-validation-paper-auto/ell-{:2f}'.format(ell),
 			# outdir='../output/parametric-traction-n-10/ell-{:2f}'.format(ell),
 			breakifunstable = True
