@@ -667,7 +667,7 @@ class StabilitySolver(object):
                     eig, u_r, u_im, err = eigen.get_eigenpair(n)
                     err2 = eigen.E.computeError(0, SLEPc.EPS.ErrorType.ABSOLUTE)
                     v_n, beta_n = u_r.split(deepcopy=True)
-                    print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
+                    # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
 
                     if debug and size == 1:
                         plt.clf()
@@ -679,11 +679,14 @@ class StabilitySolver(object):
                     eig, u_r, u_im, err = eigen.get_eigenpair(n)
 
                     order = self.parameters['order']
-                    h, en_diff, interval, energy = self.linesearch(v_n, beta_n, order, n)
+                    # h, en_diff, interval, energy = self.linesearch(v_n, beta_n, order, n)
 
-                    linsearch.append({'n': n, 'lambda_n': eig.real,'hstar': h, 'en_diff': en_diff,
-                        'v_n': v_n, 'beta_n': beta_n, 'order': order,
-                        'interval': interval, 'energy': energy})
+                    # linsearch.append({'n': n, 'lambda_n': eig.real,'hstar': h, 'en_diff': en_diff,
+                    #     'v_n': v_n, 'beta_n': beta_n, 'order': order,
+                    #     'interval': interval, 'energy': energy})
+
+                    linsearch.append({'n': n, 'lambda_n': eig.real,
+                        'v_n': v_n, 'beta_n': beta_n})
 
             eig, u_r, u_im, err = eigen.get_eigenpair(0)
             self.eigs = eigs[:,0]
@@ -695,8 +698,8 @@ class StabilitySolver(object):
             if eigs[0,0]<0:
                 self.perturbation_v = linsearch[0]['v_n']
                 self.perturbation_beta = linsearch[0]['beta_n']
-                self.hstar = linsearch[0]['hstar']
-                self.en_diff = linsearch[0]['en_diff']
+                # self.hstar = linsearch[0]['hstar']
+                # self.en_diff = linsearch[0]['en_diff']
                 self.eigendata = linsearch
 
             self.i +=1

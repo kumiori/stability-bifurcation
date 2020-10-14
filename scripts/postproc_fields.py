@@ -41,6 +41,7 @@ stride = args.stride
 
 
 params, data, signature = load_data(rootdir)
+# import pdb; pdb.set_trace()
 
 mesh = dolfin.Mesh(comm, os.path.join(rootdir, 'mesh.xml'))
 V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
@@ -72,18 +73,21 @@ maxmodes = 2
 alpha = dolfin.Function(V_alpha)
 alphas = []
 
-file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "output_postproc.xdmf"))
+# file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "output_postproc.xdmf"))
+file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "output.xdmf"))
 file_postproc.parameters["functions_share_mesh"] = True
 file_postproc.parameters["flush_output"] = True
 
 # stride = 10
 for (step, load) in enumerate(load_steps):
 	if not step % stride:
-		with file_postproc as file:
-			print('DEBUG: reading file', os.path.join(rootdir, "output_postproc.xdmf"))
+		with file_out as file:
+			print('DEBUG: reading file', os.path.join(rootdir, "output.xdmf"))
 			print('DEBUG: reading step', step)
-			file_postproc.read_checkpoint(alpha, 'alpha-{}'.format(step), 0)
-			# import pdb; pdb.set_trace()
+			try:
+				file.read_checkpoint(alpha, 'alpha-{}'.format(step), 0)
+			except Exception as e:
+				print(e)
 			if onedim:
 				alphav = [alpha(x) for x in xs]
 			else:
@@ -99,44 +103,45 @@ data = np.load(os.path.join(rootdir, "alpha.npy".format(0)))
 perturbations = []
 
 
-betan = dolfin.Function(V_alpha)
-maxmodes = 1
-fields = []
-h0=0
-fields = [beta0, alpha_old, alpha_bif, alpha]
-try:
-	with file_bif as file:
-	# with dolfin.XDMFFile(os.path.join(rootdir, "postproc.xdmf")) as file:
-		import pdb; pdb.set_trace()
-		file.read_checkpoint(beta0, 'beta0')
-		file.read_checkpoint(alpha, 'alpha')
-		file.read_checkpoint(alpha_old, 'alpha-old')
-		file.read_checkpoint(alpha_bif, 'alpha-bif')
+if params['stability']['continuation']:
+	betan = dolfin.Function(V_alpha)
+	maxmodes = 1
+	fields = []
+	h0=0
+	fields = [beta0, alpha_old, alpha_bif, alpha]
+	try:
+		with file_bif as file:
+		# with dolfin.XDMFFile(os.path.join(rootdir, "postproc.xdmf")) as file:
+			# import pdb; pdb.set_trace()
+			file.read_checkpoint(beta0, 'beta0')
+			file.read_checkpoint(alpha, 'alpha')
+			file.read_checkpoint(alpha_old, 'alpha-old')
+			file.read_checkpoint(alpha_bif, 'alpha-bif')
 
-	for field, name in zip(fields, ['beta0', 'alpha_old', 'alpha_bif', 'alpha0']):
-		if onedim:
-			fieldv = [field(x) for x in xs]
-		else:
-			fieldv = [field(x, h0) for x in xs]
-		print('saving {}'.format(name))
-		np.save(os.path.join(rootdir, name), fieldv,
-			allow_pickle=True, fix_imports=True)
+		for field, name in zip(fields, ['beta0', 'alpha_old', 'alpha_bif', 'alpha0']):
+			if onedim:
+				fieldv = [field(x) for x in xs]
+			else:
+				fieldv = [field(x, h0) for x in xs]
+			print('saving {}'.format(name))
+			np.save(os.path.join(rootdir, name), fieldv,
+				allow_pickle=True, fix_imports=True)
 
-	for n in range(maxmodes):
-		modename = 'beta-%d'%n
-		print('Reading mode: ', modename)
-		file.read_checkpoint(betan, modename)
+		for n in range(maxmodes):
+			modename = 'beta%d'%(n)
+			print('Reading mode: ', modename)
+			file.read_checkpoint(betan, modename)
 
-		perturbations.append(betan)
-		if onedim:
-			betanv = [betan(x) for x in xs]
-		else:
-			betanv = [betan(x, h0) for x in xs]
-		np.save(os.path.join(rootdir, "beta-{}".format(n)), betanv,
-			allow_pickle=True, fix_imports=True)
+			perturbations.append(betan)
+			if onedim:
+				betanv = [betan(x) for x in xs]
+			else:
+				betanv = [betan(x, h0) for x in xs]
+			np.save(os.path.join(rootdir, "beta-{}".format(n)), betanv,
+				allow_pickle=True, fix_imports=True)
 
-except Exception as e: 
-	print(e)
+	except Exception as e: 
+		print(e)
 	# print('no bifurcation data found')
 # else:
 # 	pass

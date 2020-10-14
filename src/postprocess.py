@@ -189,14 +189,15 @@ def plot_energy(params, dataf, tc):
 	fig = plt.figure()
 	plt.xlabel('$$t$$')
 
-	plt.plot(dataf['load'].values,
-		dataf['dissipated_energy'].values/En0, marker='o', label='dissipated', c='white', alpha = 0.7)
+	dissi = dataf['dissipated_energy'].values
+	elast = dataf['elastic_energy'].values
+	loads = dataf['load'].values
 
-	plt.plot(dataf['load'].values,
-		dataf['elastic_energy'].values/En0, marker='o', label='elastic', c='k', alpha = 0.7)
+	plt.plot(loads, dissi/En0, marker='o', label='dissipated', c='white', markeredgewidth=1., markeredgecolor='grey', alpha = 0.7)
 
-	plt.plot(dataf['load'].values,
-		(dataf['elastic_energy'].values+dataf['dissipated_energy'].values)/En0, marker='o', lw=3, label='total', c='grey', alpha = 0.7)
+	plt.plot(loads, elast/En0, marker='o', label='elastic', c='k', alpha = 0.7)
+
+	plt.plot(loads, (elast+dissi)/En0, marker='o', lw=3, label='total', c='grey', alpha = 0.7)
 
 	ax = plt.gca()
 	# ax.axvline(tc, c='k', lw=.5, label='$t^{cr}$')
@@ -276,8 +277,8 @@ def plot_stability(prefix, tol=1e-5):
 
 	# plt.plot((20, 20), (20, 20), ls='-', c='C0', marker='+', label='$\\lambda_0<{}$'.format(tol))
 	plt.plot((20, 20), (20, 20), ls='', c='k', marker='X', label='incr. unstable')
-	plt.plot((20, 20), (20, 20), ls='', c=elastic, marker='.', label='stable, elastic')
-	plt.plot((20, 20), (20, 20), ls='', c=homogen, marker='.', label='stable, homogeneous')
+	plt.plot((20, 20), (20, 20), ls='', c=elastic, marker='.', label='elastic')
+	plt.plot((20, 20), (20, 20), ls='', c=homogen, marker='.', label='incr. \\& state stable ')
 
 	q=2
 	coeff_sta = 2.*np.pi*q/(q+1)**(3./2.)*np.sqrt(2)
@@ -297,15 +298,9 @@ def plot_stability(prefix, tol=1e-5):
 	# ax.add_patch(patches.Rectangle((0, coeff_bif), 1, 10, facecolor = 'C0',fill=True, alpha=.3))
 	ax.add_patch(patches.Rectangle((0, 0), 1, 10, facecolor = elastic,fill=True, alpha=.3))
 	ax.add_patch(patches.Rectangle((1, coeff_sta), 10, 10, facecolor = localis,fill=True, alpha=.3))
-	# ax.add_patch(patches.Rectangle((0, 0), 10, 1./loads[-2]*coeff_bif, facecolor = 'C0',fill=True, alpha=.3))
-	# ax.add_patch(patches.Rectangle((1, 0), loads[-1], coeff_bif/(loads[-1]), facecolor = 'C2',fill=True, alpha=.3))
 	x1, y1 = [1, 1], [coeff_bif, 20]
-	# x2, y2 = [1, 10], [3, 2]
 	plt.plot(x1, y1, lw=2, c='k')
 
-	# ax.text(.55, .15, r'Elastic', fontsize=25)
-	# ax.text(1.2, .15, r'Homogeneous (unique)', fontsize=25)
-	# (?# ax.text(3.5, 2.5, r'Unstable', fontsize=25))
 	plt.legend(loc='upper right')
 	plt.xlabel('$t$')
 	plt.ylabel('$$L/\ell$$')
@@ -315,8 +310,7 @@ def plot_stability(prefix, tol=1e-5):
 	ax.set_yticks([0, 1, 1/.5, 1/.25, coeff_sta, coeff_bif])
 	ax.set_yticklabels(['0','1','2','4', '$$\\ell_s$$', '$$\\ell_b$$'])
 
-	# visuals.setspines()
-	plt.loglog()
+	# plt.loglog()
 	plt.ylim(0.5, 3*coeff_sta)
 	plt.xlim(0.5, max(loads))
 	return fig

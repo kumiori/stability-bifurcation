@@ -224,9 +224,14 @@ class DamagePrestrainedElasticityModel(DamageElasticityModel):
         mu = self.mu3D(0)
         return lmbda * tr(self.eps0()) * Identity(n) + 2*mu * self.eps0()
 
+    def lmbda2D(self, alpha):
+        # effective film energy
+        return (self.lmbda3D(alpha)*self.mu3D(alpha)) /(self.lmbda3D(alpha)+2.*self.mu3D(alpha))
+        # return write in terms of E, nu
+
     def elastic_energy_density(self, eps, alpha):
-        lmbda = self.lmbda3D(alpha)
-        # lmbda = self.lmbda2D(alpha)
+        # lmbda = self.lmbda3D(alpha)
+        lmbda = self.lmbda2D(alpha)
         mu = self.mu3D(alpha)
         return 1.0 / 2.0 * lmbda * tr(eps-self.eps0()) ** 2 + mu * inner(eps-self.eps0(), eps-self.eps0())
 
