@@ -5,7 +5,6 @@ import sympy
 import pandas as pd
 import os
 import dolfin
-import mshr
 import ufl
 import matplotlib.pyplot as plt
 import solvers
@@ -309,8 +308,9 @@ def traction_test(
             cmd = 'dolfin-convert -i gmsh meshes/circle-{}.msh meshes/circle-{}.xml'.format(geom_signature, geom_signature)
             Popen([cmd], stdout=PIPE, shell=True).communicate()
 
+        mesh = Mesh('meshes/circle-{}.xml'.format(geom_signature))
         mesh_xdmf = XDMFFile("meshes/circle-%s.xdmf"%(geom_signature))
-        # mesh_xdmf.write(mesh)
+        mesh_xdmf.write(mesh)
 
         # with pygmsh.geo.Geometry() as geom:
         #     circle = geom.add_circle(
