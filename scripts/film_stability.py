@@ -302,11 +302,15 @@ def traction_test(
             with open("meshes/circle-%s"%geom_signature+".geo", 'w') as f:
                 f.write(geofile)
 
-            cmd = 'gmsh meshes/circle-{}.geo -2 -o meshes/circle-{}.msh'.format(geom_signature, geom_signature)
-            print(check_output([cmd], shell=True))  # run in shell mode in case you are not run in terminal
-
-            cmd = 'dolfin-convert -i gmsh meshes/circle-{}.msh meshes/circle-{}.xml'.format(geom_signature, geom_signature)
-            Popen([cmd], stdout=PIPE, shell=True).communicate()
+            cmd1 = 'gmsh meshes/circle-{}.geo -2 -o meshes/circle-{}.msh'.format(geom_signature, geom_signature)
+            cmd2 = 'dolfin-convert -i gmsh meshes/circle-{}.msh meshes/circle-{}.xml'.format(geom_signature, geom_signature)
+            
+            print('Unable to handle mesh generation at the moment, please generate the mesh and test again.')
+            print(cmd1)
+            print(cmd2)
+            sys.exit()
+            print(check_output([cmd1], shell=True))  # run in shell mode in case you are not run in terminal
+            Popen([cmd2], stdout=PIPE, shell=True).communicate()
 
         mesh = Mesh('meshes/circle-{}.xml'.format(geom_signature))
         mesh_xdmf = XDMFFile("meshes/circle-%s.xdmf"%(geom_signature))
