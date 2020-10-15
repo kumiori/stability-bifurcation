@@ -5,7 +5,6 @@ import sympy
 import pandas as pd
 import os
 import dolfin
-import mshr
 import ufl
 import matplotlib.pyplot as plt
 import solvers
