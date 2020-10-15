@@ -352,17 +352,21 @@ def traction_test(
     alpha = dolfin.Function(V_alpha, name="Damage")
 
     bcs_alpha = []
-    bcs_u = [DirichletBC(V_u, Constant((0., 0)), '(near(x[0], %f) or near(x[0], %f))'%(-Lx/2., Lx/2.))]
+    # Rectangle
+    # bcs_u = [DirichletBC(V_u, Constant((0., 0)), '(near(x[0], %f) or near(x[0], %f))'%(-Lx/2., Lx/2.))]
+    # Circle
 
-    left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
-    right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
-    bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
-    top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
+    bcs_u = [DirichletBC(V_u, Constant((0., 0.)), 'on_boundary')]
 
-    mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
-    right.mark(mf, 1)
-    left.mark(mf, 2)
-    bottom.mark(mf, 3)
+    # left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
+    # right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
+    # bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
+    # top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
+
+    # mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
+    # right.mark(mf, 1)
+    # left.mark(mf, 2)
+    # bottom.mark(mf, 3)
 
     state = [u, alpha]
 
@@ -371,7 +375,8 @@ def traction_test(
 
     v, beta = dolfin.split(z)
     dx = dolfin.Measure("dx", metadata=form_compiler_parameters, domain=mesh)
-    ds = dolfin.Measure("ds", subdomain_data=mf)
+    # ds = dolfin.Measure("ds", subdomain_data=mf)
+    ds = dolfin.Measure("ds")
 
     # Files for output
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
