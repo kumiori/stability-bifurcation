@@ -233,7 +233,6 @@ def traction_test(
     for par in parameters: parameters[par].update(cmd_parameters[par])
 
     if config:
-        # import pdb; pdb.set_trace()
         for par in config: parameters[par].update(config[par])
     # else:
 
@@ -253,7 +252,7 @@ def traction_test(
     
     if parameters['experiment']['test'] == True: outdir += '-{}'.format(cmd_parameters['time_stepping']['postfix'])
     else: outdir += '-{}{}'.format(signature, cmd_parameters['time_stepping']['postfix'])
-    
+    outdir = outdir+'-cont'
     parameters['time_stepping']['outdir']=outdir
     Path(outdir).mkdir(parents=True, exist_ok=True)
     print('Outdir is: '+outdir)
@@ -272,7 +271,6 @@ def traction_test(
         f.write(signature)
     print(parameters)
     
-    # import pdb; pdb.set_trace()
 
     # boundary_meshfunction = dolfin.MeshFunction("size_t", mesh, "meshes/%s-%s_facet_region.xml"%(fname, signature))
     # cells_meshfunction = dolfin.MeshFunction("size_t", mesh, "meshes/%s-%s_physical_region.xml"%(fname, signature))
@@ -281,59 +279,17 @@ def traction_test(
     geometry_parameters = parameters['geometry']
 
     geom_signature = hashlib.md5(str(geometry_parameters).encode('utf-8')).hexdigest()
-    meshfile = "%s/meshes/circle-%s.xml"%(BASE_DIR, geom_signature)
+    meshfile = "%s/meshes/%s-%s.xml"%(BASE_DIR, fname, geom_signature)
     # cmd_parameters['experiment']['signature']=signature
-    meshsize = parameters['material']['ell']/parameters['geometry']['n']
-    d={'rad': parameters['geometry']['Lx'], 'Ly': parameters['geometry']['Ly'],
-        'meshsize': meshsize}
 
     if os.path.isfile(meshfile):
         print("Meshfile %s exists"%meshfile)
-        mesh = dolfin.Mesh("meshes/circle-%s.xml"%(geom_signature))
+        mesh = dolfin.Mesh("meshes/%s-%s.xml"%(fname, geom_signature))
     else:
         print("Creating meshfile: %s"%meshfile)
-        print("DEBUG: parameters: %s"%parameters['geometry'])
-
-        mesh_template = open('templates/circle_template.geo')
-
-        src = Template(mesh_template.read())
-        geofile = src.substitute(d)
-
-        if MPI.rank(MPI.comm_world) == 0:
-            with open("meshes/circle-%s"%geom_signature+".geo", 'w') as f:
-                f.write(geofile)
-
-            cmd = 'gmsh meshes/circle-{}.geo -2 -o meshes/circle-{}.msh'.format(geom_signature, geom_signature)
-            print(check_output([cmd], shell=True))  # run in shell mode in case you are not run in terminal
-
-            cmd = 'dolfin-convert -i gmsh meshes/circle-{}.msh meshes/circle-{}.xml'.format(geom_signature, geom_signature)
-            Popen([cmd], stdout=PIPE, shell=True).communicate()
-
-        mesh_xdmf = XDMFFile("meshes/circle-%s.xdmf"%(geom_signature))
-        # mesh_xdmf.write(mesh)
-
-        # with pygmsh.geo.Geometry() as geom:
-        #     circle = geom.add_circle(
-        #         [0.0, 0.0, 0.0],
-        #         1.0,
-        #         mesh_size=0.1,
-        #         num_sections=4,
-        #         # If compound==False, the section borders have to be points of the
-        #         # discretization. If using a compound circle, they don't; gmsh can
-        #         # choose by itself where to point the circle points.
-        #         compound=True,
-        #     )
-        #     geom.add_physical(circle.plane_surface, "disk")
-        #     # 
-        #     mesh = geom.generate_mesh()
-
-        # mesh.write("out.xdmf")
-        # mesh.write("out.xml")
-
-
-        # geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
-        # mesh = mshr.generate_mesh(geom, n * int(float(Lx / ell)))
-
+        print(('DEBUG: (-Lx/2. ={} , -Ly/2.={})'.format(Lx/2., -Ly/2.)))
+        geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
+        mesh = mshr.generate_mesh(geom, n * int(float(Lx / ell)))
     print(meshfile)
 
     mesh_xdmf = dolfin.XDMFFile("meshes/%s-%s.xdmf"%(fname, geom_signature))
@@ -385,7 +341,7 @@ def traction_test(
     model = DamagePrestrainedElasticityModel(state, E, nu, ell, sigma_D0,
         user_functional=foundation_density, 
         eps0t=Expression([['t', 0.],[0.,0.]], t=0., degree=0))
-    # import pdb; pdb.set_trace()
+    # import pdb; .set_trace()
     model.dx = dx
     model.ds = ds
     energy = model.total_energy_density(u, alpha)*dx
@@ -422,6 +378,12 @@ def traction_test(
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
     bifurcation_loads = []
+
+    tot_energy = model.elastic_energy_density(model.eps(u), alpha)*dx + \
+            1./2.*1/ell_e**2. * dot(u, u)*dx             + \
+            model.damage_dissipation_density(alpha)*dx
+    cont_atol = 1e-3
+
     for it, load in enumerate(load_steps):
         model.eps0t.t = load
         alpha_old.assign(alpha)
@@ -433,36 +395,87 @@ def traction_test(
         # Second order stability conditions
         (stable, negev) = stability.solve(solver.problem_alpha.lb)
         ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
+        # import pdb; pdb.set_trace()
 
-        solver.update()
-
-        #
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
-        print('lmbda min', lmbda_min_prev)
-        print('mineig', mineig)
+        print('DEBUG: lmbda min', lmbda_min_prev)
+        print('DEBUG: mineig', mineig)
         Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
 
         if (mineig + Deltav)*(lmbda_min_prev+dolfin.DOLFIN_EPS) < 0 and not bifurcated:
             bifurcated = True
 
             # save 3 bif modes
-            print('About to bifurcate load ', load, 'step', it)
+            print('DEBUG: About to bifurcate load ', load, 'step', it)
             bifurcation_loads.append(load)
-            modes = np.where(stability.eigs < 0)[0]
-
-            with file_bif as file:
-                leneigs = len(modes)
-                maxmodes = min(3, leneigs)
-                for n in range(maxmodes):
-                    mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
-                    modename = 'beta-%d'%n
-                    print(modename)
-                    file.write_checkpoint(mode, modename, 0, append=True)
-
             bifurc_count += 1
 
-        lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
 
+
+        lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
+        if stable:
+            solver.update()
+        else:
+            # Continuation
+            iteration = 1
+            energy_pre = dolfin.assemble(tot_energy)
+            alpha_bif.assign(alpha)
+            alpha_bif_old.assign(alpha_old)
+
+            while stable == False and iteration < 30:
+                # linesearch
+                perturbation_v    = stability.perturbation_v
+                perturbation_beta = stability.perturbation_beta
+
+
+                h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
+                    [u, alpha, alpha_old],
+                    perturbation_v, perturbation_beta)
+
+                # import pdb; pdb.set_trace()
+                # if h_opt != 0:
+                if h_opt > cont_atol:
+
+                    save_current_bifurcation = True
+
+                    # admissible
+                    uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
+                    aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
+
+                    u.vector()[:] = uval
+                    alpha.vector()[:] = aval
+
+                    u.vector().vec().ghostUpdate()
+                    alpha.vector().vec().ghostUpdate()
+
+                    (time_data_i, am_iter) = solver.solve()
+                    (stable, negev) = stability.solve(alpha_old)
+                    ColorPrint.print_pass('    Continuation iteration #{}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
+                    energy_post = dolfin.assemble(tot_energy)
+                    ener_diff = energy_post - energy_pre
+                    ColorPrint.print_warn('DEBUG: step {}, iteration {}, En_post - En_pre ={}'.format(it, iteration, energy_post - energy_pre))
+
+                    iteration += 1
+                    if ener_diff<0: bifurcated = False
+                else:
+                    # warn
+                    ColorPrint.print_warn('DEBUG: Found zero increment, we are stuck in the matrix')
+                    ColorPrint.print_warn('DEBUG: Continuing load program')
+                    break
+
+            solver.update()
+            # stable == True    
+            # modes = np.where(stability.eigs < 0)[0]
+            # with file_bif as file:
+            #     leneigs = len(modes)
+            #     maxmodes = min(3, leneigs)
+            #     for n in range(maxmodes):
+            #         mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
+            #         modename = 'beta-%d'%n
+            #         print(modename)
+            #         file.write_checkpoint(mode, modename, 0, append=True)
+
+            # bifurc_count += 1
         time_data_i["load"] = load
         time_data_i["stable"] = stable
         time_data_i["dissipated_energy"] = dolfin.assemble(
@@ -499,8 +512,8 @@ def traction_test(
             with file_out as f:
                 f.write(alpha, load)
                 f.write(u, load)
-            # with file_out as f:
                 f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
+            # with file_bif as f:
                 print('DEBUG: written step ', it)
 
         if save_current_bifurcation:
@@ -511,14 +524,11 @@ def traction_test(
             time_data_i['min_h'] = hmin
 
             with file_bif as file:
-                # leneigs = len(modes)
-                # maxmodes = min(3, leneigs)
                 beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
-                print('DEBUG: irrev ', alpha.vector()-alpha_old.vector())
-                file.write_checkpoint(beta0v, 'beta0', 0, append = True)
-                file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
-                file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
-                file.write_checkpoint(alpha, 'alpha', 0, append=True)
+                file.write_checkpoint(beta0v, 'beta0', bifurc_count-1, append = True)
+                file.write_checkpoint(alpha_bif_old, 'alpha-old', bifurc_count-1, append=True)
+                file.write_checkpoint(alpha_bif, 'alpha-bif', bifurc_count-1, append=True)
+                file.write_checkpoint(alpha, 'alpha', bifurc_count-1, append=True)
 
                 np.save(os.path.join(outdir, 'energy_perturbations'), energy_perturbations, allow_pickle=True, fix_imports=True)
 
@@ -530,8 +540,10 @@ def traction_test(
                 # import pdb; pdb.set_trace()
                 f.write(_v, load)
                 f.write(_beta, load)
-                file.write_checkpoint(_v, 'perturbation_v', 0, append=True)
-                file.write_checkpoint(_beta, 'perturbation_beta', 0, append=True)
+                file.write_checkpoint(_v, 'perturbation_v', bifurc_count-1, append=True)
+                file.write_checkpoint(_beta, 'perturbation_beta', bifurc_count-1, append=True)
+
+            save_current_bifurcation = False
 
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
         # user_postprocess_timestep(alpha, parameters, load, xresol = 100)
@@ -551,6 +563,9 @@ def traction_test(
         pp.plot_spectrum(parameters, outdir, time_data_pd.sort_values('load'), tc)
     # plt.show()
     print(time_data_pd)
+    print()
+    print('Output in: '+outdir)
+
     return time_data_pd
 
 def plot_trace_spectrum(eigendata, parameters, load, outdir):
@@ -716,7 +731,6 @@ def user_postprocess(self, load):
     ax3 = ax.twinx()
     ax.legend(fontsize='small')
     # print(stability.eigendata)
-    # import pdb; pdb.set_trace()
 
     for mode in adm_pert:
         beta_n = stability.eigendata[mode]['beta_n']
@@ -746,7 +760,6 @@ def user_postprocess_timestep(alpha, parameters, load, xresol = 100):
     xresol = xresol
     X =alpha.function_space().tabulate_dof_coordinates()
     xs = np.linspace(min(X[:, 0]),max(X[:, 0]), xresol)
-    # import pdb; pdb.set_trace()
 
     fig = plt.figure(figsize=(8, 6), dpi=180,)
     alpha0 = [alpha(x, 0) for x in xs]
@@ -810,7 +823,6 @@ if __name__ == "__main__":
         ColorPrint.print_warn('continuing in 5s')
         sleep(5)
     # signature = md5().hexdigest()
-    # import pdb; pdb.set_trace()
     if args.outdir == None:
         args.postfix += '-cont' if args.continuation==True else ''
         outdir = "../output/{:s}".format('film')
@@ -831,7 +843,6 @@ if __name__ == "__main__":
     if args.config:
         config = unquote(args.config).replace('\'', '"')
 
-    # import pdb; pdb.set_trace()
     if args.parameters is not None:
         experiment = ''
         with open(args.parameters, 'r') as params:
