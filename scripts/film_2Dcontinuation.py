@@ -209,7 +209,6 @@ def traction_test(
         'n': n,
         },
     'experiment': {
-        'test': test,
         'periodic': isPeriodic,
         'signature': ''
         },
@@ -240,7 +239,7 @@ def traction_test(
     # else:
 
     # parameters['material']['ell_e'] = 
-
+    # import pdb; pdb.set_trace()
     Lx = parameters['geometry']['Lx']
     Ly = parameters['geometry']['Ly']
     ell = parameters['material']['ell']
@@ -252,9 +251,11 @@ def traction_test(
     os.path.isfile(fname)
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
+    print('Signature is: '+signature)
     
-    if parameters['experiment']['test'] == True: outdir += '-{}'.format(cmd_parameters['time_stepping']['postfix'])
-    else: outdir += '-{}{}'.format(signature, cmd_parameters['time_stepping']['postfix'])
+    # if parameters['experiment']['test'] == True: outdir += '-{}'.format(cmd_parameters['time_stepping']['postfix'])
+    # else: 
+    outdir += '-{}{}'.format(signature, cmd_parameters['time_stepping']['postfix'])
     
     parameters['time_stepping']['outdir']=outdir
     Path(outdir).mkdir(parents=True, exist_ok=True)
@@ -499,7 +500,7 @@ def traction_test(
 
         time_data_i["S(alpha)"] = dolfin.assemble(1./(model.a(alpha))*model.dx)
         time_data_i["A(alpha)"] = dolfin.assemble((model.a(alpha))*model.dx)
-        time_data_i["avg_alpha"] = dolfin.assemble(alpha*model.dx)
+        time_data_i["avg_alpha"] = 1/dolfin.assemble(dolfin.project(Constant(1.), V_alpha)*model.dx) * dolfin.assemble(alpha*model.dx)
 
         ColorPrint.print_pass(
             "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
@@ -821,7 +822,7 @@ if __name__ == "__main__":
     parser.add_argument("--parameters", type=str, default=None)
     parser.add_argument("--print", type=bool, default=False)
     parser.add_argument("--continuation", type=bool, default=False)
-    parser.add_argument("--test", type=bool, default=True)
+    # parser.add_argument("--test", type=bool, default=True)
     parser.add_argument("--periodic", action='store_true')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
@@ -833,7 +834,8 @@ if __name__ == "__main__":
     # signature = md5().hexdigest()
     # import pdb; pdb.set_trace()
     if args.outdir == None:
-        args.postfix += '-cont' if args.continuation==True else ''
+        args.postfix += '-cont'
+         # if args.continuation==True else ''
         outdir = "../output/{:s}".format('film')
     else:
         outdir = args.outdir
@@ -877,7 +879,7 @@ if __name__ == "__main__":
             continuation=args.continuation,
             periodic=args.periodic,
             configString=config,
-            test=args.test
+            # test=args.test
         )
 
 
