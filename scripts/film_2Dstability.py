@@ -66,7 +66,7 @@ stability_parameters = {"order": 4,
                         "checkstability": True,
                         "continuation": False,
                         "projection": 'none',
-                        'maxmodes': 5,
+                        'maxmodes': 1,
                         }
 
 petsc_options_alpha_tao = {"tao_type": "gpcg",
@@ -307,7 +307,9 @@ def traction_test(
             
             print('Unable to handle mesh generation at the moment, please generate the mesh and test again.')
             print(cmd1)
+            print('')
             print(cmd2)
+            print('')
             sys.exit()
             print(check_output([cmd1], shell=True))  # run in shell mode in case you are not run in terminal
             Popen([cmd2], stdout=PIPE, shell=True).communicate()
@@ -352,21 +354,7 @@ def traction_test(
     alpha = dolfin.Function(V_alpha, name="Damage")
 
     bcs_alpha = []
-    # Rectangle
-    # bcs_u = [DirichletBC(V_u, Constant((0., 0)), '(near(x[0], %f) or near(x[0], %f))'%(-Lx/2., Lx/2.))]
-    # Circle
-
     bcs_u = [DirichletBC(V_u, Constant((0., 0.)), 'on_boundary')]
-
-    # left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
-    # right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
-    # bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
-    # top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
-
-    # mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
-    # right.mark(mf, 1)
-    # left.mark(mf, 2)
-    # bottom.mark(mf, 3)
 
     state = [u, alpha]
 
@@ -375,7 +363,6 @@ def traction_test(
 
     v, beta = dolfin.split(z)
     dx = dolfin.Measure("dx", metadata=form_compiler_parameters, domain=mesh)
-    # ds = dolfin.Measure("ds", subdomain_data=mf)
     ds = dolfin.Measure("ds")
 
     # Files for output
@@ -393,7 +380,7 @@ def traction_test(
     foundation_density = 1./2.*1./ell_e**2.*dot(u, u)
     model = DamagePrestrainedElasticityModel(state, E, nu, ell, sigma_D0,
         user_functional=foundation_density, 
-        eps0t=Expression([['t', 0.],[0.,0.]], t=0., degree=0))
+        eps0t=Expression([['t', 0.],[0.,'t']], t=0., degree=0))
     # import pdb; pdb.set_trace()
     model.dx = dx
     model.ds = ds
@@ -408,14 +395,8 @@ def traction_test(
     stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
     # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'], rayleigh=[rP, rN])
 
-    # if isPeriodic:
-    #     stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z,
-    #         parameters = stability_parameters,
-    #         constrained_domain = PeriodicBoundary(Lx))
-    # else:
-    #     stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
-
     load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
+
     if loads:
         load_steps = loads
 
