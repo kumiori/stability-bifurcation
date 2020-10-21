@@ -31,12 +31,10 @@ from subprocess import Popen, PIPE, check_output
 import numpy as np
 
 from solver_stability import StabilitySolver
-# from solver_stability_periodic import StabilitySolver
 from time_stepping import TimeStepping
 from copy import deepcopy
 from linsearch import LineSearch
 
-import os.path
 import os
 
 import mpi4py
@@ -274,11 +272,6 @@ def traction_test(
     with open(os.path.join(outdir, 'signature.md5'), 'w') as f:
         f.write(signature)
     print(parameters)
-    
-    # import pdb; pdb.set_trace()
-
-    # boundary_meshfunction = dolfin.MeshFunction("size_t", mesh, "meshes/%s-%s_facet_region.xml"%(fname, signature))
-    # cells_meshfunction = dolfin.MeshFunction("size_t", mesh, "meshes/%s-%s_physical_region.xml"%(fname, signature))
 
     # ------------------
     geometry_parameters = parameters['geometry']
@@ -361,17 +354,6 @@ def traction_test(
     # Circle
 
     bcs_u = [DirichletBC(V_u, Constant((0., 0.)), 'on_boundary')]
-
-    # left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
-    # right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
-    # bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
-    # top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
-
-    # mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
-    # right.mark(mf, 1)
-    # left.mark(mf, 2)
-    # bottom.mark(mf, 3)
-
     state = [u, alpha]
 
     Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
@@ -379,7 +361,6 @@ def traction_test(
 
     v, beta = dolfin.split(z)
     dx = dolfin.Measure("dx", metadata=form_compiler_parameters, domain=mesh)
-    # ds = dolfin.Measure("ds", subdomain_data=mf)
     ds = dolfin.Measure("ds")
 
     # Files for output
@@ -392,12 +373,12 @@ def traction_test(
         f.parameters["functions_share_mesh"] = True
         f.parameters["flush_output"] = True
 
-    # Problem definition
+    # Problem
 
     foundation_density = 1./2.*1./ell_e**2.*dot(u, u)
     model = DamagePrestrainedElasticityModel(state, E, nu, ell, sigma_D0,
         user_functional=foundation_density, 
-        eps0t=Expression([['t', 0.],[0.,0.]], t=0., degree=0))
+        eps0t=Expression([['t', 0.],[0.,'t']], t=0., degree=0))
     # import pdb; pdb.set_trace()
     model.dx = dx
     model.ds = ds
@@ -409,15 +390,8 @@ def traction_test(
     rP =model.rP(u, alpha, v, beta)*dx + 1/ell_e**2.*dot(v, v)*dx
     rN =model.rN(u, alpha, beta)*dx
 
-    stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
-    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'], rayleigh=[rP, rN])
-
-    # if isPeriodic:
-    #     stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z,
-    #         parameters = stability_parameters,
-    #         constrained_domain = PeriodicBoundary(Lx))
-    # else:
-    #     stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
+    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
+    stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'], rayleigh=[rP, rN])
 
     load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
     if loads:
@@ -431,13 +405,13 @@ def traction_test(
     bifurcated = False
     bifurcation_loads = []
     save_current_bifurcation = False
-    bifurc_count = 0
+    bifurc_i = 0
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
-    bifurcation_loads = []
     for it, load in enumerate(load_steps):
         model.eps0t.t = load
         alpha_old.assign(alpha)
+
         ColorPrint.print_warn('Solving load t = {:.2f}'.format(load))
 
         # First order stability conditions
@@ -447,9 +421,7 @@ def traction_test(
         (stable, negev) = stability.solve(solver.problem_alpha.lb)
         ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
 
-        solver.update()
 
-        #
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
         print('lmbda min', lmbda_min_prev)
         print('mineig', mineig)
@@ -461,23 +433,54 @@ def traction_test(
             # save 3 bif modes
             print('About to bifurcate load ', load, 'step', it)
             bifurcation_loads.append(load)
-            modes = np.where(stability.eigs < 0)[0]
-
-            with file_bif as file:
-                leneigs = len(stability.linsearch)
-                # import pdb; pdb.set_trace()
-                maxmodes = min(leneigs, parameters['stability']['maxmodes'])
-                print('DEBUG: leneigs {}'.format(leneigs))
-                print('DEBUG: found {}'.format(maxmodes))
-                for n in range(maxmodes):
-                    mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
-                    modename = 'beta-%d'%n
-                    print(modename)
-                    file.write_checkpoint(mode, modename, 0, append=True)
-
-            bifurc_count += 1
+            print('DEBUG: decide what to do')
+            # save_current_bifurcation = True
+            bifurc_i += 1
 
         lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
+
+        if stable:
+            solver.update()
+        else:
+            # Continuation
+            iteration = 1
+            while stable == False:
+                # linesearch
+                perturbation_v    = stability.perturbation_v
+                perturbation_beta = stability.perturbation_beta
+
+                h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
+                    [u, alpha, alpha_old],
+                    perturbation_v, perturbation_beta)
+
+                if h_opt != 0:
+                    save_current_bifurcation = True
+                    alpha_bif.assign(alpha)
+                    alpha_bif_old.assign(alpha_old)
+                    # admissible
+                    uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
+                    aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
+
+                    u.vector()[:] = uval
+                    alpha.vector()[:] = aval
+
+                    u.vector().vec().ghostUpdate()
+                    alpha.vector().vec().ghostUpdate()
+
+                    # import pdb; pdb.set_trace()
+                    (time_data_i, am_iter) = solver.solve()
+                    (stable, negev) = stability.solve(alpha_old)
+                    ColorPrint.print_pass('    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
+                    iteration += 1
+
+                else:
+                    # warn
+                    ColorPrint.print_warn('Found zero increment, we are stuck in the matrix')
+                    ColorPrint.print_warn('Continuing load program')
+                    break
+
+            solver.update()
+            # stable == True    
 
         time_data_i["load"] = load
         time_data_i["stable"] = stable
@@ -491,7 +494,6 @@ def traction_test(
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
-        # import pdb; pdb.set_trace()
 
         _sigma = model.stress(model.eps(u), alpha)
         e1 = dolfin.Constant([1, 0])
