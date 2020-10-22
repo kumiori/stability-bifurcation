@@ -398,19 +398,16 @@ def traction_test(
         # import pdb; pdb.set_trace()
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
-        print('DEBUG: lmbda min', lmbda_min_prev)
-        print('DEBUG: mineig', mineig)
+        # print('DEBUG: lmbda min', lmbda_min_prev)
+        # print('DEBUG: mineig', mineig)
         Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
 
         if (mineig + Deltav)*(lmbda_min_prev+dolfin.DOLFIN_EPS) < 0 and not bifurcated:
             bifurcated = True
-
             # save 3 bif modes
             print('DEBUG: About to bifurcate load ', load, 'step', it)
             bifurcation_loads.append(load)
             bifurc_count += 1
-
-
 
         lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
         if stable:
@@ -426,7 +423,6 @@ def traction_test(
                 # linesearch
                 perturbation_v    = stability.perturbation_v
                 perturbation_beta = stability.perturbation_beta
-
 
                 h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
                     [u, alpha, alpha_old],
@@ -459,7 +455,8 @@ def traction_test(
                     if ener_diff<0: bifurcated = False
                 else:
                     # warn
-                    ColorPrint.print_warn('DEBUG: Found zero increment, we are stuck in the matrix')
+                    ColorPrint.print_warn('DEBUG: Found (almost) zero increment, we are stuck in the matrix')
+                    ColorPrint.print_warn('DEBUG:   h_opt = {}'.format(h_opt))
                     ColorPrint.print_warn('DEBUG: Continuing load program')
                     break
 
@@ -545,7 +542,18 @@ def traction_test(
 
             save_current_bifurcation = False
 
+
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
+
+    plt.figure()
+    plt.plot(time_data_pd["load"].values(), time_data_pd["iterations"].values(), label='its')
+    plt.semilogy()
+    ax = plt.gca()
+    ax2 = ax.twinx()
+    ax2.plot(time_data_pd["load"].values(), time_data_pd["alpha_error"].values(), 'o', c='C1', label='alpha error') 
+    plt.savefig(os.path.join(outdir, 'am.pdf'))
+    plt.legend()
+    plt.close()
         # user_postprocess_timestep(alpha, parameters, load, xresol = 100)
 
     plt.figure()
