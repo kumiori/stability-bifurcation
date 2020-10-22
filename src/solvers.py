@@ -65,6 +65,61 @@ default_parameters = {"alt_min": alt_min_parameters,
                       "max_it": 50,
                       "solver_alpha_tao": petsc_options_alpha_tao}
 
+class DamageProblemSNES(NonlinearProblem):
+
+    def __init__(self, energy, alpha, bcs, lb=None, ub=None):
+
+        NonlinearProblem.__init__(self)
+        self.energy = energy
+        self.alpha = alpha
+        self.V = self.alpha.function_space()
+        self.denergy = derivative(
+            self.energy, self.alpha, TestFunction(self.V))
+        self.ddenergy = derivative(
+            self.denergy, self.alpha, TrialFunction(self.V))
+        if lb == None:
+            lb = interpolate(Constant("0."), self.V)
+        if ub == None:
+            ub = interpolate(Constant("1."), self.V)
+        self.lb = lb
+        self.ub = ub
+        self.bcs = bcs
+        self.b = PETScVector()
+        self.A = PETScMatrix()
+    # def form(self, A, b, x):
+    #    pass
+
+    def F(self, b, x):
+     #       self.alpha.vector()[:] = x
+        #assemble(self.denergy, tensor=b)
+        #[bc.apply(b, x) for bc in self.bcs]
+        assemble_system(self.ddenergy, self.denergy,
+                        bcs=self.bcs, A_tensor=self.A, b_tensor=b)
+        pass
+
+    def J(self, A, x):
+        #        self.alpha.vector()[:] = x
+        #assemble(self.ddenergy, tensor=A)
+        #[bc.apply(A) for bc in self.bcs]
+        assemble_system(self.ddenergy, self.denergy,
+                        bcs=self.bcs, A_tensor=A, b_tensor=self.b)
+        pass
+
+    def update_lb(self, lb=None):
+        """update the lower bound"""
+        if lb:
+            self.lb.assign(lb)
+        else:
+            self.lb.assign(self.alpha)
+
+    def active_set_indicator_lb(self, tol=1.0e-5):
+        clb = conditional(self.alpha > tol + self.lb, 0.0, 1.0)
+        return clb
+
+    def active_set_indicator_ub(self, tol=1.0e-5):
+        cub = conditional(self.alpha < self.ub + tol, 0.0, 1.0)
+        return cub
+
 class DamageProblemTAO(OptimisationProblem):
     def __init__(self, energy, alpha, bcs, lb=None, ub=None):
 
@@ -172,7 +227,6 @@ class AlternateMinimizationSolver(object):
         elif self.parameters["solver_alpha"] == "tao":
             self.set_solver_alpha_tao()
 
-
     def set_solver_u(self):
         for option, value in self.parameters["solver_u"].items():
             print("setting ", option,value)
@@ -196,6 +250,32 @@ class AlternateMinimizationSolver(object):
         solver.set_from_options()
         snes.setFromOptions()
         self.solver_u = solver
+
+    def set_solver_alpha_snes2(self):
+        V = self.alpha.function_space()
+        denergy = derivative(self.energy, self.alpha, TestFunction(V))
+        ddenergy = derivative(denergy, self.alpha, TrialFunction(V))
+        self.lb = self.alpha_init # interpolate(Constant("0."), V)
+        ub = interpolate(Constant("1."), V)
+        self.problem_alpha = NonlinearVariationalProblem(
+            denergy, self.alpha, self.bcs_alpha, J=ddenergy)
+        self.problem_alpha.set_bounds(self.lb, ub)
+        self.problem_alpha.lb = self.lb
+        # set up the solver
+        solver = NonlinearVariationalSolver(self.problem_alpha)
+        
+        snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
+                                         "snes_solver": {"linear_solver": "mumps",
+                                                         "maximum_iterations": 300,
+                                                         "report": True,
+                                                         "line_search": "basic",
+                                                         "method": "vinewtonrsls",
+                                                         "absolute_tolerance": 1e-5,
+                                                         "relative_tolerance": 1e-5,
+                                                         "solution_tolerance": 1e-5}}
+        solver.parameters.update(snes_solver_parameters_bounds)
+        #solver.solve()
+        self.solver = solver
 
     def set_solver_alpha_tao(self):
         self.problem_alpha = DamageProblemTAO(
