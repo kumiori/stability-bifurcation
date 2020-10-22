@@ -65,7 +65,7 @@ timestepping_parameters = {"perturbation_choice": 'steepest',
 
 stability_parameters = {"order": 4,
                         "checkstability": True,
-                        "continuation": False,
+                        "continuation": True,
                         "projection": 'none',
                         'maxmodes': 5,
                         }

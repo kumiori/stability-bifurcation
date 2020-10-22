@@ -132,8 +132,7 @@ parameters = {"alt_min": alt_min_parameters,
 
 # constants
 ell = 0.1
-Lx = 1
-Ly = 0.1
+R = 1
 load_min = 0.9
 load_max = 1.1
 nsteps = 10
@@ -157,8 +156,7 @@ def traction_test(
     load_max=2,
     loads=None,
     nsteps=20,
-    Lx=1.,
-    Ly=0.1,
+    R=1.,
     outdir="outdir",
     postfix='',
     savelag=1,
@@ -171,7 +169,7 @@ def traction_test(
 ):
     # constants
     # ell = ell
-    Lx = Lx
+    R = R
     load_min = load_min
     load_max = load_max
     nsteps = nsteps
@@ -202,8 +200,7 @@ def traction_test(
         "nu": nu.values()[0],
         "sigma_D0": sigma_D0.values()[0]},
     'geometry': {
-        'Lx': Lx,
-        'Ly': Ly,
+        'R': R,
         'n': n,
         },
     'experiment': {
@@ -238,8 +235,7 @@ def traction_test(
 
     # parameters['material']['ell_e'] = 
     # import pdb; pdb.set_trace()
-    Lx = parameters['geometry']['Lx']
-    Ly = parameters['geometry']['Ly']
+    R = parameters['geometry']['R']
     ell = parameters['material']['ell']
     ell_e = parameters['material']['ell_e']
 
@@ -280,7 +276,7 @@ def traction_test(
     meshfile = "%s/meshes/circle-%s.xml"%(BASE_DIR, geom_signature)
     # cmd_parameters['experiment']['signature']=signature
     meshsize = parameters['material']['ell']/parameters['geometry']['n']
-    d={'rad': parameters['geometry']['Lx'], 'Ly': parameters['geometry']['Ly'],
+    d={'rad': parameters['geometry']['R'],
         'meshsize': meshsize}
 
     if os.path.isfile(meshfile):
@@ -349,9 +345,7 @@ def traction_test(
     alpha = dolfin.Function(V_alpha, name="Damage")
 
     bcs_alpha = []
-    # Rectangle
-    # bcs_u = [DirichletBC(V_u, Constant((0., 0)), '(near(x[0], %f) or near(x[0], %f))'%(-Lx/2., Lx/2.))]
-    # Circle
+    # bcs_alpha = [DirichletBC(V_alpha, Constant(0.), 'on_boundary')]
 
     bcs_u = [DirichletBC(V_u, Constant((0., 0.)), 'on_boundary')]
     state = [u, alpha]
@@ -373,8 +367,6 @@ def traction_test(
         f.parameters["functions_share_mesh"] = True
         f.parameters["flush_output"] = True
 
-    # Problem
-
     foundation_density = 1./2.*1./ell_e**2.*dot(u, u)
     model = DamagePrestrainedElasticityModel(state, E, nu, ell, sigma_D0,
         user_functional=foundation_density, 
@@ -390,8 +382,8 @@ def traction_test(
     rP =model.rP(u, alpha, v, beta)*dx + 1/ell_e**2.*dot(v, v)*dx
     rN =model.rN(u, alpha, beta)*dx
 
-    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
-    stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'], rayleigh=[rP, rN])
+    stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
+    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'], rayleigh=[rP, rN])
 
     load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
     if loads:
@@ -441,6 +433,7 @@ def traction_test(
 
         if stable:
             solver.update()
+            ColorPrint.print_pass('    Current state is{}stable'.format(' ' if stable else ' un'))
         else:
             # Continuation
             iteration = 1
@@ -498,7 +491,7 @@ def traction_test(
         _sigma = model.stress(model.eps(u), alpha)
         e1 = dolfin.Constant([1, 0])
         _snn = dolfin.dot(dolfin.dot(_sigma, e1), e1)
-        time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*model.ds(1))
+        # time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*model.ds(1))
 
         time_data_i["S(alpha)"] = dolfin.assemble(1./(model.a(alpha))*model.dx)
         time_data_i["A(alpha)"] = dolfin.assemble((model.a(alpha))*model.dx)
@@ -811,9 +804,8 @@ if __name__ == "__main__":
     parser.add_argument("--ell_e", type=float, default=.3)
     parser.add_argument("--load_max", type=float, default=3.0)
     parser.add_argument("--load_min", type=float, default=0.)
-    parser.add_argument("--Lx", type=float, default=1)
-    parser.add_argument("--Ly", type=float, default=0.1)
-    parser.add_argument("--n", type=int, default=2)
+    parser.add_argument("--R", type=float, default=1)
+    parser.add_argument("--n", type=int, default=3)
     parser.add_argument("--nu", type=float, default=0.0)
     parser.add_argument("--nsteps", type=int, default=30)
     parser.add_argument("--degree", type=int, default=2)
@@ -823,7 +815,7 @@ if __name__ == "__main__":
     parser.add_argument("--E", type=float, default=1)
     parser.add_argument("--parameters", type=str, default=None)
     parser.add_argument("--print", type=bool, default=False)
-    parser.add_argument("--continuation", type=bool, default=False)
+    parser.add_argument("--continuation", type=bool, default=True)
     # parser.add_argument("--test", type=bool, default=True)
     parser.add_argument("--periodic", action='store_true')
     # args = parser.parse_args()
@@ -873,8 +865,7 @@ if __name__ == "__main__":
             load_max=args.load_max,
             nsteps=args.nsteps,
             n=args.n,
-            Lx=args.Lx,
-            Ly=args.Ly,
+            R=args.R,
             outdir=outdir,
             postfix=args.postfix,
             savelag=args.savelag,
