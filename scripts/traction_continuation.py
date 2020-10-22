@@ -392,7 +392,7 @@ def traction_test(
 
         time_data_i["S(alpha)"] = dolfin.assemble(1./(model.a(alpha))*model.dx)
         time_data_i["A(alpha)"] = dolfin.assemble((model.a(alpha))*model.dx)
-        time_data_i["avg_alpha"] = dolfin.assemble(alpha*model.dx)
+        time_data_i["avg_alpha"] = 1/dolfin.assemble(dolfin.project(Constant(1.), V_alpha)*model.dx) * dolfin.assemble(alpha*model.dx)
 
         ColorPrint.print_pass(
             "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
