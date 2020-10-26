@@ -79,7 +79,7 @@ def plot_fills(ax, ell, tc):
 	ax.add_patch(patches.Rectangle((t_stab(ell), 0), 10, 10, facecolor = localis, fill=True, alpha=.3))
 	return ax
 
-def plot_spectrum(params, data, tc, ax=None, tol=1e-12):
+def plot_spectrum(params, outdir, data, tc, ax=None, tol=1e-12):
 	E0 = params['material']['E']
 	w1 = params['material']['sigma_D0']**2/E0
 	ell = params['material']['ell']
@@ -103,18 +103,18 @@ def plot_spectrum(params, data, tc, ax=None, tol=1e-12):
 
 	ax2 = plt.twinx()
 	ax2.plot(data['load'].values, data['alpha_max'].values, label='$$max(\\alpha)$$')
-	ax2.legend()
+	plt.legend()
 	tbif = t_bif(ell)
 	tstab = t_stab(ell)
 	ax2.set_ylabel('max $\\alpha$')
 	ax2.set_ylim(0, 1.03)
-	
+
 	ax = plt.gca()
 
 	# ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
 	# ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
 	ax.set_xlim(params['time_stepping']['load_min'], params['time_stepping']['load_max'])
-	
+
 	ax2.set_yticks([0, 1.])
 	ax2.set_yticklabels(['0','1'])
 	ax2.set_ylim(0, 1.03)
@@ -127,7 +127,7 @@ def plot_spectrum(params, data, tc, ax=None, tol=1e-12):
 	plot_fills(ax, ell, tc)
 
 	plt.legend(loc="upper left")
-
+	plt.savefig(os.path.join(outdir, 'spectrum.pdf'))
 
 	# ax1.get_yaxis().set_major_formatter(ScalarFormatter())
 

@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import solvers
 from damage_elasticity_model import DamagePrestrainedElasticityModel
 from utils import ColorPrint, get_versions
-from post_processing import make_figures, plot_global_data
+# from post_processing import make_figures, plot_global_data, plot_spectrum
 # set_log_level(100)
 dolfin.parameters["std_out_all_processes"] = False
 
@@ -227,6 +227,7 @@ def traction_test(
     }
 
 
+    # import pdb; pdb.set_trace()
 
     # --------------------
 
@@ -249,7 +250,8 @@ def traction_test(
     os.path.isfile(fname)
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    
+    # import pdb; pdb.set_trace()
+
     if parameters['experiment']['test'] == True: outdir += '-{}'.format(cmd_parameters['time_stepping']['postfix'])
     else: outdir += '-{}{}'.format(signature, cmd_parameters['time_stepping']['postfix'])
     outdir = outdir+'-cont'
@@ -341,7 +343,6 @@ def traction_test(
     model = DamagePrestrainedElasticityModel(state, E, nu, ell, sigma_D0,
         user_functional=foundation_density, 
         eps0t=Expression([['t', 0.],[0.,0.]], t=0., degree=0))
-    # import pdb; .set_trace()
     model.dx = dx
     model.ds = ds
     energy = model.total_energy_density(u, alpha)*dx
@@ -546,13 +547,13 @@ def traction_test(
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
     plt.figure()
-    plt.plot(time_data_pd["load"].values(), time_data_pd["iterations"].values(), label='its')
     plt.semilogy()
     ax = plt.gca()
+    ax.plot(time_data_pd["load"].values, time_data_pd["iterations"].values, label='iterations')
     ax2 = ax.twinx()
-    ax2.plot(time_data_pd["load"].values(), time_data_pd["alpha_error"].values(), 'o', c='C1', label='alpha error') 
-    plt.savefig(os.path.join(outdir, 'am.pdf'))
+    ax2.plot(time_data_pd["load"].values, time_data_pd["alpha_error"].values, 'o', c='C1', label='alpha error') 
     plt.legend()
+    plt.savefig(os.path.join(outdir, 'am.pdf'))
     plt.close()
         # user_postprocess_timestep(alpha, parameters, load, xresol = 100)
 
@@ -566,8 +567,10 @@ def traction_test(
     _E = parameters['material']['E']
     _w1 = parameters['material']['sigma_D0']**2. / parameters['material']['E']
 
+    # import pdb; pdb.set_trace()
+
     tc = np.sqrt(2*_w1/(_E*(1.-2.*_nu)*(1.+_nu)))
-    if parameters['stability']['checkstability']=='True':
+    if parameters['stability']['checkstability'] == True:
         pp.plot_spectrum(parameters, outdir, time_data_pd.sort_values('load'), tc)
     # plt.show()
     print(time_data_pd)
@@ -821,7 +824,7 @@ if __name__ == "__main__":
     parser.add_argument("--parameters", type=str, default=None)
     parser.add_argument("--print", type=bool, default=False)
     parser.add_argument("--continuation", type=bool, default=False)
-    parser.add_argument("--test", type=bool, default=True)
+    parser.add_argument("--test", action='store_true')
     parser.add_argument("--periodic", action='store_true')
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
@@ -846,6 +849,7 @@ if __name__ == "__main__":
                     cmd = cmd + '--{} {} '.format(c, str(u))
         print(cmd)
         sys.exit()
+    # import pdb; pdb.set_trace()
 
     config = '{}'
     if args.config:
