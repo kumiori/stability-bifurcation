@@ -1,5 +1,5 @@
 from dolfin import norm, assemble, assemble_system, TestFunction, XDMFFile, TrialFunction, interpolate
-from dolfin import PETScTAOSolver, PETScSNESSolver, OptimisationProblem, NonlinearProblem, PETScOptions, PETScVector, PETScMatrix, as_backend_type, Vector
+from dolfin import PETScTAOSolver, PETScSNESSolver, OptimisationProblem, NonlinearProblem, PETScOptions, PETScVector, PETScMatrix, Vector
 from dolfin import NonlinearVariationalProblem, NonlinearVariationalSolver
 from dolfin import Constant, Expression
 from utils import ColorPrint
@@ -251,31 +251,62 @@ class AlternateMinimizationSolver(object):
         snes.setFromOptions()
         self.solver_u = solver
 
-    def set_solver_alpha_snes2(self):
+
+    def set_solver_alpha_snes(self):
         V = self.alpha.function_space()
-        denergy = derivative(self.energy, self.alpha, TestFunction(V))
-        ddenergy = derivative(denergy, self.alpha, TrialFunction(V))
-        self.lb = self.alpha_init # interpolate(Constant("0."), V)
-        ub = interpolate(Constant("1."), V)
-        self.problem_alpha = NonlinearVariationalProblem(
-            denergy, self.alpha, self.bcs_alpha, J=ddenergy)
-        self.problem_alpha.set_bounds(self.lb, ub)
-        self.problem_alpha.lb = self.lb
-        # set up the solver
-        solver = NonlinearVariationalSolver(self.problem_alpha)
+        self.problem_alpha = DamageProblemSNES(
+            self.energy, self.alpha, self.bcs_alpha, lb=self.alpha_init)
         
-        snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
-                                         "snes_solver": {"linear_solver": "mumps",
-                                                         "maximum_iterations": 300,
-                                                         "report": True,
-                                                         "line_search": "basic",
-                                                         "method": "vinewtonrsls",
-                                                         "absolute_tolerance": 1e-5,
-                                                         "relative_tolerance": 1e-5,
-                                                         "solution_tolerance": 1e-5}}
-        solver.parameters.update(snes_solver_parameters_bounds)
-        #solver.solve()
-        self.solver = solver
+        # solver = PETScSNESSolver()
+        # snes = solver.snes()
+                # Create the solver
+        comm = self.alpha.function_space().mesh().mpi_comm()
+        # self.comm = comm
+        snes = PETSc.SNES().create(comm=comm)
+
+        lb = self.alpha_init
+        ub = interpolate(Constant("1."), V)
+
+        snes.setOptionsPrefix("alpha_")
+
+        for option, value in self.parameters["solver_alpha_snes"].items():
+            print("setting ", option,value)
+            PETScOptions.set(option, value)
+
+        snes.setFromOptions()
+
+        # self.ass = SystemAssembler(J, F, bcs_alpha)
+
+        import pdb; pdb.set_trace()
+        snes.setVariableBounds(lb.vector().vec(), ub.vector().vec()) # 
+        # self.solver_alpha = snes
+        self.solver_alpha = solver
+
+    # def set_solver_alpha_snes2(self):
+    #     V = self.alpha.function_space()
+    #     denergy = derivative(self.energy, self.alpha, TestFunction(V))
+    #     ddenergy = derivative(denergy, self.alpha, TrialFunction(V))
+    #     self.lb = self.alpha_init # interpolate(Constant("0."), V)
+    #     ub = interpolate(Constant("1."), V)
+    #     self.problem_alpha = NonlinearVariationalProblem(
+    #         denergy, self.alpha, self.bcs_alpha, J=ddenergy)
+    #     self.problem_alpha.set_bounds(self.lb, ub)
+    #     self.problem_alpha.lb = self.lb
+    #     # set up the solver
+    #     solver = NonlinearVariationalSolver(self.problem_alpha)
+        
+    #     snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
+    #                                      "snes_solver": {"linear_solver": "mumps",
+    #                                                      "maximum_iterations": 300,
+    #                                                      "report": True,
+    #                                                      "line_search": "basic",
+    #                                                      "method": "vinewtonrsls",
+    #                                                      "absolute_tolerance": 1e-5,
+    #                                                      "relative_tolerance": 1e-5,
+    #                                                      "solution_tolerance": 1e-5}}
+    #     solver.parameters.update(snes_solver_parameters_bounds)
+    #     #solver.solve()
+    #     self.solver = solver
 
     def set_solver_alpha_tao(self):
         self.problem_alpha = DamageProblemTAO(

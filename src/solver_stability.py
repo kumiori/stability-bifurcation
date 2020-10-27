@@ -12,7 +12,7 @@ import petsc4py
 from petsc4py import PETSc
 from dolfin import MPI
 import matplotlib.pyplot as plt
-
+from dolfin.cpp.log import log, LogLevel
 import mpi4py
 
 comm = mpi4py.MPI.COMM_WORLD
@@ -265,7 +265,7 @@ class StabilitySolver(object):
 
     def default_parameters(self):
         return {'order': 3,
-                'eig_rtol': 1e-12,
+                'eig_rtol': 1e-8,
                 'projection': 'none',
                 "maxmodes": 1,
                 "inactiveset_atol": 1e-5
@@ -456,6 +456,7 @@ class StabilitySolver(object):
     def get_inactive_set(self):
         tol = self.parameters['inactiveset_atol']
         debug= False
+        log(LogLevel.DEBUG, 'Inactive set tolerance {}'.format(self.parameters['inactiveset_atol']))
 
         Ealpha = dolfin.assemble(self.Ealpha)
         vec = dolfin.PETScVector(MPI.comm_self)
@@ -465,9 +466,11 @@ class StabilitySolver(object):
             print('len vec grad', len(vec[:]))
 
 
-        mask = Ealpha[:]/self.cellarea.vector() < tol
+        # mask = Ealpha[:]/self.cellarea.vector() < tol
+        mask = Ealpha[:] < tol
 
         inactive_set_alpha = set(np.where(mask == True)[0])
+        # import pdb; pdb.set_trace()
 
         # from subspace to global numbering
         global_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]

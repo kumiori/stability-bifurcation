@@ -14,6 +14,7 @@ from utils import ColorPrint, get_versions
 # from post_processing import make_figures, plot_global_data, plot_spectrum
 # set_log_level(100)
 dolfin.parameters["std_out_all_processes"] = False
+from dolfin.cpp.log import log, LogLevel
 
 
 dolfin.parameters["linear_algebra_backend"] = "PETSc"
@@ -75,9 +76,9 @@ petsc_options_alpha_tao = {"tao_type": "gpcg",
                            "tao_gpcg_maxpgits": 50,
                            "tao_max_it": 300,
                            "tao_steptol": 1e-7,
-                           "tao_gatol": 1e-5,
-                           "tao_grtol": 1e-5,
-                           "tao_gttol": 1e-5,
+                           "tao_gatol": 1e-8,
+                           "tao_grtol": 1e-8,
+                           "tao_gttol": 1e-8,
                            "tao_catol": 0.,
                            "tao_crtol": 0.,
                            "tao_ls_ftol": 1e-6,
@@ -87,7 +88,7 @@ petsc_options_alpha_tao = {"tao_type": "gpcg",
                            "tao_ls_stepmin": 1e-8,  #
                            "tao_ls_stepmax": 1e6,  #
                            "pc_type": "bjacobi",
-                           "tao_monitor": "",  # "tao_ls_type": "more-thuente"
+                           "tao_monitor": True,  # "tao_ls_type": "more-thuente"
                            # "ksp_type": "preonly"  # "tao_ls_type": "more-thuente"
                            }
 # vinewtonrsls
@@ -110,9 +111,12 @@ petsc_options_u = {
 
 alt_min_parameters = {"max_it": 300,
                       "tol": 1.e-5,
-                      "solver_alpha": "tao",
                       "solver_u": petsc_options_u,
+                      # either
+                      # "solver_alpha": "snes",
                       # "solver_alpha_snes": petsc_options_alpha_snes
+                      # or
+                      "solver_alpha": "tao",
                      "solver_alpha_tao": petsc_options_alpha_tao
                      }
 
@@ -250,7 +254,6 @@ def traction_test(
     os.path.isfile(fname)
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    # import pdb; pdb.set_trace()
 
     if parameters['experiment']['test'] == True: outdir += '-{}'.format(cmd_parameters['time_stepping']['postfix'])
     else: outdir += '-{}{}'.format(signature, cmd_parameters['time_stepping']['postfix'])
@@ -283,6 +286,7 @@ def traction_test(
     geom_signature = hashlib.md5(str(geometry_parameters).encode('utf-8')).hexdigest()
     meshfile = "%s/meshes/%s-%s.xml"%(BASE_DIR, fname, geom_signature)
     # cmd_parameters['experiment']['signature']=signature
+    import pdb; pdb.set_trace()
 
     if os.path.isfile(meshfile):
         print("Meshfile %s exists"%meshfile)
@@ -388,25 +392,26 @@ def traction_test(
     for it, load in enumerate(load_steps):
         model.eps0t.t = load
         alpha_old.assign(alpha)
-        ColorPrint.print_warn('Solving load t = {:.2f}'.format(load))
+        # ColorPrint.print_warn('Solving load t = {:.2f}'.format(load))
+        log(LogLevel.PROGRESS, 'Solving load t = {:.2f}'.format(load))
 
         # First order stability conditions
         (time_data_i, am_iter) = solver.solve()
 
         # Second order stability conditions
         (stable, negev) = stability.solve(solver.problem_alpha.lb)
-        ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
-        # import pdb; pdb.set_trace()
+        # ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
+        log(LogLevel.INFO, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
-        # print('DEBUG: lmbda min', lmbda_min_prev)
-        # print('DEBUG: mineig', mineig)
+        log(LogLevel.DEBUG, 'lmbda min {}'.format(lmbda_min_prev))
+        log(LogLevel.DEBUG, 'mineig {}'.format(mineig))
         Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
 
         if (mineig + Deltav)*(lmbda_min_prev+dolfin.DOLFIN_EPS) < 0 and not bifurcated:
             bifurcated = True
             # save 3 bif modes
-            print('DEBUG: About to bifurcate load ', load, 'step', it)
+            log(LogLevel.DEBUG, 'About to bifurcate at load {} step {}'.format(load, it))
             bifurcation_loads.append(load)
             bifurc_count += 1
 
@@ -447,18 +452,18 @@ def traction_test(
 
                     (time_data_i, am_iter) = solver.solve()
                     (stable, negev) = stability.solve(alpha_old)
-                    ColorPrint.print_pass('    Continuation iteration #{}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
+                    log(LogLevel.INFO, '    Continuation iteration #{}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
                     energy_post = dolfin.assemble(tot_energy)
                     ener_diff = energy_post - energy_pre
-                    ColorPrint.print_warn('DEBUG: step {}, iteration {}, En_post - En_pre ={}'.format(it, iteration, energy_post - energy_pre))
+                    log(LogLevel.INFO, 'step {}, iteration {}, En_post - En_pre ={}'.format(it, iteration, energy_post - energy_pre))
 
                     iteration += 1
                     if ener_diff<0: bifurcated = False
                 else:
                     # warn
-                    ColorPrint.print_warn('DEBUG: Found (almost) zero increment, we are stuck in the matrix')
-                    ColorPrint.print_warn('DEBUG:   h_opt = {}'.format(h_opt))
-                    ColorPrint.print_warn('DEBUG: Continuing load program')
+                    log(LogLevel.WARNING, 'Found (almost) zero increment, we are stuck in the matrix')
+                    log(LogLevel.WARNING, '  h_opt = {}'.format(h_opt))
+                    log(LogLevel.WARNING, 'Continuing load program')
                     break
 
             solver.update()
@@ -497,7 +502,7 @@ def traction_test(
         time_data_i["A(alpha)"] = dolfin.assemble((model.a(alpha))*model.dx)
         time_data_i["avg_alpha"] = dolfin.assemble(alpha*model.dx)
 
-        ColorPrint.print_pass(
+        log(LogLevel.INFO,
             "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
                 time_data_i["load"],
                 time_data_i["iterations"],
@@ -536,8 +541,9 @@ def traction_test(
                 _v.rename('perturbation displacement', 'perturbation displacement')
                 _beta.rename('perturbation damage', 'perturbation damage')
                 # import pdb; pdb.set_trace()
-                f.write(_v, load)
-                f.write(_beta, load)
+                file.write(_v, load)
+                file.write(_beta, load)
+            with file_bif as file:
                 file.write_checkpoint(_v, 'perturbation_v', bifurc_count-1, append=True)
                 file.write_checkpoint(_beta, 'perturbation_beta', bifurc_count-1, append=True)
 
@@ -545,6 +551,9 @@ def traction_test(
 
 
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
+        dalpha = alpha - alpha_old
+        # import pdb; pdb.set_trace()
+        user_postprocess_timestep(dalpha, file_out, load, parameters, solver, stability)
 
     plt.figure()
     plt.semilogy()
@@ -555,7 +564,6 @@ def traction_test(
     plt.legend()
     plt.savefig(os.path.join(outdir, 'am.pdf'))
     plt.close()
-        # user_postprocess_timestep(alpha, parameters, load, xresol = 100)
 
     plt.figure()
     dolfin.plot(alpha)
@@ -763,40 +771,78 @@ def user_postprocess(self, load):
 
     fig.savefig(os.path.join(outdir, "profiles-{:.3f}.pdf".format(load)), bbox_inches="tight")
 
-def user_postprocess_timestep(alpha, parameters, load, xresol = 100):
-    from matplotlib.ticker import FuncFormatter, MaxNLocator
+def user_postprocess_timestep(dalpha, file_out, load, parameters, solver, stability):
+    # from matplotlib.ticker import FuncFormatter, MaxNLocator
 
     # alpha = self.solver.alpha
     # parameters = self.parameters
-    xresol = xresol
-    X =alpha.function_space().tabulate_dof_coordinates()
-    xs = np.linspace(min(X[:, 0]),max(X[:, 0]), xresol)
+    # xresol = xresol
+    # X =alpha.function_space().tabulate_dof_coordinates()
+    # xs = np.linspace(min(X[:, 0]),max(X[:, 0]), xresol)
 
-    fig = plt.figure(figsize=(8, 6), dpi=180,)
-    alpha0 = [alpha(x, 0) for x in xs]
-    spacetime[load] = alpha0
-    spacetime = spacetime.fillna(0)
-    mat = np.matrix(spacetime)
-    plt.imshow(mat, cmap = 'Greys', vmin = 0., vmax = 1., aspect=.1)
-    plt.colorbar()
+    inactive_set = stability.get_inactive_set()
 
-    def format_space(x, pos):
-        return '$%1.1f$'%((-x+xresol/2)/xresol)
+    w = dolfin.Function(stability.Z)
+    w.vector()[list(inactive_set)] = 1.
+    wu, wa = w.split(deepcopy = True)
+    wa.rename('beta support', 'beta support')
+    file_out.write(wa, load)
+    outdir = parameters['time_stepping']['outdir']
+    if size == 1: 
+        fig = plt.figure(figsize=(8, 6), dpi=180,)
+        dolfin.plot(wa, vmin=0., vmax = 1.)
+        fig.savefig(os.path.join(outdir, "beta_support.pdf".format(load)), bbox_inches="tight")
+    # alpha0 = [alpha(x, 0) for x in xs]
+    # spacetime[load] = alpha0
+    # spacetime = spacetime.fillna(0)
+    # mat = np.matrix(spacetime)
+    # plt.imshow(mat, cmap = 'Greys', vmin = 0., vmax = 1., aspect=.1)
+    # plt.colorbar()
 
-    def format_time(t, pos):
-        return '$%1.1f$'%((t-parameters['load_min'])/parameters['nsteps']*parameters['load_max'])
+    # def format_space(x, pos):
+    #     return '$%1.1f$'%((-x+xresol/2)/xresol)
 
-    ax = plt.gca()
+    # def format_time(t, pos):
+    #     return '$%1.1f$'%((t-parameters['load_min'])/parameters['nsteps']*parameters['load_max'])
 
-    ax.yaxis.set_major_formatter(FuncFormatter(format_space))
-    ax.xaxis.set_major_formatter(FuncFormatter(format_time))
+    # ax = plt.gca()
 
-    plt.xlabel('$t$')
-    plt.ylabel('$x$')
-    fig.savefig(os.path.join(outdir, "spacetime.pdf".format(load)), bbox_inches="tight")
+    # ax.yaxis.set_major_formatter(FuncFormatter(format_space))
+    # ax.xaxis.set_major_formatter(FuncFormatter(format_time))
 
-    spacetime.to_json(os.path.join(outdir + "/spacetime.json"))
+    # plt.xlabel('$t$')
+    # plt.ylabel('$x$')
+    # fig.savefig(os.path.join(outdir, "spacetime.pdf".format(load)), bbox_inches="tight")
+
+
+    # spacetime.to_json(os.path.join(outdir + "/spacetime.json"))
+    # dot(assemble(solver.problem_alpha.denergy), dalpha)
+    # _res = 
+    # import pdb; pdb.set_trace()
+
+    res = Function(solver.problem_alpha.alpha.function_space())
+    # res.vector()[:] = assemble(solver.problem_alpha.denergy/stability.cellarea.vector())[:]
+    res.vector()[:] = assemble(solver.problem_alpha.denergy)[:]/stability.cellarea.vector()[:]
+    res.rename('alpha residual', 'alpha residual')
+    # import pdb; pdb.set_trace()
+    file_out.write(res, load)
+    if size == 1: 
+        fig = plt.figure(figsize=(8, 6), dpi=180,)
+        plt.colorbar(dolfin.plot(res))
+        fig.savefig(os.path.join(outdir, "residual_alpha.pdf".format(load)), bbox_inches="tight")
+    
+    # res = computeResidual()
+        # problem_alpha.denergy
+        # pass
+    # file_out.write(res, load)
+    # fig.savefig(os.path.join(outdir, "residual.pdf".format(load)), bbox_inches="tight")
+
     pass
+# 
+    # def computeResidual():
+    #     w = dolfin.Function(stability.Z)
+    #     res = assemble(dot(de_alpha, alpha - alpha_old))
+    #     return res
 
 if __name__ == "__main__":
 
