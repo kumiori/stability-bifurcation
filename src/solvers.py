@@ -7,8 +7,9 @@ from utils import ColorPrint
 from ufl import sqrt, inner, dot, conditional, derivative
 import os
 from petsc4py import PETSc
-from dolfin.cpp.log import log, LogLevel
+from dolfin.cpp.log import log, LogLevel, set_log_level
 
+set_log_level(LogLevel.WARNING)
 
 def take_last(dic):
     new_dic = {}
@@ -24,26 +25,26 @@ alt_min_parameters = {"max_it": 300,
                       "solver_alpha": "tao"
                      }
 
-petsc_options_alpha_tao = {"tao_type": "gpcg",
-                           "tao_ls_type": "gpcg",
-                           "tao_gpcg_maxpgits": 50,
-                           "tao_max_it": 300,
-                           "tao_steptol": 1e-7,
-                           "tao_gatol": 1e-4,
-                           "tao_grtol": 1e-4,
-                           "tao_gttol": 1e-4,
-                           "tao_catol": 0.,
-                           "tao_crtol": 0.,
-                           "tao_ls_ftol": 1e-6,
-                           "tao_ls_gtol": 1e-6,
-                           "tao_ls_rtol": 1e-6,
-                           "ksp_rtol": 1e-6,
-                           "tao_ls_stepmin": 1e-8,  #
-                           "tao_ls_stepmax": 1e6,  #
-                           "pc_type": "bjacobi",
-                           "tao_monitor": "",  # "tao_ls_type": "more-thuente"
-                           # "ksp_type": "preonly"  # "tao_ls_type": "more-thuente"
-                           }
+# petsc_options_alpha_tao = {"tao_type": "gpcg",
+#                            "tao_ls_type": "gpcg",
+#                            "tao_gpcg_maxpgits": 50,
+#                            "tao_max_it": 300,
+#                            "tao_steptol": 1e-7,
+#                            "tao_gatol": 1e-4,
+#                            "tao_grtol": 1e-4,
+#                            "tao_gttol": 1e-4,
+#                            "tao_catol": 0.,
+#                            "tao_crtol": 0.,
+#                            "tao_ls_ftol": 1e-6,
+#                            "tao_ls_gtol": 1e-6,
+#                            "tao_ls_rtol": 1e-6,
+#                            "ksp_rtol": 1e-6,
+#                            "tao_ls_stepmin": 1e-8,  #
+#                            "tao_ls_stepmax": 1e6,  #
+#                            "pc_type": "bjacobi",
+#                            "tao_monitor": "",  # "tao_ls_type": "more-thuente"
+#                            # "ksp_type": "preonly"  # "tao_ls_type": "more-thuente"
+#                            }
 petsc_options_alpha_snes = {
     "alpha_snes_type": "vinewtonrsls",
     "alpha_snes_stol": 1e-5,
@@ -65,10 +66,12 @@ petsc_options_u = {
 
 default_parameters = {"alt_min": alt_min_parameters,
                       "solver_u": petsc_options_u,
-                      "solver_alpha": "tao",
+                      "solver_alpha": "snes",
                       "tol": 1e-5,
                       "max_it": 50,
-                      "solver_alpha_tao": petsc_options_alpha_tao}
+                      "solver_alpha_snes": petsc_options_alpha_snes
+                      # "solver_alpha_tao": petsc_options_alpha_tao
+                      }
 
 
 class DamageSolverSNES:
@@ -80,46 +83,40 @@ class DamageSolverSNES:
         """
         Initializes the SNES damage solver.
         """
-        # Set the solver name
         solver_name = "damage_snes"
-        # Store the problem
         self.problem = DamageSNES(energy, state, bcs)
-        # Get the damage variablex``xsnes
         self.alpha = self.problem.alpha
-        # Get the vectors
         self.alpha_dvec = as_backend_type(self.alpha.vector())
         self.alpha_pvec = self.alpha_dvec.vec()
-        # Create the solver
+
         comm = self.alpha.function_space().mesh().mpi_comm()
         self.comm = comm
         snes = PETSc.SNES().create(comm=comm)
-        # Set the prefix
+
         prefix = "{}_".format(solver_name)
         snes.setOptionsPrefix(prefix)
-        # Set the PETSc options from the parameters
+
         for parameter, value in parameters['solver_alpha_snes'].items():
             log(LogLevel.INFO, 'setting {}: {}'.format(parameter, value))
             PETScOptions.set(prefix + parameter, value)
         # Get the functions of the problem
         (J, F, bcs_alpha) = (self.problem.ddenergy, self.problem.denergy, self.problem.bcs)
-        # Create the SystemAssembler
+
         self.ass = SystemAssembler(J, F, bcs_alpha)
         # Intialise the residual
         self.b = self.init_residual()
         # Set the residual
         snes.setFunction(self.residual, self.b.vec())
-        # import pdb; pdb.set_trace()
-        # Initialise the Jacobian
         self.A = self.init_jacobian()
-        # Set the Jacobian
+
         snes.setJacobian(self.jacobian, self.A.mat())
         snes.ksp.setOperators(self.A.mat())
-        # Set the bounds
-        # import pdb; pdb.set_trace()
 
+        log(LogLevel.WARNING, 'SetVariableBounds')
         snes.setVariableBounds(self.problem.lb.vec(), self.problem.ub.vec())
-        # Update the parameters
+
         snes.setFromOptions()
+
         # Store the solver
         self.snes = snes
 
@@ -313,7 +310,7 @@ class ElasticityProblem(NonlinearProblem):
             A.set_nullspace(self.nullspace)
         [bc.apply(A) for bc in self.bcs]
 
-class AlternateMinimizationSolver(object):
+class EquilibriumSolver(object):
 
     def __init__(self, energy, state, bcs, state_0=None, parameters=default_parameters, nullspace=None):
         self.energy = energy
