@@ -1,10 +1,13 @@
 from dolfin import norm, assemble, assemble_system, TestFunction, XDMFFile, TrialFunction, interpolate
 from dolfin import PETScTAOSolver, PETScSNESSolver, OptimisationProblem, NonlinearProblem, PETScOptions, PETScVector, PETScMatrix, Vector
 from dolfin import NonlinearVariationalProblem, NonlinearVariationalSolver
-from dolfin import Constant, Expression
+from dolfin import Constant, Expression, Function, Form
+from dolfin import SystemAssembler, as_backend_type
 from utils import ColorPrint
 from ufl import sqrt, inner, dot, conditional, derivative
 import os
+from petsc4py import PETSc
+from dolfin.cpp.log import log, LogLevel
 
 
 def take_last(dic):
@@ -48,7 +51,9 @@ petsc_options_alpha_snes = {
     "alpha_snes_rtol": 1e-5,
     "alpha_snes_max_it": 500,
     "alpha_ksp_type": "preonly",
-    "alpha_pc_type": "lu"}
+    "alpha_pc_type": "lu",
+    "alpha_linesearch_type": 'basic',
+    'alpha_pc_factor_mat_solver_type': 'mumps'}
 
 petsc_options_u = {
     "u_snes_type": "newtontr",
@@ -65,6 +70,103 @@ default_parameters = {"alt_min": alt_min_parameters,
                       "max_it": 50,
                       "solver_alpha_tao": petsc_options_alpha_tao}
 
+
+class DamageSolverSNES:
+    """
+    Class for the damage solver.
+    """
+
+    def __init__(self, energy, state, bcs, parameters={}):
+        """
+        Initializes the SNES damage solver.
+        """
+        # Set the solver name
+        solver_name = "damage_snes"
+        # Store the problem
+        self.problem = DamageProblemSNES(energy, state, bcs)
+        # Get the damage variablex``x
+        self.alpha = self.problem.alpha
+        # Get the vectors
+        self.alpha_dvec = as_backend_type(self.alpha.vector())
+        self.alpha_pvec = self.alpha_dvec.vec()
+        # Create the solver
+        comm = self.alpha.function_space().mesh().mpi_comm()
+        self.comm = comm
+        snes = PETSc.SNES().create(comm=comm)
+        # Set the prefix
+        prefix = "{}_".format(solver_name)
+        snes.setOptionsPrefix(prefix)
+        # Set the PETSc options from the parameters
+        import pdb; pdb.set_trace()
+
+        for parameter, value in parameters['solver_alpha_snes'].items():
+            print("setting ", parameter, value)
+            PETScOptions.set(prefix + parameter, value)
+        # Get the functions of the problem
+        (J, F, bcs_alpha) = (self.problem.ddenergy, self.problem.denergy, self.problem.bcs)
+        # Create the SystemAssembler
+        self.ass = SystemAssembler(J, F, bcs_alpha)
+        # Intialise the residual
+        self.b = self.init_residual()
+        # Set the residual
+        snes.setFunction(self.residual, self.b.vec())
+        # Initialise the Jacobian
+        self.A = self.init_jacobian()
+        # Set the Jacobian
+        snes.setJacobian(self.jacobian, self.A.mat())
+        snes.ksp.setOperators(self.A.mat())
+        # Set the bounds
+        snes.setVariableBounds(self.problem.lb.vec(), self.problem.ub.vec())
+        # Update the parameters
+        snes.setFromOptions()
+        # Store the solver
+        self.snes = snes
+
+    def init_residual(self):
+        # Get the state
+        alpha = self.problem.alpha
+        # Initialise b
+        b = as_backend_type(Function(alpha.function_space()).vector())
+        return b
+
+    def init_jacobian(self):
+        A = PETScMatrix(self.comm)
+        self.ass.init_global_tensor(A, Form(self.problem.ddenergy))
+        return A
+
+    def update_x(self, x):
+        """
+        Given a PETSc Vec x, update the storage of our solution function alpha.
+        """
+        x.copy(self.alpha_pvec)
+        self.alpha_dvec.update_ghost_values()
+
+    def residual(self, snes, x, b):
+        self.update_x(x)
+        b_wrap = PETScVector(b)
+        self.ass.assemble(b_wrap, self.alpha_dvec)
+
+    def jacobian(self, snes, x, A, P):
+        self.update_x(x)
+        A_wrap = PETScMatrix(A)
+        self.ass.assemble(A_wrap)
+
+    def solve(self):
+        """
+        Solve the damage problem in its current state.
+        """
+        # Display info
+        log(LogLevel.INFO, 'Damage problem SNES')
+
+        # Get the damage variable
+        alpha = self.problem.alpha
+        # Need a copy for line searches etc. to work correctly.
+        x = alpha.copy(deepcopy=True)
+        xv = as_backend_type(x.vector()).vec()
+        # Solve the problem
+
+        self.snes.solve(None, xv)
+
 class DamageProblemSNES(NonlinearProblem):
 
     def __init__(self, energy, alpha, bcs, lb=None, ub=None):
@@ -78,9 +180,9 @@ class DamageProblemSNES(NonlinearProblem):
         self.ddenergy = derivative(
             self.denergy, self.alpha, TrialFunction(self.V))
         if lb == None:
-            lb = interpolate(Constant("0."), self.V)
+            lb = interpolate(Constant("0."), self.V).vector()
         if ub == None:
-            ub = interpolate(Constant("1."), self.V)
+            ub = interpolate(Constant("1."), self.V).vector()
         self.lb = lb
         self.ub = ub
         self.bcs = bcs
@@ -208,6 +310,9 @@ class AlternateMinimizationSolver(object):
         self.alpha = state[1]
         self.bcs_u = bcs[0]
         self.bcs_alpha = bcs[1]
+        comm = self.alpha.function_space().mesh().mpi_comm()
+        self.comm = comm
+
         if state_0:
             self.u_init = state_0[0]
             self.alpha_init = state_0[1]
@@ -221,9 +326,8 @@ class AlternateMinimizationSolver(object):
         self.problem_u = ElasticityProblem(self.energy, self.u, self.bcs_u, nullspace=nullspace)
         self.set_solver_u()
         if self.parameters["solver_alpha"] == "snes":
-            self.set_solver_alpha_snes()
-        elif self.parameters["solver_alpha"] == "snes2":
-            self.set_solver_alpha_snes2()
+            self.solver_alpha = DamageSolverSNES(
+                    self.energy, state[1], self.bcs_alpha, parameters)
         elif self.parameters["solver_alpha"] == "tao":
             self.set_solver_alpha_tao()
 
@@ -251,12 +355,11 @@ class AlternateMinimizationSolver(object):
         snes.setFromOptions()
         self.solver_u = solver
 
-
     def set_solver_alpha_snes(self):
         V = self.alpha.function_space()
         self.problem_alpha = DamageProblemSNES(
             self.energy, self.alpha, self.bcs_alpha, lb=self.alpha_init)
-        
+
         # solver = PETScSNESSolver()
         # snes = solver.snes()
                 # Create the solver
@@ -268,45 +371,58 @@ class AlternateMinimizationSolver(object):
         ub = interpolate(Constant("1."), V)
 
         snes.setOptionsPrefix("alpha_")
-
+        (J, F, bcs_alpha) = (self.problem_alpha.ddenergy,
+                            self.problem_alpha.denergy,
+                            self.problem_alpha.bcs)
+ 
         for option, value in self.parameters["solver_alpha_snes"].items():
             print("setting ", option,value)
             PETScOptions.set(option, value)
 
         snes.setFromOptions()
 
-        # self.ass = SystemAssembler(J, F, bcs_alpha)
+        self.ass = SystemAssembler(J, F, bcs_alpha)
+        # Intialise the residual
+        self.b = self.init_residual()
+        # Set the residual
+        snes.setFunction(self.residual, self.b.vec())
+        # Initialise the Jacobian
+        self.A = self.init_jacobian()
+        # Set the Jacobian
+        snes.setJacobian(self.jacobian, self.A.mat())
+        snes.ksp.setOperators(self.A.mat())
 
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         snes.setVariableBounds(lb.vector().vec(), ub.vector().vec()) # 
         # self.solver_alpha = snes
-        self.solver_alpha = solver
+        snes.setFromOptions()
 
-    # def set_solver_alpha_snes2(self):
-    #     V = self.alpha.function_space()
-    #     denergy = derivative(self.energy, self.alpha, TestFunction(V))
-    #     ddenergy = derivative(denergy, self.alpha, TrialFunction(V))
-    #     self.lb = self.alpha_init # interpolate(Constant("0."), V)
-    #     ub = interpolate(Constant("1."), V)
-    #     self.problem_alpha = NonlinearVariationalProblem(
-    #         denergy, self.alpha, self.bcs_alpha, J=ddenergy)
-    #     self.problem_alpha.set_bounds(self.lb, ub)
-    #     self.problem_alpha.lb = self.lb
-    #     # set up the solver
-    #     solver = NonlinearVariationalSolver(self.problem_alpha)
-        
-    #     snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
-    #                                      "snes_solver": {"linear_solver": "mumps",
-    #                                                      "maximum_iterations": 300,
-    #                                                      "report": True,
-    #                                                      "line_search": "basic",
-    #                                                      "method": "vinewtonrsls",
-    #                                                      "absolute_tolerance": 1e-5,
-    #                                                      "relative_tolerance": 1e-5,
-    #                                                      "solution_tolerance": 1e-5}}
-    #     solver.parameters.update(snes_solver_parameters_bounds)
-    #     #solver.solve()
-    #     self.solver = solver
+        self.solver_alpha = snes
+
+    def init_residual(self):
+        # Get the state
+        alpha = self.problem_alpha.alpha
+        # Initialise b
+        b = as_backend_type(
+            Function(alpha.function_space()).vector()
+            )
+        return b
+
+    def init_jacobian(self):
+        A = PETScMatrix(self.comm)
+        self.ass.init_global_tensor(A, Form(self.problem_alpha.ddenergy))
+        return A
+
+    def residual(self, snes, x, b):
+        self.update_x(x)
+        b_wrap = PETScVector(b)
+        self.ass.assemble(b_wrap, self.alpha_dvec)
+
+    def jacobian(self, snes, x, A, P):
+        self.update_x(x)
+        A_wrap = PETScMatrix(A)
+        self.ass.assemble(A_wrap)
+
 
     def set_solver_alpha_tao(self):
         self.problem_alpha = DamageProblemTAO(
@@ -349,17 +465,19 @@ class AlternateMinimizationSolver(object):
                 self.problem_u, self.u.vector())
 
             if self.parameters["solver_alpha"] == "snes2":
-                self.set_solver_alpha_snes2()
-                (alpha_it, alpha_reason) = self.solver.solve()
+                # self.set_solver_alpha_snes2()
+                (alpha_it, alpha_reason) = self.solver_alpha.solve()
 
             elif self.parameters["solver_alpha"] == "snes":
-                self.set_solver_alpha_snes()
-                import pdb; pdb.set_trace()
-                (alpha_it, alpha_reason) = self.solver_alpha.solve(
-                    self.problem_alpha,
-                    self.alpha.vector(),
-                    )
-                del self.solver_alpha
+                # self.set_solver_alpha_snes()
+                # Solve the problem
+                # import pdb; pdb.set_trace()
+                # (alpha_it, alpha_reason) = 
+                self.solver_alpha.solve()
+                # (alpha_it, alpha_reason) = self.solver_alpha.solve(
+                #     self.problem_alpha,
+                #     self.alpha.vector())
+                # del self.solver_alpha
 
             elif self.parameters["solver_alpha"] == "tao":
                 (alpha_it, alpha_reason) = self.solver_alpha.solve(
@@ -398,5 +516,86 @@ class AlternateMinimizationSolver(object):
         return (take_last(alt_min_data), alt_min_data)
 
 
+
+
+class DamageElasticitySolver:
+    """
+    Class for the damage elasticity solver.
+    The resolution is done via an alternate minimization of the energy with
+    respect to displacement and damage.
+    """
+
+    def __init__(self, energy, model, state, bcs, parameters={}):
+        """
+        Initializes the elasticity solver from the elasticity problem.
+        """
+        # Set the solver name
+        self.solver_name = "damage_elasticity"
+        # Store the model
+        self.model = model
+        # Store the parameters
+        self.parameters = parameters
+        # Set the elasticity solver
+        self.elasticity_solver = ElasticitySolver(
+                energy, state, bcs, parameters)
+        # Set the damage solver
+        self.damage_solver = DamageSolver(
+                energy, state, bcs, parameters)
+
+    def solve(self):
+        """
+        Solve the problem in its current state using an alternate minimization
+        algorithm.
+        """
+        # Get the solver parameters
+        pars = self.parameters[self.solver_name]
+        # Get the model
+        model = self.model
+        # Get the state
+        state = self.damage_solver.problem.state
+        # Get the state variables
+        alpha = state["alpha"]
+        # Update the bound of the damage problem
+        self.damage_solver.problem.update_lower_bound()
+        # Setup quantities for cnvergence criteria
+        convergence = False
+        i = 1
+        damage_diss_dens_im1 = local_project(
+            model.damage_dissipation_density(state), alpha.function_space())
+        err_damage_diss_dens = Function(alpha.function_space())
+        # Resolution loop
+        while not convergence:
+            # Raise error if max_it is reached
+            if i == pars["max_it"]:
+                template = "Alternate minimization did not converge in {}"
+                message = template.format(i)
+                raise RuntimeError(message)
+            # Solve the elastic problem
+            self.elasticity_solver.solve()
+            # Solve the damage problem
+            self.damage_solver.solve()
+            # Compute damage error between two iterations of the AM
+            damage_diss_dens = local_project(
+                model.damage_dissipation_density(state),
+                alpha.function_space())
+            err_damage_diss_dens.assign(
+                    damage_diss_dens - damage_diss_dens_im1,
+                    )
+            damage_energy_rerr = norm(
+                err_damage_diss_dens,
+                norm_type="L2",
+                mesh=alpha.function_space().mesh()
+                )
+            # Update damage_diss_dens_im1
+            damage_diss_dens_im1.assign(damage_diss_dens)
+            # Check the criterion
+            convergence = damage_energy_rerr < pars["alpha_rtol"]
+            # Display some information
+            message = "  INFO AM: Iteration {} -  Error {}"
+            ColorPrint.print_info(
+                message.format(i, damage_energy_rerr)
+                )
+            # Increment i
+            i += 1
 
 

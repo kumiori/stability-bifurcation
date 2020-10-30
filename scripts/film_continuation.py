@@ -113,11 +113,11 @@ alt_min_parameters = {"max_it": 300,
                       "tol": 1.e-5,
                       "solver_u": petsc_options_u,
                       # either
-                      # "solver_alpha": "snes",
-                      # "solver_alpha_snes": petsc_options_alpha_snes
+                      "solver_alpha": "snes",
+                      "solver_alpha_snes": petsc_options_alpha_snes
                       # or
-                      "solver_alpha": "tao",
-                     "solver_alpha_tao": petsc_options_alpha_tao
+                      # "solver_alpha": "tao",
+                     # "solver_alpha_tao": petsc_options_alpha_tao
                      }
 
 versions = get_versions()
@@ -286,7 +286,6 @@ def traction_test(
     geom_signature = hashlib.md5(str(geometry_parameters).encode('utf-8')).hexdigest()
     meshfile = "%s/meshes/%s-%s.xml"%(BASE_DIR, fname, geom_signature)
     # cmd_parameters['experiment']['signature']=signature
-    import pdb; pdb.set_trace()
 
     if os.path.isfile(meshfile):
         print("Meshfile %s exists"%meshfile)
@@ -351,6 +350,8 @@ def traction_test(
     model.ds = ds
     energy = model.total_energy_density(u, alpha)*dx
     # Alternate minimization solver
+    # import pdb; pdb.set_trace()
+
     solver = solvers.AlternateMinimizationSolver(
         energy, [u, alpha], [bcs_u, bcs_alpha], parameters=parameters['alt_min'])
 
@@ -399,7 +400,7 @@ def traction_test(
         (time_data_i, am_iter) = solver.solve()
 
         # Second order stability conditions
-        (stable, negev) = stability.solve(solver.problem_alpha.lb)
+        (stable, negev) = stability.solve(solver.solver_alpha.problem.lb)
         # ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
         log(LogLevel.INFO, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
