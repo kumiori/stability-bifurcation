@@ -305,14 +305,14 @@ class StabilitySolver(object):
         # positive part
         mask = beta_n.vector()[:]>0.
         hp2 = (one-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
-        hp1 = (self.alpha_old.vector()[mask]-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [-np.inf]
+        hp1 = (self.alpha_old[mask]-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [-np.inf]
         hp = (max(hp1), min(hp2))
 
         # negative part
         mask = beta_n.vector()[:]<0.
 
         hn2 = (one-self.alpha.vector()[mask])/beta_n.vector()[mask] if len(np.where(mask==True)[0])>0 else [-np.inf]
-        hn1 = (self.alpha_old.vector()[mask]-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
+        hn1 = (self.alpha_old[mask]-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
         hn = (max(hn2), min(hn1))
 
         hmax = np.array(np.min([hp[1], hn[1]]))
@@ -328,15 +328,15 @@ class StabilitySolver(object):
         self.hmin = float(hmin_glob)
 
         if self.hmin>0:
-            ColorPrint.print_warn('Line search troubles: found hmin>0')
+            log(LogLevel.WARNING, 'Line search troubles: found hmin>0')
             # import pdb; pdb.set_trace()
             return 0., np.nan, (0., 0.), 0.
         if self.hmax==0 and self.hmin==0:
-            ColorPrint.print_warn('Line search failed: found zero step size')
+            log(LogLevel.WARNING,'Line search failed: found zero step size')
             # import pdb; pdb.set_trace()
             return 0., np.nan, (0., 0.), 0.
         if self.hmax < self.hmin:
-            ColorPrint.print_warn('Line search failed: optimal h* not admissible')
+            log(LogLevel.WARNING,'Line search failed: optimal h* not admissible')
             # import pdb; pdb.set_trace()
             return 0., np.nan, (0., 0.), 0.
             # get next perturbation mode
@@ -367,21 +367,21 @@ class StabilitySolver(object):
         p = np.poly1d(z)
 
         if m==2:
-            ColorPrint.print_info('Line search using quadratic interpolation')
+            log(LogLevel.INFO, 'Line search using quadratic interpolation')
             hstar = - z[1]/(2*z[0])
         else:
-            ColorPrint.print_info('Line search using polynomial interpolation (order {})'.format(m))
+            log(LogLevel.INFO, 'Line search using polynomial interpolation (order {})'.format(m))
             h = np.linspace(self.hmin, self.hmax, 100)
             hstar = h[np.argmin(p(h))]
 
         if hstar < self.hmin or hstar > self.hmax:
-            ColorPrint.print_warn('Line search failed, h*={:3e} not in feasible interval'.format(hstar))
+            log(LogLevel.WARNING,'Line search failed, h*={:3e} not in feasible interval'.format(hstar))
             return 0., np.nan
 
-        ColorPrint.print_info('Line search h* = {:3f} in ({:.3f}, {:.3f}), h*/hmax {:3f}\
+        log(LogLevel.INFO, 'Line search h* = {:3f} in ({:.3f}, {:.3f}), h*/hmax {:3f}\
             '.format(hstar, self.hmin, self.hmax, hstar/self.hmax))
-        ColorPrint.print_info('Line search approx =\n {}'.format(p))
-        ColorPrint.print_info('h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
+        log(LogLevel.INFO, 'Line search approx =\n {}'.format(p))
+        log(LogLevel.INFO, 'h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
         ColorPrint.print_warn('Line search estimate, relative energy variation={:.5f}%'.format((p(hstar))/en0*100))
 
         # restore solution
@@ -515,7 +515,7 @@ class StabilitySolver(object):
         Fm = self.pc.getFactorMatrix()
         # myviewer = PETSc.Viewer().createASCII("test.txt", mode=PETSc.Viewer.Format.ASCII_COMMON,comm= PETSc.COMM_WORLD)
         (neg, zero, pos) = Fm.getInertia()
-        ColorPrint.print_info("#Eigenvalues of E'': (%s [neg], %s [zero], %s [pos])" % (neg, zero, pos))
+        log(LogLevel.INFO, "#Eigenvalues of E'': (%s [neg], %s [zero], %s [pos])" % (neg, zero, pos))
         if neg:
             self.stable = False
         else:
@@ -567,31 +567,31 @@ class StabilitySolver(object):
         postfix = 'seq' if size == 1 else 'mpi'
 
         locnumbcs = np.array(len(self.bc_dofs))
-        if debug:
-            print(rank, ': ', 'locnumbcs', locnumbcs)
+        # if debug:
+        log(LogLevel.DEBUG, 'rank, {} : {}'.format(rank, locnumbcs))
         numbcs = np.array(0.,'d')
         comm.Reduce(locnumbcs, numbcs, op=mpi4py.MPI.SUM, root=0)
 
         if debug and rank == 0:
-            print('#bc dofs = {}'.format(int(numbcs)))
-
+            log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
+        # import pdb; pdb.set_trace()
         if not np.all(self.alpha.vector()[:] >=self.alpha_old.vector()[:]):
             pd = np.where(self.alpha.vector()[:]-self.alpha_old.vector()[:] < 0)[0]
-            ColorPrint.print_warn('Pointwise irreversibility issues on dofs {}'.format(pd))
-            ColorPrint.print_warn('diff = {}'
+            log(LogLevel.WARNING, 'Pointwise irreversibility issues on dofs {}'.format(pd))
+            log(LogLevel.WARNING, 'diff = {}'
                 .format(self.alpha.vector()[pd]-self.alpha_old.vector()[pd]))
-            ColorPrint.print_warn('Continuing')
+            log(LogLevel.WARNING, 'Continuing')
 
         self.assigner.assign(self.z_old, [self.u_zero, self.alpha_old])
         self.assigner.assign(self.z, [self.u_zero, self.alpha])
 
         if self.is_elastic(self.z, self.z_old):
-            ColorPrint.print_pass('Current state: elastic')
+            log(LogLevel.INFO, 'Current state: elastic')
             self.stable = True
             self.negev = np.nan
             return self.stable, 0
         else:
-            ColorPrint.print_pass('Current state: not elastic')
+            log(LogLevel.INFO, 'Current state: not elastic')
 
         inactive_dofs = self.get_inactive_set()
         self.inactive_set = inactive_dofs
@@ -605,10 +605,10 @@ class StabilitySolver(object):
             self.H2 = self.rP - self.rN
 
         if hasattr(self, 'H2'):
-            ColorPrint.print_pass('Inertia: Using user-provided Hessian')
+            log(LogLevel.INFO, 'Inertia: Using user-provided Hessian')
             self.H_reduced = self.reduce_Hessian(self.H2, restricted_dofs_is = index_set)
         else:
-            ColorPrint.print_pass('Inertia: Using computed Hessian')
+            log(LogLevel.INFO, 'Inertia: Using computed Hessian')
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
 
         self.pc_setup()
@@ -655,18 +655,18 @@ class StabilitySolver(object):
             # eigen.save_eigenvectors(nconv)
 
             if nconv > 0:
-                ColorPrint.print_pass('')
-                ColorPrint.print_pass("i        k      err     ")
-                ColorPrint.print_pass("---------------------------")
+                log(LogLevel.INFO, '')
+                log(LogLevel.INFO, "i        k      err     ")
+                log(LogLevel.INFO, "---------------------------")
                 for (i, k) in enumerate(eigs):
-                    ColorPrint.print_pass( "%d %12e %12e" %(i, k[0], k[1]) )
-                ColorPrint.print_pass('')
+                    log(LogLevel.INFO,  "%d %12e %12e" %(i, k[0], k[1]) )
+                log(LogLevel.INFO, '')
 
             linsearch = []
 
             if negconv > 0:
                 for n in range(negconv) if negconv < maxmodes else range(maxmodes):
-                    ColorPrint.print_pass('Perturbation mode {}'.format(n))
+                    log(LogLevel.INFO, 'Perturbation mode {}'.format(n))
                     eig, u_r, u_im, err = eigen.get_eigenpair(n)
                     err2 = eigen.E.computeError(0, SLEPc.EPS.ErrorType.ABSOLUTE)
                     v_n, beta_n = u_r.split(deepcopy=True)

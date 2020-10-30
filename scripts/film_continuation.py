@@ -392,15 +392,17 @@ def traction_test(
 
     for it, load in enumerate(load_steps):
         model.eps0t.t = load
+        lb = alpha_old
         alpha_old.assign(alpha)
-        # ColorPrint.print_warn('Solving load t = {:.2f}'.format(load))
+        # log(LogLevel.INFO, 'Solving load t = {:.2f}'.format(load))
         log(LogLevel.PROGRESS, 'Solving load t = {:.2f}'.format(load))
 
         # First order stability conditions
         (time_data_i, am_iter) = solver.solve()
 
         # Second order stability conditions
-        (stable, negev) = stability.solve(solver.solver_alpha.problem.lb)
+        (stable, negev) = stability.solve(lb)
+        # (stable, negev) = stability.solve(solver.solver_alpha.problem.lb)
         # ColorPrint.print_pass('Current state is{}stable'.format(' ' if stable else ' un'))
         log(LogLevel.INFO, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
@@ -518,7 +520,7 @@ def traction_test(
                 f.write(u, load)
                 f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
             # with file_bif as f:
-                print('DEBUG: written step ', it)
+                log(LogLevel.DEBUG, 'Written step {}'.format(it))
 
         if save_current_bifurcation:
             # modes = np.where(stability.eigs < 0)[0]
@@ -876,9 +878,9 @@ if __name__ == "__main__":
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args()
     if len(unknown):
-        ColorPrint.print_warn('Unrecognised arguments:')
+        log(LogLevel.INFO, 'Unrecognised arguments:')
         print(unknown)
-        ColorPrint.print_warn('continuing in 5s')
+        log(LogLevel.INFO, 'continuing in 5s')
         sleep(5)
     # signature = md5().hexdigest()
     if args.outdir == None:
