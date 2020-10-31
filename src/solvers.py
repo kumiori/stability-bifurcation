@@ -432,7 +432,6 @@ class EquilibriumSolver(object):
         A_wrap = PETScMatrix(A)
         self.ass.assemble(A_wrap)
 
-
     def set_solver_alpha_tao(self):
         self.problem_alpha = DamageProblemTAO(
             self.energy, self.alpha, self.bcs_alpha, lb=self.alpha_init)
