@@ -456,44 +456,21 @@ def numerial_test(
         return alpha
     energy = (ell*inner(grad(alpha), grad(alpha)) + w(alpha)/ell)*dx
 
-    # First directional derivative in alpha along the direction beta
-    # dF = derivative(F,alpha,beta)
-    # ddF = derivative(dF,alpha,dalpha)
-
     bc_l = DirichletBC(V_alpha,  Constant(0.0), left)
     bc_r = DirichletBC(V_alpha, Constant(1.0), right)
     bcs=[bc_l,bc_r]
 
     state = {'alpha': alpha}
 
-    # log(LogLevel.INFO, 'Outdir = {}'.format(outdir))
-
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True
     file_out.parameters["flush_output"] = True
-
-    # problem_nl = NonlinearVariationalProblem(dF, alpha, bcs, J = ddF)
-    # problem_nl.set_bounds(lb, ub)
-    # set up the solver
-    # solver_nl = NonlinearVariationalSolver(problem_nl)
 
     with open('../parameters/solvers_default.yml') as f:
         solver_parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     solver = DamageSolver(energy, state, bcs, parameters=solver_parameters['damage'])
-    # snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
-    #                           "snes_solver": {"linear_solver": "cg",
-    #                                           "maximum_iterations": 100,
-    #                                           "report": True,
-    #                                           "line_search": "basic",
-    #                                           "method":"vinewtonrsls",
-    #                                           "absolute_tolerance":1e-6,
-    #                                           "relative_tolerance":1e-6,
-    #                                           "solution_tolerance":1e-6}}
-    # solver_nl.parameters.update(snes_solver_parameters_bounds)
-    # solver_nl.parameters.update({"nonlinear_solver": "snes"})
-    # info(solver.parameters,True)
-    # solve the problem
+
     solver.solve()
     plot(alpha)
     plt.savefig(os.path.join(outdir, 'alpha.pdf'))
@@ -506,14 +483,5 @@ if __name__ == "__main__":
     with open('../parameters/parameters.yml') as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
-    # Choose the directory where the mesh is stored
-    # mesh_dir = Path("mesh")
-    # Choose directory to store the results
-    # resu_dir = Path("results")
-    # if MPI.comm_world.rank == 0:
-    #     resu_dir.mkdir(parents=True, exist_ok=True)
-    # Choose the name of the result files (without the extension)
-    # resu_name = Path("tensile_test_beam")
-    # Launch simulation
     numerial_test(parameters)
 
