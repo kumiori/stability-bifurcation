@@ -562,6 +562,7 @@ class DamageSolver:
         #                 "Damage solver 1 failed, trying with damage solver 2")
         #         continue
 
+        log(LogLevel.INFO, "Solving damage")
 
         try:
             self.solver.solve()
