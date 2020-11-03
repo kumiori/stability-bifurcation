@@ -8,6 +8,7 @@ import os
 import site
 import sys
 
+from dolfin import Function, as_backend_type, SystemAssembler, Form
 
 
 
@@ -275,8 +276,9 @@ class AlternateMinimizationSolver(object):
             "iterations": [],
             "alpha_error": [],
             "alpha_max": []}
+        import pdb; pdb.set_trace()
 
-        while criterion > par["tol"] and it < par["max_it"]:
+        while criterion > self.parameters["tol"] and it < self.parameters["max_it"]:
             it = it + 1
             (u_it, u_reason) = self.solver_u.solve(
                 self.problem_u, self.u.vector())
@@ -359,8 +361,10 @@ class EquilibriumSolver:
             self.u_0 = self.u.copy(deepcopy=True)
             self.alpha_0 = self.alpha.copy(deepcopy=True)
 
-        self.elasticity_solver = ElasticitySolver(energy, state, bcs['elastic'], parameters)
-        self.damage_solver = DamageSolver(energy, state, bcs['damage'], parameters)
+        # import pdb; pdb.set_trace()
+
+        self.elasticity_solver = ElasticitySolver(energy, state, bcs['elastic'], parameters['elasticity'])
+        self.damage_solver = DamageSolver(energy, state, bcs['damage'], parameters['damage'])
 
     def solve(self):
         parameters = self.parameters
@@ -377,9 +381,9 @@ class EquilibriumSolver:
             "alpha_error": [],
             "alpha_max": []}
 
-        while criterion > parameters["tol"] and it < parameters["max_it"]:
+        while criterion > self.parameters["tol"] and it < self.parameters["max_it"]:
             it = it + 1
-            (u_it, u_reason) = self.solver_u.solve(self.problem_u, self.u.vector())
+            (u_it, u_reason) = self.elasticity_solver.solve()
             (alpha_it, alpha_reason) = self.damage_solver.solve()
 
             # if parameters["solver_alpha"] == "snes":
@@ -426,6 +430,7 @@ class EquilibriumSolver:
 
             # update
             alpha_old.assign(alpha)
+        return (alt_min_data, it)
 
     def update(self):
         self.problem_alpha.update_lower_bound()
@@ -439,17 +444,80 @@ class EquilibriumSolver:
         #     self.problem_alpha.update_lb()
         #     print('Updated irreversibility')
 
-class ElastcitityProblem:
+class ElasticityProblem(NonlinearProblem):
     """docstring for ElastcitityProblem"""
-    def __init__(self, arg):
-        super(ElastcitityProblem, self).__init__()
-        self.arg = arg
+
+    def __init__(self, energy, state, bcs):
+        """
+        Initialises the elasticity problem.
+
+        Arguments:
+            * energy
+            * state
+            * boundary conditions
+        """
+        # Initialize the parent
+        NonlinearProblem.__init__(self)
+        self.bcs = bcs
+        self.state = state
+        u = state["u"]
+
+        V = u.function_space()
+        v = TestFunction(V)
+        du = TrialFunction(V)
+
+        self.residual = derivative(energy, u, v)
+        self.jacobian = derivative(self.residual, u, du)
+
+    def F(self, b, x):
+        """
+        Compute F at current point x.
+        This function is called at each interation of the solver.
+        """
+        assemble(self.residual, tensor=b)
+        for bc in self.bcs:
+            bc.apply(b, x)
+        pass
+
+    def J(self, A, x):
+        """
+        Compute J=F' at current point x.
+        This function is called at each interation of the solver.
+        """
+        assemble(self.jacobian, tensor=A)
+        for bc in self.bcs:
+            bc.apply(A)
+        pass
 
 class ElasticitySolver:
     """docstring for ElasticitySolver"""
-    def __init__(self, arg):
+    def __init__(self, energy, state, bcs, parameters={}):
         super(ElasticitySolver, self).__init__()
-        self.arg = arg
+        solver_name = 'elasticity'
+        self.problem = ElasticityProblem(energy, state, bcs)
+        # Set the solver
+        self.solver = PETScSNESSolver()
+        snes = self.solver.snes()
+
+        prefix = ""
+        # snes.setOptionsPrefix(prefix)
+        # Set the parameters
+        for parameter, value in parameters.items():
+            log(LogLevel.INFO, "Set: {} = {}".format(parameter, value))
+            PETScOptions.set(prefix + parameter, value)
+        # Update the paramters
+        snes.setFromOptions()
+
+    def solve(self):
+        # Get the problem
+        log(LogLevel.INFO, "Solving elasticity")
+        problem = self.problem
+        # Get the vector
+        u = problem.state["u"].vector()
+        # Solve the problem
+        self.solver.solve(problem, u)
+        # import pdb; pdb.set_trace()
+        return (self.solver.snes().getIterationNumber(), self.solver.snes().getConvergedReason())
 
 class DamageSolver:
     """docstring for DamageSolver"""
@@ -497,6 +565,8 @@ class DamageSolver:
 
         try:
             self.solver.solve()
+            return (self.solver.solver.getIterationNumber(), self.solver.solver.getConvergedReason())
+
         except:
             log(LogLevel.WARNING,
                     "Damage solver failed, what's next?")
