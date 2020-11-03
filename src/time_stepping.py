@@ -3,7 +3,7 @@ sys.path.append("../src/")
 from utils import ColorPrint
 from dolfin import  Function, assemble, plot, norm
 import numpy as np
-import post_processing as pp
+import _post_processing as pp
 import os
 import pandas as pd
 import json

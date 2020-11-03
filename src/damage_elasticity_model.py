@@ -12,7 +12,7 @@ class DamageElasticityModel(object):
         nu,
         ell,
         sigma_D0,
-        k_ell=Constant(1.0e-8),
+        k_res=Constant(1.0e-8),
         user_functional=None,
     ):
 
@@ -22,7 +22,7 @@ class DamageElasticityModel(object):
         self.nu = nu
         self.ell = ell
         self.sigma_D0 = sigma_D0
-        self.k_ell = k_ell
+        self.k_res = k_res
         self.lmbda_0 = self.lmbda3D(0)
         self.mu_0 = self.mu3D(0)
         self.dim = state[0].function_space().ufl_element().value_size()
@@ -51,7 +51,7 @@ class DamageElasticityModel(object):
 
     def a(self, alpha):
         """Stiffness modulation as a function of the damage """
-        return (1 - alpha) ** 2 + self.k_ell
+        return (1 - alpha) ** 2 + self.k_res
 
     def elastic_energy_density(self, eps, alpha):
         lmbda = self.lmbda3D(alpha)
@@ -108,22 +108,23 @@ class DamageElasticityModel1D(DamageElasticityModel):
     def __init__(
         self,
         state,
-        E0,
-        ell,
-        sigma_D0,
-        k_ell=Constant(1.0e-8),
+        parameters,
         user_functional=None,
     ):
 
-        self.u = state[0]
-        self.alpha = state[1]
-        self.E0 = E0
-        self.ell = ell
-        self.sigma_D0 = sigma_D0
-        self.k_ell = k_ell
+        self.u = state['u']
+        self.alpha = state['alpha']
+
+        self.k_res=parameters['k_res']
+
+        self.E0 = parameters['E']
+        self.ell = parameters['ell']
+        self.sigma_D0 = parameters['sigma_D0']
         self.mu_0 = self.mu(0)
-        assert state[0].function_space().ufl_element().value_size() == 1
-        self.dim = state[0].function_space().ufl_element().value_size()
+
+
+        assert self.u.function_space().ufl_element().value_size() == 1
+        self.dim = self.u.function_space().ufl_element().value_size()
         self.user_functional = user_functional
 
     def mu(self, alpha):
@@ -140,7 +141,7 @@ class DamageElasticityModel1D(DamageElasticityModel):
 
     def a(self, alpha):
         """Stiffness modulation as a function of the damage """
-        return (1 - alpha) ** 2 + self.k_ell
+        return (1 - alpha) ** 2 + self.k_res
 
     def elastic_energy_density(self, eps, alpha):
         return 1./2.* self.E0*self.a(alpha)*eps**2.
@@ -197,7 +198,7 @@ class DamagePrestrainedElasticityModel(DamageElasticityModel):
         ell,
         sigma_D0,
         eps0t=Expression([['t', '0'],['0', 't']], t=0., degree=0),
-        k_ell=Constant(1.0e-8),
+        k_res=Constant(1.0e-8),
         user_functional=None,
     ):
 
@@ -207,7 +208,7 @@ class DamagePrestrainedElasticityModel(DamageElasticityModel):
         self.nu = nu
         self.ell = ell
         self.sigma_D0 = sigma_D0
-        self.k_ell = k_ell
+        self.k_res = k_res
         self.lmbda_0 = self.lmbda3D(0)
         self.mu_0 = self.mu3D(0)
         self.eps0t = eps0t
