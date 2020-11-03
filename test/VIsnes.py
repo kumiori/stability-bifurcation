@@ -477,6 +477,14 @@ def numerial_test(
     log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
 
 
+    xs = np.linspace(-Lx/2., Lx/2., 100)
+    profile = np.array([alpha(x, 0) for x in xs])
+    plt.figure()
+    plt.plot(xs, profile, marker='o')
+    # plt.plot(xs, np.array([u(x) for x in xs]))
+    plt.savefig(os.path.join(outdir, 'profile.pdf'))
+
+
 if __name__ == "__main__":
 
     # Parameters
