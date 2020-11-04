@@ -1,0 +1,8 @@
+stability:
+    order: 4
+    projection: 'None'
+    maxmodes: 5
+    checkstability: 'True'
+    continuation: 'False'
+    cont_rtol: 1.0e-05
+    inactiveset_atol: 1.0e-05

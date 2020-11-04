@@ -1,0 +1,20 @@
+# === General === #
+general:
+    dim: 2
+
+# === Loading === #
+loading: 
+    ud_min: 0.0
+    ud_max: 0.4
+    n_steps: 40
+
+#  === Model === #
+model:
+    mode: "plane-strain"
+    E: 1
+    nu: 0.3
+    ell: 0.05
+    k_res: 1.e-8
+
+# === Solver === #
+solver: "parameters/solvers_parameters.yml"

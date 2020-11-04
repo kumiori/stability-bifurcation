@@ -1,0 +1,5 @@
+material:
+    E: 1
+    ell: 0.05
+    sigma_D0: 1.0
+    k_res: 1.e-8

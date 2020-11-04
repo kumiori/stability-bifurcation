@@ -1,0 +1,5 @@
+# === General === #
+representation: uflacs
+optimize: 'True'
+cpp_optimize: 'True'
+quadrature_degree: 2

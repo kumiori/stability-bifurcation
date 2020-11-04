@@ -1,0 +1,125 @@
+# Elasticity solver parameters
+tol: 1.0e-5
+max_it: 300
+
+elasticity:
+    # MUMPS
+    snes_type: ksponly
+    ksp_type: preonly
+    pc_type: lu
+    pc_factor_mat_solver_type: mumps
+    ksp_atol: 1.0e-08
+    ksp_rtol: 1.0e-08
+    ksp_stol: 1.0e-08
+    # GMRES + HYPRE (https://mooseframework.inl.gov/application_development/hypre.html)
+    # ksp_type: gmres
+    # pc_type: hypre
+    # pc_hypre_type: boomeramg
+    # pc_hypre_boomeramg_cycle_type: V
+    # pc_hypre_boomeramg_relax_type_all: backward-SOR/Jacobi # SOR/Jacobi
+    # pc_hypre_boomeramg_measure_type: global # local
+    # pc_hypre_boomeramg_coarsen_type: Falgout
+    # pc_hypre_boomeramg_strong_threshold: 0.3 # 3D: 0.7 (> 0.5)
+    # pc_hypre_boomeramg_agg_nl: 1
+    # pc_hypre_boomeramg_print_statistics: 0 
+    # GMRES + GAMG (can be tuned to be quicker)
+    # ksp_type: gmres
+    # pc_type: gamg
+    # pc_gamg_type: agg
+    # pc_gamg_repartition: 1
+    # pc_gamg_reuse_interpolation: 1
+    # pc_gamg_asm_use_agg: 1
+    # pc_gamg_agg_nsmooths: 1
+    # pc_gamg_square_graph: 1
+    # pc_gamg_threshold: 0.01
+    # pc_gamg_sym_graph: 1
+    # mg_levels_esteig_ksp_type: cg
+    # mg_levels_ksp_type: chebyshev
+    # mg_levels_pc_type: jacobi
+    # mg_levels_ksp_chebyshev_esteig_steps: 50
+# Elasticity plasticity solver parameters
+elasticity_plasticity:
+    snes:
+        snes_type: newtonls
+        snes_linesearch_type: nleqerr
+        # MUMPS
+        ksp_type: preonly
+        pc_type: lu
+        pc_factor_mat_solver_type: mumps
+        # GMRES + HYPRE https://mooseframework.inl.gov/application_development/hypre.html
+        # ksp_type: gmres
+        # pc_type: hypre
+        # pc_hypre_type: boomeramg
+        # pc_hypre_boomeramg_cycle_type: V
+        # pc_hypre_boomeramg_relax_type_all: SOR/Jacobi # backward-SOR/Jacobi
+        # pc_hypre_boomeramg_measure_type: global # local
+        # pc_hypre_boomeramg_coarsen_type: Falgout # in 3D try: HMIS, PMIS
+        # pc_hypre_boomeramg_strong_threshold: 0.3 # 3D: 0.7 (> 0.5)
+        # pc_hypre_boomeramg_agg_nl: 1
+        # pc_hypre_boomeramg_print_statistics: 0 
+        # GMRES + GAMG (can be tuned to be quicker)
+        # ksp_type: gmres
+        # pc_type: gamg
+        # pc_gamg_type: agg
+        # pc_gamg_repartition: 1
+        # pc_gamg_reuse_interpolation: 1
+        # pc_gamg_asm_use_agg: 1
+        # pc_gamg_agg_nsmooths: 1
+        # pc_gamg_square_graph: 1
+        # pc_gamg_threshold: 0.01
+        # pc_gamg_sym_graph: 1
+        # mg_levels_esteig_ksp_type: cg
+        # mg_levels_ksp_type: chebyshev
+        # mg_levels_pc_type: jacobi
+        # mg_levels_ksp_chebyshev_esteig_steps: 50
+        snes_max_it: 1000
+        snes_atol: 1.0e-5
+        snes_rtol: 1.0e-8
+        snes_stol: 1.0e-8
+        snes_divergence_tolerance: -1.0
+    plane_stress_loop:
+        p_rtol: 1e-4
+        max_it: 25
+# Damage solver
+damage:
+    type:
+        # - TAO
+        - SNES
+    snes:
+        # Options in the case of SNES solver
+        snes_type: vinewtonrsls
+        snes_linesearch_type: basic
+        ksp_type: preonly
+        pc_type: lu
+        pc_factor_mat_solver_type: mumps
+        snes_atol: 1.0e-05
+        snes_rtol: 1.0e-05
+        snes_stol: 0.0 
+        snes_max_it: 500
+        snes_divergence_tolerance: -1.0
+        snes_monitor: ""
+    tao:
+        # Options in the case of TAO solver
+        # As the tao petsc4py is not accessible, these options are those from Fenics optimization problem
+        tao_type: gpcg
+        tao_gpcg_maxpgits: 50
+        tao_max_it: 300
+        tao_steptol: 1.0e-7
+        tao_gatol: 1.0e-6
+        tao_grtol: 1.0e-6
+        tao_gttol: 1.0e-6
+        tao_catol: 0.
+        tao_crtol: 0.
+        ksp_type: preonly
+        pc_type: lu
+        pc_factor_mat_solver_type: mumps
+        tao_monitor: ""
+# Damage Elasticity Solver
+damage_elasticity:
+    max_it: 25
+    alpha_rtol: 1.0e-5
+# Damage Plasticity Solver
+damage_plasticity:
+    max_it: 100
+    alpha_rtol: 1.0e-4
+
