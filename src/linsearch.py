@@ -13,8 +13,8 @@ class LineSearch(object):
     """Given an energy, a state, and a perturbation, performs returns optimal step and """
     def __init__(self, energy, state):
         super(LineSearch, self).__init__()
-        self.u_0 = dolfin.Vector(state[0].vector())
-        self.alpha_0 = dolfin.Vector(state[1].vector())
+        self.u_0 = dolfin.Vector(state['u'].vector())
+        self.alpha_0 = dolfin.Vector(state['alpha'].vector())
 
         self.energy = energy
 

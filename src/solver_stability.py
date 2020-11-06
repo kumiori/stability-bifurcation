@@ -14,6 +14,7 @@ from dolfin import MPI
 import matplotlib.pyplot as plt
 from dolfin.cpp.log import log, LogLevel
 import mpi4py
+import yaml 
 
 comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -33,9 +34,10 @@ class EigenSolver(object):
                  slepc_eigensolver = None
                 ):
         self.comm = comm
+
         self.slepc_options = slepc_options
         if option_prefix:
-            self.E.setOptionsPrefix(option_prefix)
+            self.E.setOptionsPrefix(optiaon_prefix)
         self.V = u.function_space()
         self.index_set_not_bc = None
         if type(bcs) == list:
@@ -87,7 +89,7 @@ class EigenSolver(object):
             self.E = self.eigensolver_setup()
 
         if a_m:
-            self.E.setOperators(self.K,self.M)       
+            self.E.setOperators(self.K,self.M)
         else:
             self.E.setOperators(self.K)
 
@@ -114,12 +116,16 @@ class EigenSolver(object):
         st = E.getST()
         st.setType('sinvert')
         st.setShift(-1.e-3)
+
+        self.set_options(self.slepc_options)
+        E.setFromOptions()
+
         return E
 
     def solve(self, n_eig):
         E = self.E
-        E.setDimensions(n_eig)
-        self.set_options(self.slepc_options)
+        # E.setDimensions(n_eig)
+        # self.set_options(self.slepc_options)
         E.setFromOptions()
         E.solve()
         # print info
@@ -135,8 +141,8 @@ class EigenSolver(object):
     def set_options(self,slepc_options):
         print("---- setting additional slepc options -----")
         for (opt, value) in slepc_options.items():
-            print("    ",opt,":",value)
-            dolfin.PETScOptions.set(opt,value) 
+            log(LogLevel.INFO, "INFO: setting {} {}".format(opt,value))
+            dolfin.PETScOptions.set(opt, value) 
         print("-------------------------------------------")
         self.E.setFromOptions()
 
@@ -178,8 +184,8 @@ class StabilitySolver(object):
         self.i = 0
         self.parameters = self.default_parameters()
         if parameters is not None: self.parameters.update(parameters)                                                         # for debug purposes
-        self.u = state[0]
-        self.alpha = state[1]
+        self.u = state['u']
+        self.alpha = state['alpha']
         self._u = dolfin.Vector(self.u.vector())
         self._alpha = dolfin.Vector(self.alpha.vector())
         self.meshsize = (mesh.hmax()+mesh.hmax())/2.
@@ -187,6 +193,10 @@ class StabilitySolver(object):
 
         self.Z = z.function_space()
         self.z = z
+        # import pdb; pdb.set_trace()
+
+        with open('../parameters/eigensolver.yml') as f:
+            self.inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
 
         # self.Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([state[0].ufl_element(), state[1].ufl_element()]))
         # self.z = dolfin.Function(self.Z)
@@ -198,8 +208,6 @@ class StabilitySolver(object):
         cdm = dolfin.project(dolfin.CellDiameter(self.mesh)**2., dolfin.FunctionSpace(self.mesh, 'CG', 1))
         self.cellarea = dolfin.Function(z.function_space())
         self.cellarea.assign(cdm)
-
-
 
         self.ownership = self.Z.dofmap().ownership_range()
         self.assigner = dolfin.FunctionAssigner(
@@ -231,7 +239,7 @@ class StabilitySolver(object):
         (z_u, z_a) = dolfin.split(self.z)
         # import pdb; pdb.set_trace()
         # energy = ufl.replace(energy, {self.u: z_u, self.alpha: z_a})
-        energy = ufl.replace(energy, {state[0]: z_u, state[1]: z_a})
+        energy = ufl.replace(energy, {state['u']: z_u, state['alpha']: z_a})
         self.J = dolfin.derivative(energy, self.z, dolfin.TestFunction(self.Z))
         self.H = dolfin.derivative(self.J, self.z, dolfin.TrialFunction(self.Z))
 
@@ -256,12 +264,6 @@ class StabilitySolver(object):
         self.perturbation_v = dolfin.Function(self.Z.sub(0).collapse())
         self.perturbation_beta = dolfin.Function(self.Z.sub(1).collapse())
 
-        dolfin.PETScOptions.set("ksp_type", "preonly")
-        dolfin.PETScOptions.set("pc_type", "cholesky")
-        dolfin.PETScOptions.set("pc_factor_mat_solver_type", "mumps")
-        dolfin.PETScOptions.set("mat_mumps_icntl_24", 1)
-        dolfin.PETScOptions.set("mat_mumps_icntl_13", 1)
-        dolfin.PETScOptions.set("eps_monitor")
 
     def default_parameters(self):
         return {'order': 3,
@@ -412,7 +414,7 @@ class StabilitySolver(object):
             # scalar
             zeros = dolfin.Constant(0.)
 
-        for bc in self.bcs[0]:
+        for bc in self.bcs['elastic']:
             if hasattr(bc, 'sub_domain'):
                 new_bc = dolfin.DirichletBC(self.Z.sub(0), zeros, bc.sub_domain, bc.method())
             elif hasattr(bc, 'domain_args'):
@@ -421,7 +423,7 @@ class StabilitySolver(object):
                 raise RuntimeError("Couldn't find where bcs for displacement are applied")
 
             bcs_Z.append(new_bc)
-        for bc in self.bcs[1]:
+        for bc in self.bcs['damage']:
             if hasattr(bc, 'sub_domain'):
                 new_bc = dolfin.DirichletBC(self.Z.sub(1), zero, bc.sub_domain, bc.method())
             elif hasattr(bc, 'domain_args'):
@@ -492,13 +494,23 @@ class StabilitySolver(object):
 
     def pc_setup(self):
         self.pc = PETSc.PC().create(MPI.comm_world)
-        self.pc.setType("cholesky")
-        if hasattr(self.pc, 'setFactorSolverType'):
-            self.pc.setFactorSolverType("mumps")
-        elif hasattr(self.pc, 'setFactorSolverPackage'):
-            self.pc.setFactorSolverPackage('mumps')
-        else:
-            ColorPrint.print_warn('Could not configure preconditioner')
+        prefix = "inertia_"
+        self.pc.setOptionsPrefix(prefix)
+
+        for parameter, value in self.inertia_parameters.items():
+            dolfin.PETScOptions.set(parameter, value)
+            log(LogLevel.INFO, 'INFO: Setting up inertia solver: {} {}'.format(parameter, value))
+
+        dolfin.PETScOptions.set("inertia_ksp_type", "preonly")
+        dolfin.PETScOptions.set("inertia_pc_type", "cholesky")
+        dolfin.PETScOptions.set("inertia_pc_factor_mat_solver_type", "mumps")
+        dolfin.PETScOptions.set("inertia_mat_mumps_icntl_24", 1)
+        dolfin.PETScOptions.set("inertia_mat_mumps_icntl_13", 1)
+        dolfin.PETScOptions.set("inertia_eps_monitor", 1)
+
+        self.pc.setFromOptions()
+        self.pc.view()
+        # import pdb; pdb.set_trace()
 
     def get_inertia(self, Mat = None, restricted_dof_is=None):
         if Mat == None:
@@ -512,7 +524,10 @@ class StabilitySolver(object):
                 H = H.getSubMatrix(restricted_dof_is, restricted_dof_is)
         self.pc.setOperators(H)
         self.pc.setUp()
+        self.pc.view()
+        import pdb; pdb.set_trace()
         Fm = self.pc.getFactorMatrix()
+        import pdb; pdb.set_trace()
         # myviewer = PETSc.Viewer().createASCII("test.txt", mode=PETSc.Viewer.Format.ASCII_COMMON,comm= PETSc.COMM_WORLD)
         (neg, zero, pos) = Fm.getInertia()
         log(LogLevel.INFO, "#Eigenvalues of E'': (%s [neg], %s [zero], %s [pos])" % (neg, zero, pos))
@@ -574,15 +589,17 @@ class StabilitySolver(object):
 
         if debug and rank == 0:
             log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
-        # import pdb; pdb.set_trace()
-        if not np.all(self.alpha.vector()[:] >=self.alpha_old.vector()[:]):
-            pd = np.where(self.alpha.vector()[:]-self.alpha_old.vector()[:] < 0)[0]
+        if not np.all(self.alpha.vector()[:] >=self.alpha_old[:]):
+            pd = np.where(self.alpha.vector()[:]-self.alpha_old[:] < 0)[0]
             log(LogLevel.WARNING, 'Pointwise irreversibility issues on dofs {}'.format(pd))
             log(LogLevel.WARNING, 'diff = {}'
-                .format(self.alpha.vector()[pd]-self.alpha_old.vector()[pd]))
+                .format(self.alpha.vector()[pd]-self.alpha_old[pd]))
             log(LogLevel.WARNING, 'Continuing')
 
-        self.assigner.assign(self.z_old, [self.u_zero, self.alpha_old])
+        # A convoluted way to do a simple thing. FIXME
+        _alpha_old = dolfin.Function(self.alpha.function_space())
+        _alpha_old.vector()[:] = self.alpha_old[:] 
+        self.assigner.assign(self.z_old, [self.u_zero, _alpha_old])
         self.assigner.assign(self.z, [self.u_zero, self.alpha])
 
         if self.is_elastic(self.z, self.z_old):
@@ -622,13 +639,13 @@ class StabilitySolver(object):
         # solve full eigenvalue problem
             eigen_tol = self.parameters['eig_rtol']
             if hasattr(self, 'H2'):
-                ColorPrint.print_pass('Full eig: Using user-provided Hessian')
-                ColorPrint.print_pass('Norm provided {}'.format(dolfin.assemble(self.H2).norm('frobenius')))
+                log(LogLevel.PROGRESS, 'PROGRESS: Full eig: Using user-provided Hessian')
+                log(LogLevel.PROGRESS, 'PROGRESS: Norm provided {}'.format(dolfin.assemble(self.H2).norm('frobenius')))
                 eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
             else:
-                ColorPrint.print_pass('Full eig: Using computed Hessian')
+                log(LogLevel.PROGRESS, 'PROGRESS: Full eig: Using computed Hessian')
                 eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
-            ColorPrint.print_pass('Norm computed {}'.format(dolfin.assemble(self.H).norm('frobenius')))
+            log(LogLevel.PROGRESS, 'PROGRESS: Norm computed {}'.format(dolfin.assemble(self.H).norm('frobenius')))
             self.computed.append(dolfin.assemble(self.H).norm('frobenius'))
             if hasattr(self, 'H2'): self.provided.append(dolfin.assemble(self.H2).norm('frobenius'))
 

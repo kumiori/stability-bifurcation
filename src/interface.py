@@ -275,7 +275,7 @@ def traction_1d(
     # 
     k_ell = 1e-8
     a = (1 - alpha) ** 2. + k_ell
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     w_1 = material_parameters['sigma_D0'] ** 2 / material_parameters['E']
     w = w_1 * alpha
     eps = u.dx(0)
@@ -309,8 +309,8 @@ def traction_1d(
     solver = solvers.EquilibriumSolver(energy, model, state, bcs, parameters=solver_parameters)
 
     # stability = StabilitySolver(mesh, energy,
-    #     [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
-    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
+    #     state, [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
+    stability = StabilitySolver(mesh, energy, state, bcs, z, parameters = parameters['stability'])
 
     # Time iterations
     load_steps = np.linspace(parameters['time_stepping']['load_min'], parameters['time_stepping']['load_max'], parameters['time_stepping']['n_steps'])
@@ -318,7 +318,7 @@ def traction_1d(
 
     time_data = []
 
-    linesearch = LineSearch(energy, [u, alpha])
+    linesearch = LineSearch(energy, state)
     alpha_old = dolfin.Function(alpha.function_space())
     lmbda_min_prev = 0.000001
     bifurcated = False
@@ -339,10 +339,11 @@ def traction_1d(
 
         log(LogLevel.PROGRESS, 'PROGRESS: Solving load t = {:.2f}'.format(load))
         (time_data_i, am_iter) = solver.solve()
-        # (stable, negev) = stability.solve(solver.problem_alpha.lb)
+        # import pdb; pdb.set_trace()
+        (stable, negev) = stability.solve(solver.damage_solver.problem.lb)
 
-        # log(LogLevel.PROGRESS, 'PROGRESS: Current state is{}stable'.format(' ' if stable else ' un'))
-        # solver.update()
+        log(LogLevel.PROGRESS, 'PROGRESS: Current state is{}stable'.format(' ' if stable else ' un'))
+        solver.update()
 
         # mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
         # log(LogLevel.INFO, 'INFO: lmbda min {}'.format(lmbda_min_prev))
@@ -409,7 +410,7 @@ def traction_1d(
                 f.write(u, load)
             with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
                 f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
-                print('DEBUG: written step ', it)
+                log(LogLevel.PROGRESS, 'PROGRESS: written step {}'.format(it))
 
 
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
@@ -582,7 +583,7 @@ if __name__ == "__main__":
     w1 = material_parameters['sigma_D0'] ** 2 / material_parameters['E']
     tc = np.sqrt(w1/material_parameters['E'])
     ell = material_parameters['ell']
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     lab = '\\ell={}, E={}, \\sigma_D = {}'.format(material_parameters['ell'], material_parameters['E'],material_parameters['sigma_D0'])
     # params['geometry']['Ly'] =1
     fig1, ax1 =pp.plot_energy(parameters, data, tc)

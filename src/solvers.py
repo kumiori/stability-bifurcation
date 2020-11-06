@@ -433,8 +433,8 @@ class EquilibriumSolver:
         return (alt_min_data, it)
 
     def update(self):
-        self.problem_alpha.update_lower_bound()
-        log(LogLevel.PROGRESS, 'Updated irreversibility')
+        self.damage_solver.problem.update_lower_bound()
+        log(LogLevel.PROGRESS, 'PROGRESS: Updated irreversibility')
 
         # if self.parameters["solver_alpha"] == "snes2":
         #     self.problem_alpha.lb.assign(self.alpha)
