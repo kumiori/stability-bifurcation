@@ -35,7 +35,7 @@ from solver_stability import StabilitySolver
 from dolfin.cpp.log import log, LogLevel, set_log_level
 import yaml
 
-set_log_level(LogLevel.PROGRESS)
+set_log_level(LogLevel.WARNING)
 
 comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -340,9 +340,9 @@ def traction_1d(
         log(LogLevel.PROGRESS, 'PROGRESS: Solving load t = {:.2f}'.format(load))
         (time_data_i, am_iter) = solver.solve()
         # import pdb; pdb.set_trace()
-        (stable, negev) = stability.solve(solver.damage_solver.problem.lb)
+        # (stable, negev) = stability.solve(solver.damage_solver.problem.lb)
 
-        log(LogLevel.PROGRESS, 'PROGRESS: Current state is{}stable'.format(' ' if stable else ' un'))
+        # log(LogLevel.PROGRESS, 'PROGRESS: Current state is{}stable'.format(' ' if stable else ' un'))
         solver.update()
 
         # mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
@@ -395,7 +395,7 @@ def traction_1d(
         # time_data_i["a(alpha)"] = dolfin.assemble(a*dx)
         # time_data_i["avg_alpha"] = dolfin.assemble(alpha*dx)
         # import pdb; pdb.set_trace()
-        log(LogLevel.PROGRESS,
+        log(LogLevel.INFO,
             "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
                 time_data_i["load"],
                 time_data_i["iterations"][0],

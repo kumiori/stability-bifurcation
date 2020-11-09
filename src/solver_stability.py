@@ -29,15 +29,15 @@ class EigenSolver(object):
                  bcs=None,
                  restricted_dofs_is=None,
                  slepc_options={'eps_max_it':100},
-                 option_prefix=None,
+                 option_prefix='eigen_',
                  comm=MPI.comm_world, 
                  slepc_eigensolver = None
                 ):
         self.comm = comm
 
         self.slepc_options = slepc_options
-        if option_prefix:
-            self.E.setOptionsPrefix(optiaon_prefix)
+        # if option_prefix:
+            # self.E.setOptionsPrefix(option_prefix)
         self.V = u.function_space()
         self.index_set_not_bc = None
         if type(bcs) == list:
@@ -86,7 +86,7 @@ class EigenSolver(object):
         if slepc_eigensolver:
             self.E = slepc_eigensolver
         else:
-            self.E = self.eigensolver_setup()
+            self.E = self.eigensolver_setup(prefix=option_prefix)
 
         if a_m:
             self.E.setOperators(self.K,self.M)
@@ -106,9 +106,11 @@ class EigenSolver(object):
         index_set.createGeneral(interior_dofs)  
         return index_set
 
-    def eigensolver_setup(self):
+    def eigensolver_setup(self, prefix=None):
         E = SLEPc.EPS()
         E.create()
+        if prefix:
+            E.setOptionsPrefix(prefix)
         E.setType(SLEPc.EPS.Type.KRYLOVSCHUR)
         E.setProblemType(SLEPc.EPS.ProblemType.HEP)
         E.setWhichEigenpairs(E.Which.TARGET_REAL)
@@ -117,8 +119,9 @@ class EigenSolver(object):
         st.setType('sinvert')
         st.setShift(-1.e-3)
 
-        self.set_options(self.slepc_options)
         E.setFromOptions()
+
+        # .set_options(self.slepc_options)
 
         return E
 
@@ -144,7 +147,7 @@ class EigenSolver(object):
             log(LogLevel.INFO, "INFO: setting {} {}".format(opt,value))
             dolfin.PETScOptions.set(opt, value) 
         print("-------------------------------------------")
-        self.E.setFromOptions()
+        # self.E.setFromOptions()
 
     def get_eigenpair(self,i):
         u_r = dolfin.Function(self.V)
@@ -193,10 +196,11 @@ class StabilitySolver(object):
 
         self.Z = z.function_space()
         self.z = z
-        # import pdb; pdb.set_trace()
 
         with open('../parameters/eigensolver.yml') as f:
             self.inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
+        with open('../parameters/eigensolver.yml') as f:
+            self.eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
 
         # self.Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([state[0].ufl_element(), state[1].ufl_element()]))
         # self.z = dolfin.Function(self.Z)
@@ -237,7 +241,6 @@ class StabilitySolver(object):
         self.energy = energy
 
         (z_u, z_a) = dolfin.split(self.z)
-        # import pdb; pdb.set_trace()
         # energy = ufl.replace(energy, {self.u: z_u, self.alpha: z_a})
         energy = ufl.replace(energy, {state['u']: z_u, state['alpha']: z_a})
         self.J = dolfin.derivative(energy, self.z, dolfin.TestFunction(self.Z))
@@ -288,109 +291,6 @@ class StabilitySolver(object):
         beta.vector().set_local(bval)
 
         return
-
-    def linesearch(self, v_n, beta_n, m=3, mode=0):
-        debug = False
-        en0 = dolfin.assemble(self.energy)
-        _u = self._u
-        _alpha = self._alpha
-
-        _u[:] = self.u.vector()[:]
-        _alpha[:] = self.alpha.vector()[:]
-
-        one = max(1., max(self.alpha.vector()[:]))
-
-        if hasattr(self, 'bcs') and len(self.bcs[0])>0:
-            assert np.all([self.is_compatible(bc, v_n, homogeneous = True) for bc in self.bcs[0]]), \
-                'displacement test field is not kinematically admissible'
-
-        # positive part
-        mask = beta_n.vector()[:]>0.
-        hp2 = (one-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
-        hp1 = (self.alpha_old[mask]-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [-np.inf]
-        hp = (max(hp1), min(hp2))
-
-        # negative part
-        mask = beta_n.vector()[:]<0.
-
-        hn2 = (one-self.alpha.vector()[mask])/beta_n.vector()[mask] if len(np.where(mask==True)[0])>0 else [-np.inf]
-        hn1 = (self.alpha_old[mask]-self.alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
-        hn = (max(hn2), min(hn1))
-
-        hmax = np.array(np.min([hp[1], hn[1]]))
-        hmin = np.array(np.max([hp[0], hn[0]]))
-
-        hmax_glob = np.array(0.0,'d')
-        hmin_glob = np.array(0.0,'d')
-
-        comm.Allreduce(hmax, hmax_glob, op=mpi4py.MPI.MIN)
-        comm.Allreduce(hmin, hmin_glob, op=mpi4py.MPI.MAX)
-
-        self.hmax = float(hmax_glob)
-        self.hmin = float(hmin_glob)
-
-        if self.hmin>0:
-            log(LogLevel.WARNING, 'Line search troubles: found hmin>0')
-            # import pdb; pdb.set_trace()
-            return 0., np.nan, (0., 0.), 0.
-        if self.hmax==0 and self.hmin==0:
-            log(LogLevel.WARNING,'Line search failed: found zero step size')
-            # import pdb; pdb.set_trace()
-            return 0., np.nan, (0., 0.), 0.
-        if self.hmax < self.hmin:
-            log(LogLevel.WARNING,'Line search failed: optimal h* not admissible')
-            # import pdb; pdb.set_trace()
-            return 0., np.nan, (0., 0.), 0.
-            # get next perturbation mode
-
-        en = []
-
-        htest = np.linspace(self.hmin, self.hmax, m+1)
-
-        for h in htest:
-            uval = _u[:]     + h*v_n.vector()[:]
-            aval = _alpha[:] + h*beta_n.vector()[:]
-
-            if not np.all(aval - self.alpha_old.vector()[:] + dolfin.DOLFIN_EPS_LARGE >= 0.):
-                print('damage test field doesn\'t verify sharp irrev from below')
-                import pdb; pdb.set_trace()
-            if not np.all(aval <= one):
-                print('damage test field doesn\'t verify irrev from above')
-                import pdb; pdb.set_trace()
-
-            self.u.vector()[:] = uval
-            self.alpha.vector()[:] = aval
-
-            en.append(dolfin.assemble(self.energy)-en0)
-            if debug and size == 1:
-                ax2.plot(xs, [self.alpha(x, 0) for x in xs], label='$\\alpha+h \\beta_{{{}}}$, h={:.3f}'.format(mode, h), lw=.5, c='C1' if h>0 else 'C4')
-
-        z = np.polyfit(htest, en, m)
-        p = np.poly1d(z)
-
-        if m==2:
-            log(LogLevel.INFO, 'Line search using quadratic interpolation')
-            hstar = - z[1]/(2*z[0])
-        else:
-            log(LogLevel.INFO, 'Line search using polynomial interpolation (order {})'.format(m))
-            h = np.linspace(self.hmin, self.hmax, 100)
-            hstar = h[np.argmin(p(h))]
-
-        if hstar < self.hmin or hstar > self.hmax:
-            log(LogLevel.WARNING,'Line search failed, h*={:3e} not in feasible interval'.format(hstar))
-            return 0., np.nan
-
-        log(LogLevel.INFO, 'Line search h* = {:3f} in ({:.3f}, {:.3f}), h*/hmax {:3f}\
-            '.format(hstar, self.hmin, self.hmax, hstar/self.hmax))
-        log(LogLevel.INFO, 'Line search approx =\n {}'.format(p))
-        log(LogLevel.INFO, 'h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
-        ColorPrint.print_warn('Line search estimate, relative energy variation={:.5f}%'.format((p(hstar))/en0*100))
-
-        # restore solution
-        self.u.vector()[:] = _u[:]
-        self.alpha.vector()[:] = _alpha[:]
-
-        return hstar, p(hstar)/en0, (self.hmin, self.hmax), en
 
     def save_matrix(self, Mat, name):
         if name[-3:]=='txt': viewer = PETSc.Viewer().createASCII(name, 'w')
@@ -492,7 +392,7 @@ class StabilitySolver(object):
                 H_reduced = H.getSubMatrix(restricted_dofs_is, restricted_dofs_is)
         return H_reduced
 
-    def pc_setup(self):
+    def inertia_setup(self):
         self.pc = PETSc.PC().create(MPI.comm_world)
         prefix = "inertia_"
         self.pc.setOptionsPrefix(prefix)
@@ -509,7 +409,7 @@ class StabilitySolver(object):
         dolfin.PETScOptions.set("inertia_eps_monitor", 1)
 
         self.pc.setFromOptions()
-        self.pc.view()
+        # self.pc.view()
         # import pdb; pdb.set_trace()
 
     def get_inertia(self, Mat = None, restricted_dof_is=None):
@@ -524,10 +424,10 @@ class StabilitySolver(object):
                 H = H.getSubMatrix(restricted_dof_is, restricted_dof_is)
         self.pc.setOperators(H)
         self.pc.setUp()
-        self.pc.view()
-        import pdb; pdb.set_trace()
+        # self.pc.view()
+        # import pdb; pdb.set_trace()   
         Fm = self.pc.getFactorMatrix()
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         # myviewer = PETSc.Viewer().createASCII("test.txt", mode=PETSc.Viewer.Format.ASCII_COMMON,comm= PETSc.COMM_WORLD)
         (neg, zero, pos) = Fm.getInertia()
         log(LogLevel.INFO, "#Eigenvalues of E'': (%s [neg], %s [zero], %s [pos])" % (neg, zero, pos))
@@ -538,8 +438,7 @@ class StabilitySolver(object):
         return neg
 
     def project(self, beta, mode = 'none'):
-        # import pdb; pdb.set_trace()
-        if self.bcs: bc_a = self.bcs[1]
+        if self.bcs: bc_a = self.bcs['damage']
         if mode == 'truncate':
             mask = beta.vector()[:] < 0
             beta.vector()[np.where(mask == True)[0]] = 0
@@ -628,7 +527,7 @@ class StabilitySolver(object):
             log(LogLevel.INFO, 'Inertia: Using computed Hessian')
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
 
-        self.pc_setup()
+        self.inertia_setup()
         # import pdb; pdb.set_trace()
 
         negev = self.get_inertia(self.H_reduced)
@@ -654,7 +553,7 @@ class StabilitySolver(object):
             nconv, it = eigen.solve(min(maxmodes, negev+7))
 
             if nconv == 0:
-                ColorPrint.print_warn('Eigensolver did not converge')
+                log(LogLevel.WARNING, 'Eigensolver did not converge')
                 self.stable = negev <= 0
                 self.eigs = []
                 self.mineig = np.nan
@@ -664,9 +563,9 @@ class StabilitySolver(object):
             negconv = sum(eigs[:,0]<0)
             # sanity check
             if nconv and negconv != negev:
-                ColorPrint.print_bold('eigen solver found {} negative evs '.format(negconv))
+                log(LogLevel.WARNING, 'Eigen solver found {} negative evs '.format(negconv))
             if nconv == 0 and negev>0:
-                ColorPrint.print_bold('Full eigensolver did not converge but inertia yields {} neg eigen'.format(negev))
+                log(LogLevel.WARNING, 'Full eigensolver did not converge but inertia yields {} neg eigen'.format(negev))
                 return
 
             # eigen.save_eigenvectors(nconv)
@@ -723,9 +622,9 @@ class StabilitySolver(object):
                 self.eigendata = linsearch
 
             self.i +=1
-            print('*** negev  ', negev)
-            print('*** negev  unstable ', negev < 0)
-            print('*** mineig stable ', eig.real > 0)
+            log(LogLevel.INFO, 'negative ev (inertia) {}'.format(negev))
+            log(LogLevel.INFO, 'counting neg. ev. : stable :{}'.format(not (negev > 0)))
+            log(LogLevel.INFO, 'computing min. ev.: stable {}'.format(eig.real > 0))
             self.stable = eig.real > 0  # based on eigenvalue
         return (self.stable, int(negev))
 
