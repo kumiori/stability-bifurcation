@@ -48,10 +48,10 @@ V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
 
 load_min = params['time_stepping']['load_min']
 load_max = params['time_stepping']['load_max']
-nsteps = params['time_stepping']['nsteps']
+nsteps = params['time_stepping']['n_steps']
 Lx = params['geometry']['Lx']
 
-onedim = False
+onedim = True
 if not onedim:
 	Ly = params['geometry']['Ly']
 
@@ -73,10 +73,11 @@ maxmodes = 2
 alpha = dolfin.Function(V_alpha)
 alphas = []
 
-# file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "output_postproc.xdmf"))
-file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "output.xdmf"))
+file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "output_postproc.xdmf"))
+# file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "output.xdmf"))
 file_postproc.parameters["functions_share_mesh"] = True
 file_postproc.parameters["flush_output"] = True
+import pdb; pdb.set_trace()
 
 # stride = 10
 for (step, load) in enumerate(load_steps):

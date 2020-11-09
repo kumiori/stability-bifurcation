@@ -187,8 +187,8 @@ class AlternateMinimizationSolver(object):
         self.set_solver_u()
         if self.parameters["solver_alpha"] == "snes":
             self.set_solver_alpha_snes()
-        elif self.parameters["solver_alpha"] == "snes2":
-            self.set_solver_alpha_snes2()
+        # elif self.parameters["solver_alpha"] == "snes2":
+        #     self.set_solver_alpha_snes2()
         elif self.parameters["solver_alpha"] == "tao":
             self.set_solver_alpha_tao()
 
@@ -216,31 +216,31 @@ class AlternateMinimizationSolver(object):
         snes.setFromOptions()
         self.solver_u = solver
 
-    def set_solver_alpha_snes2(self):
-        V = self.alpha.function_space()
-        denergy = derivative(self.energy, self.alpha, TestFunction(V))
-        ddenergy = derivative(denergy, self.alpha, TrialFunction(V))
-        self.lb = self.alpha_init # interpolate(Constant("0."), V)
-        ub = interpolate(Constant("1."), V)
-        self.problem_alpha = NonlinearVariationalProblem(
-            denergy, self.alpha, self.bcs_alpha, J=ddenergy)
-        self.problem_alpha.set_bounds(self.lb, ub)
-        self.problem_alpha.lb = self.lb
-        # set up the solver
-        solver = NonlinearVariationalSolver(self.problem_alpha)
+    # def set_solver_alpha_snes2(self):
+    #     V = self.alpha.function_space()
+    #     denergy = derivative(self.energy, self.alpha, TestFunction(V))
+    #     ddenergy = derivative(denergy, self.alpha, TrialFunction(V))
+    #     self.lb = self.alpha_init # interpolate(Constant("0."), V)
+    #     ub = interpolate(Constant("1."), V)
+    #     self.problem_alpha = NonlinearVariationalProblem(
+    #         denergy, self.alpha, self.bcs_alpha, J=ddenergy)
+    #     self.problem_alpha.set_bounds(self.lb, ub)
+    #     self.problem_alpha.lb = self.lb
+    #     # set up the solver
+    #     solver = NonlinearVariationalSolver(self.problem_alpha)
         
-        snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
-                                         "snes_solver": {"linear_solver": "mumps",
-                                                         "maximum_iterations": 300,
-                                                         "report": True,
-                                                         "line_search": "basic",
-                                                         "method": "vinewtonrsls",
-                                                         "absolute_tolerance": 1e-5,
-                                                         "relative_tolerance": 1e-5,
-                                                         "solution_tolerance": 1e-5}}
-        solver.parameters.update(snes_solver_parameters_bounds)
-        #solver.solve()
-        self.solver = solver
+    #     snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
+    #                                      "snes_solver": {"linear_solver": "mumps",
+    #                                                      "maximum_iterations": 300,
+    #                                                      "report": True,
+    #                                                      "line_search": "basic",
+    #                                                      "method": "vinewtonrsls",
+    #                                                      "absolute_tolerance": 1e-5,
+    #                                                      "relative_tolerance": 1e-5,
+    #                                                      "solution_tolerance": 1e-5}}
+    #     solver.parameters.update(snes_solver_parameters_bounds)
+    #     #solver.solve()
+    #     self.solver = solver
 
     def set_solver_alpha_tao(self):
         self.problem_alpha = DamageProblemTAO(
@@ -253,13 +253,13 @@ class AlternateMinimizationSolver(object):
         self.solver_alpha = solver
 
     def update(self):
-        if self.parameters["solver_alpha"] == "snes2":
-            self.problem_alpha.lb.assign(self.alpha)
-            self.problem_alpha.set_bounds(self.alpha, interpolate(Constant("2."), self.alpha.function_space()))
-            print('Updated irreversibility')
-        else:
-            self.problem_alpha.update_lb()
-            print('Updated irreversibility')
+        # if self.parameters["solver_alpha"] == "snes2":
+        #     self.problem_alpha.lb.assign(self.alpha)
+        #     self.problem_alpha.set_bounds(self.alpha, interpolate(Constant("2."), self.alpha.function_space()))
+        #     print('Updated irreversibility')
+        # else:
+        self.problem_alpha.update_lb()
+        print('Updated irreversibility')
 
     def solve(self):
         # initialization
@@ -283,11 +283,11 @@ class AlternateMinimizationSolver(object):
             (u_it, u_reason) = self.solver_u.solve(
                 self.problem_u, self.u.vector())
 
-            if self.parameters["solver_alpha"] == "snes2":
-                self.set_solver_alpha_snes2()
-                (alpha_it, alpha_reason) = self.solver.solve()
+            # if self.parameters["solver_alpha"] == "snes2":
+            #     self.set_solver_alpha_snes2()
+            #     (alpha_it, alpha_reason) = self.solver.solve()
 
-            elif self.parameters["solver_alpha"] == "snes":
+            if self.parameters["solver_alpha"] == "snes":
                 self.set_solver_alpha_snes()
                 import pdb; pdb.set_trace()
                 (alpha_it, alpha_reason) = self.solver_alpha.solve(
@@ -320,7 +320,7 @@ class AlternateMinimizationSolver(object):
             alt_min_data["alpha_max"].append(alpha.vector().max())
 
             ColorPrint.print_info(
-                "iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}".format(
+                "Iteration #{:2d}: alpha_error={:.4g}, alpha_max={:.4g}".format(
                     it,
                     err_alpha,
                     alpha.vector().max()
@@ -381,6 +381,9 @@ class EquilibriumSolver:
             "alpha_error": [],
             "alpha_max": []}
 
+        log(LogLevel.WARNING,'self.damage_solver.problem.lb[:]')
+        log(LogLevel.WARNING, '{}'.format(self.damage_solver.problem.lb[:]))
+
         while criterion > self.parameters["tol"] and it < self.parameters["max_it"]:
             it = it + 1
             (u_it, u_reason) = self.elasticity_solver.solve()
@@ -403,12 +406,21 @@ class EquilibriumSolver:
             #         self.problem_alpha.lb.vector(),
             #         self.problem_alpha.ub.vector()
             #     )
-            # irrev = alpha.vector()-self.problem_alpha.lb.vector()
-            # if min(irrev[:]) >=0:
-            #   ColorPrint.print_pass('')
-            # else: 
-            #   log(LogLevel.INFO,'Pointwise irrev {}'.format(' NOK'))
+            # import pdb; pdb.set_trace()
+            irrev = alpha.vector()-self.damage_solver.problem.lb
+            if min(irrev[:]) >=0:
+              ColorPrint.print_pass('')
+            else: 
+              log(LogLevel.INFO,'Pointwise irrev {}'.format(' NOK'))
 
+            if not np.all(alpha.vector()[:] >=self.damage_solver.problem.lb):
+                # import pdb; pdb.set_trace()
+                pd = np.where(alpha.vector()[:]-self.damage_solver.problem.lb[:] < 0)[0]
+                log(LogLevel.WARNING, 'Pointwise irreversibility issues on dofs {}'.format(pd))
+
+                # log(LogLevel.WARNING, 'diff = {}'
+                #     .format(self.alpha.vector()[pd]-self.alpha_old[pd]))
+                log(LogLevel.WARNING, 'Continuing')
 
             alpha_error.vector()[:] = alpha.vector() - alpha_old.vector()
             # crit: energy norm
@@ -499,13 +511,12 @@ class ElasticitySolver:
         self.solver = PETScSNESSolver()
         snes = self.solver.snes()
 
-        prefix = ""
-        # snes.setOptionsPrefix(prefix)
-        # Set the parameters
+        prefix = "elasticity_"
+        snes.setOptionsPrefix(prefix)
+
         for parameter, value in parameters.items():
-            log(LogLevel.INFO, "Set: {} = {}".format(parameter, value))
+            log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value))
             PETScOptions.set(prefix + parameter, value)
-        # Update the paramters
         snes.setFromOptions()
 
     def solve(self):
@@ -599,11 +610,14 @@ class DamageSolverSNES:
             lb=interpolate(Constant(0.), V)
         ub = interpolate(Constant(1.), V)
 
-        # snes.setOptionsPrefix("alpha_")
+        prefix = "damage_"
+        # prefix = ""
+        snes.setOptionsPrefix(prefix)
         for option, value in self.parameters["snes"].items():
-            PETScOptions.set(option, value)
-            log(LogLevel.INFO, "Set: {} = {}".format(option,value))
+            PETScOptions.set(prefix+option, value)
+            log(LogLevel.INFO, "Set: {} = {}".format(prefix + option,value))
         snes.setFromOptions()
+        # snes.view()
         # import pdb; pdb.set_trace()
 
         (J, F, bcs_alpha) = (problem.J, problem.F, problem.bcs)
@@ -620,7 +634,8 @@ class DamageSolverSNES:
         snes.ksp.setOperators(self.A.mat())
         # Set the bounds
 
-        snes.setVariableBounds(lb.vector().vec(), ub.vector().vec()) # 
+        snes.setVariableBounds(self.problem.lb.vec(),
+            self.problem.ub.vec()) # 
 
         self.solver = snes
 
@@ -630,7 +645,6 @@ class DamageSolverSNES:
         """
         x.copy(self.alpha_pvec)
         self.alpha_dvec.update_ghost_values()
-
 
     def init_residual(self):
         # Get the state
@@ -714,6 +728,8 @@ class DamageProblemSNES(NonlinearProblem):
         # Get the damage variable
         alpha = self.state["alpha"]
         # Update the current bound values
-        self.lb = alpha.copy(deepcopy = True).vector().vec()
+        # self.lb = alpha.copy(deepcopy = True).vector().vec()
+        self.lb = alpha.copy(deepcopy = True).vector()
+        log(LogLevel.CRITICAL, 'CRITICAL: Updated irreversibility')
 
 

@@ -20,12 +20,6 @@ comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-
-OptDB = PETSc.Options()
-OptDB.view()
-
-import pdb; pdb.set_trace()
-
 class EigenSolver(object):
     def __init__(self,
                  a_k,
@@ -40,6 +34,10 @@ class EigenSolver(object):
                 ):
         self.comm = comm
 
+        OptDB = PETSc.Options()
+        OptDB.view()
+
+        # import pdb; pdb.set_trace()
         self.slepc_options = slepc_options
         # if option_prefix:
             # self.E.setOptionsPrefix(option_prefix)
@@ -272,7 +270,6 @@ class StabilitySolver(object):
         self.perturbation_v = dolfin.Function(self.Z.sub(0).collapse())
         self.perturbation_beta = dolfin.Function(self.Z.sub(1).collapse())
 
-
     def default_parameters(self):
         return {'order': 3,
                 'eig_rtol': 1e-8,
@@ -400,22 +397,23 @@ class StabilitySolver(object):
     def inertia_setup(self):
         self.pc = PETSc.PC().create(MPI.comm_world)
         prefix = "inertia_"
-        self.pc.setOptionsPrefix(prefix)
+        if prefix:
+            self.pc.setOptionsPrefix(prefix)
 
         for parameter, value in self.inertia_parameters.items():
+            # import pdb; pdb.set_trace()
             dolfin.PETScOptions.set(parameter, value)
-            log(LogLevel.INFO, 'INFO: Setting up inertia solver: {} {}'.format(parameter, value))
+            log(LogLevel.INFO, 'INFO: Setting up inertia solver: {}: {}'.format(parameter, value))
 
-        dolfin.PETScOptions.set("inertia_ksp_type", "preonly")
+        # dolfin.PETScOptions.set("inertia_ksp_type", "preonly")
         dolfin.PETScOptions.set("inertia_pc_type", "cholesky")
         dolfin.PETScOptions.set("inertia_pc_factor_mat_solver_type", "mumps")
-        dolfin.PETScOptions.set("inertia_mat_mumps_icntl_24", 1)
-        dolfin.PETScOptions.set("inertia_mat_mumps_icntl_13", 1)
-        dolfin.PETScOptions.set("inertia_eps_monitor", 1)
+        # dolfin.PETScOptions.set("inertia_mat_mumps_icntl_24", 1)
+        # dolfin.PETScOptions.set("inertia_mat_mumps_icntl_13", 1)
+        # dolfin.PETScOptions.set("inertia_eps_monitor", 1)
 
         self.pc.setFromOptions()
-        # self.pc.view()
-        # import pdb; pdb.set_trace()
+        self.pc.view()
 
     def get_inertia(self, Mat = None, restricted_dof_is=None):
         if Mat == None:
@@ -493,12 +491,15 @@ class StabilitySolver(object):
 
         if debug and rank == 0:
             log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
-        if not np.all(self.alpha.vector()[:] >=self.alpha_old[:]):
-            pd = np.where(self.alpha.vector()[:]-self.alpha_old[:] < 0)[0]
-            log(LogLevel.WARNING, 'Pointwise irreversibility issues on dofs {}'.format(pd))
-            log(LogLevel.WARNING, 'diff = {}'
-                .format(self.alpha.vector()[pd]-self.alpha_old[pd]))
-            log(LogLevel.WARNING, 'Continuing')
+
+        # if not np.all(self.alpha.vector()[:] >=self.alpha_old[:]):
+        #     import pdb; pdb.set_trace()
+        #     pd = np.where(self.alpha.vector()[:]-self.alpha_old[:] < 0)[0]
+        #     log(LogLevel.WARNING, 'Pointwise irreversibility issues on dofs {}'.format(pd))
+
+        #     log(LogLevel.WARNING, 'diff = {}'
+        #         .format(self.alpha.vector()[pd]-self.alpha_old[pd]))
+        #     log(LogLevel.WARNING, 'Continuing')
 
         # A convoluted way to do a simple thing. FIXME
         _alpha_old = dolfin.Function(self.alpha.function_space())

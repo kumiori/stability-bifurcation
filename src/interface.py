@@ -35,7 +35,7 @@ from solver_stability import StabilitySolver
 from dolfin.cpp.log import log, LogLevel, set_log_level
 import yaml
 
-set_log_level(LogLevel.WARNING)
+set_log_level(LogLevel.INFO)
 
 comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -335,14 +335,15 @@ def traction_1d(
     time_data_pd = []
     for it, load in enumerate(load_steps):
         ut.t = load
-        alpha_old.assign(alpha)
-
-        log(LogLevel.PROGRESS, 'PROGRESS: Solving load t = {:.2f}'.format(load))
-        (time_data_i, am_iter) = solver.solve()
+        # alpha_old.assign(alpha)
         # import pdb; pdb.set_trace()
+
+        log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
+        (time_data_i, am_iter) = solver.solve()
         # (stable, negev) = stability.solve(solver.damage_solver.problem.lb)
 
-        # log(LogLevel.PROGRESS, 'PROGRESS: Current state is{}stable'.format(' ' if stable else ' un'))
+        # log(LogLevel.INFO, 'INFO: Current state is{}stable'.format(' ' if stable else ' un'))
+        # import pdb; pdb.set_trace()
         solver.update()
 
         # mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
@@ -395,8 +396,8 @@ def traction_1d(
         # time_data_i["a(alpha)"] = dolfin.assemble(a*dx)
         # time_data_i["avg_alpha"] = dolfin.assemble(alpha*dx)
         # import pdb; pdb.set_trace()
-        log(LogLevel.INFO,
-            "Time step {:.4g}: it {:3d}, err_alpha={:.4g}".format(
+        log(LogLevel.CRITICAL,
+            "Load/time step {:.4g}: iteration: {:3d}, err_alpha={:.4g}".format(
                 time_data_i["load"],
                 time_data_i["iterations"][0],
                 time_data_i["alpha_error"][0]))
