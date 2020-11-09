@@ -21,6 +21,11 @@ rank = comm.Get_rank()
 size = comm.Get_size()
 
 
+OptDB = PETSc.Options()
+OptDB.view()
+
+import pdb; pdb.set_trace()
+
 class EigenSolver(object):
     def __init__(self,
                  a_k,
