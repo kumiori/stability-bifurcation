@@ -26,7 +26,7 @@ from hashlib import md5
 from pathlib import Path
 import json
 import hashlib
-from time_stepping import TimeStepping
+# from loading import TimeStepping
 from copy import deepcopy
 import mpi4py
 
@@ -109,13 +109,13 @@ alt_min_parameters = {"max_it": 300,
 
 numerical_parameters = {"alt_min": alt_min_parameters,
                       "stability": stability_parameters,
-                      "time_stepping": timestepping_parameters}
+                      "loading": timestepping_parameters}
 
 versions = get_versions()
 versions.update({'filename': os.path.basename(__file__)})
 parameters = {"alt_min": alt_min_parameters,
                 "stability": stability_parameters,
-                "time_stepping": timestepping_parameters,
+                "loading": timestepping_parameters,
                 "material": {},
                 "geometry": {},
                 "experiment": {},
@@ -157,7 +157,7 @@ def traction_1d(
     with open('../parameters/model1d.yaml') as f:
         material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
 
-    with open('../parameters/time_stepping.yaml') as f:
+    with open('../parameters/loading.yaml') as f:
         timestepping_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
 
     with open('../parameters/stability.yaml') as f:
@@ -169,7 +169,7 @@ def traction_1d(
     # default values
     parameters = {'solver':{**solver_parameters},
         'compiler': {**form_compiler_parameters},
-        'time_stepping': {**timestepping_parameters},
+        'loading': {**timestepping_parameters},
         'stability': {**stability_parameters},
         'material': {**material_parameters},
         'geometry': {**geometry_parameters}
@@ -194,8 +194,8 @@ def traction_1d(
 
     print(parameters)
 
-    # outdir += '-{}'.format(cmd_parameters['time_stepping']['postfix'])
-    parameters['time_stepping']['outdir']=outdir
+    # outdir += '-{}'.format(cmd_parameters['loading']['postfix'])
+    parameters['loading']['outdir']=outdir
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     print('Outdir is: '+outdir)
@@ -205,7 +205,7 @@ def traction_1d(
 
     with open(os.path.join(outdir, 'rerun.sh'), 'w') as f:
         configuration = deepcopy(parameters)
-        configuration['time_stepping'].pop('outdir')
+        configuration['loading'].pop('outdir')
         # str(configuration).replace("\'True\'", "True").replace("\'False\'", "False")
         rerun_cmd = 'python3 {} --config="{}"'.format(os.path.basename(__file__), configuration)
         f.write(rerun_cmd)
@@ -252,7 +252,8 @@ def traction_1d(
     bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant(0), left),
              dolfin.DirichletBC(V_u, ut, right)]
 
-    bcs_alpha = []
+    bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0), left),
+                dolfin.DirichletBC(V_alpha, dolfin.Constant(0), right)]
 
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
     # bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(1.), right)]
@@ -306,15 +307,15 @@ def traction_1d(
 
     # Alternate minimisation solver
     # import pdb; pdb.set_trace()
-    solver = solvers.EquilibriumSolver(energy, model, state, bcs, parameters=solver_parameters)
+    solver = solvers.EquilibriumSolver(energy, state, bcs, parameters=solver_parameters)
 
     # stability = StabilitySolver(mesh, energy,
     #     state, [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
     stability = StabilitySolver(mesh, energy, state, bcs, z, parameters = parameters['stability'])
 
     # Time iterations
-    load_steps = np.linspace(parameters['time_stepping']['load_min'], parameters['time_stepping']['load_max'], parameters['time_stepping']['n_steps'])
-    # load_steps = np.logspace(np.log10(load_min), np.log10(load_max), parameters['time_stepping']['nsteps'])
+    load_steps = np.linspace(parameters['loading']['load_min'], parameters['loading']['load_max'], parameters['loading']['n_steps'])
+    # load_steps = np.logspace(np.log10(load_min), np.log10(load_max), parameters['loading']['nsteps'])
 
     time_data = []
 
@@ -605,8 +606,8 @@ if __name__ == "__main__":
     # ax1.axvline(pp.t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
     # ax1.axvline(pp.t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
 
-    # plt.plot(np.linspace(1, params['time_stepping']['load_max'], 30),
-    #          [1- (t/material_parameters['sigma_D0']/material_parameters['E'])**(2/(1-2)) for t in np.linspace(1, params['time_stepping']['load_max'], 30)],
+    # plt.plot(np.linspace(1, params['loading']['load_max'], 30),
+    #          [1- (t/material_parameters['sigma_D0']/material_parameters['E'])**(2/(1-2)) for t in np.linspace(1, params['loading']['load_max'], 30)],
     #         c='k', lw=.5)
     # plt.title('${}$'.format(lab))
     # # visuals.setspines2()

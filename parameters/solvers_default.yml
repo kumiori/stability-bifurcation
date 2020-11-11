@@ -76,8 +76,3 @@ damage:
 damage_elasticity:
     max_it: 25
     alpha_rtol: 1.0e-5
-# Damage Plasticity Solver
-damage_plasticity:
-    max_it: 100
-    alpha_rtol: 1.0e-4
-

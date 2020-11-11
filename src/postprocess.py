@@ -129,7 +129,7 @@ def plot_spectrum(parameters, outdir, data, tc, ax=None, tol=1e-12):
 
     # ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
     # ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
-    ax.set_xlim(parameters['time_stepping']['load_min'], parameters['time_stepping']['load_max'])
+    ax.set_xlim(parameters['loading']['load_min'], parameters['loading']['load_max'])
 
     ax2.set_yticks([0, 1.])
     ax2.set_yticklabels(['0','1'])
@@ -158,7 +158,7 @@ def plot_sigmaeps(params, dataf, tc):
     
     fig = plt.figure()
 
-    t = np.linspace(0., params['time_stepping']['load_max'], 100)
+    t = np.linspace(0., params['loading']['load_max'], 100)
     fig = plt.figure()
     plt.ylabel('$$\sigma$$')
     plt.xlabel('$$t$$')
@@ -184,7 +184,7 @@ def plot_sigmaeps(params, dataf, tc):
     # ax.axvline(tc, c='k', lw=.5, label='$t^{cr}$')
     # ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label='$t^{cr}_s$')
     # ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
-    ax.set_xlim(params['time_stepping']['load_min'], params['time_stepping']['load_max'])   
+    ax.set_xlim(params['loading']['load_min'], params['loading']['load_max'])   
 
     plot_fills(ax, ell, tc)
     plot_loadticks(ax, tc, ell)
@@ -225,7 +225,7 @@ def plot_energy(parameters, dataf, tc):
     # print(t_bif(ell))
     # ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label=r'$t^{cr}_s$')
     # ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
-    ax.set_xlim(parameters['time_stepping']['load_min'], parameters['time_stepping']['load_max'])
+    ax.set_xlim(parameters['loading']['load_min'], parameters['loading']['load_max'])
     
     ax.set_ylabel('Energy/$(w_1|\Omega|)$')
     

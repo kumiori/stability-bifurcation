@@ -211,7 +211,7 @@ class AlternateMinimizationSolver(object):
         elif hasattr(pc, 'setFactorSolverPackage'):
             pc.setFactorSolverPackage('mumps')
         else:
-            ColorPrint.print_warn('Could not configure preconditioner')
+            log(LogLevel.WARNING,'Could not configure preconditioner')
         solver.set_from_options()
         snes.setFromOptions()
         self.solver_u = solver
@@ -305,8 +305,8 @@ class AlternateMinimizationSolver(object):
                 )
                 irrev = alpha.vector()-self.problem_alpha.lb.vector()
                 if min(irrev[:]) >=0:
-                    ColorPrint.print_pass('')
-                else: ColorPrint.print_warn('Pointwise irrev {}'.format(' NOK'))
+                    log(LogLevel.INFO, '')
+                else: log(LogLevel.WARNING,'Pointwise irrev {}'.format(' NOK'))
 
 
             alpha_error.vector()[:] = alpha.vector() - alpha_old.vector()
@@ -319,7 +319,7 @@ class AlternateMinimizationSolver(object):
             alt_min_data["alpha_error"].append(err_alpha)
             alt_min_data["alpha_max"].append(alpha.vector().max())
 
-            ColorPrint.print_info(
+            log(LogLevel.INFO,
                 "Iteration #{:2d}: alpha_error={:.4g}, alpha_max={:.4g}".format(
                     it,
                     err_alpha,
@@ -334,10 +334,9 @@ class AlternateMinimizationSolver(object):
 
 class EquilibriumSolver:
     """docstring for EquilibriumSolver"""
-    def __init__(self, energy, model, state, bcs, state_0 = {}, parameters={}):
+    def __init__(self, energy, state, bcs, state_0 = {}, parameters={}):
         super(EquilibriumSolver, self).__init__()
         self.energy = energy
-        self.model = model
         self.state = state
         self.bcs = bcs
 
@@ -409,7 +408,7 @@ class EquilibriumSolver:
             # import pdb; pdb.set_trace()
             irrev = alpha.vector()-self.damage_solver.problem.lb
             if min(irrev[:]) >=0:
-              ColorPrint.print_pass('')
+              log(LogLevel.INFO, '')
             else: 
               log(LogLevel.INFO,'Pointwise irrev {}'.format(' NOK'))
 
@@ -432,7 +431,7 @@ class EquilibriumSolver:
             alt_min_data["alpha_error"].append(err_alpha)
             alt_min_data["alpha_max"].append(alpha.vector().max())
 
-            ColorPrint.print_info(
+            log(LogLevel.INFO,
                 "iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}".format(
                     it,
                     err_alpha,
@@ -569,7 +568,7 @@ class DamageSolver:
         #         # Break if the resolution is ok
         #         break
         #     except:
-        #         ColorPrint.print_warn(
+        #         log(LogLevel.WARNING,
         #                 "Damage solver 1 failed, trying with damage solver 2")
         #         continue
 
