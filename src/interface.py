@@ -49,78 +49,8 @@ form_compiler_parameters = {
 }
 
 
-timestepping_parameters = {"perturbation_choice": 1,
-                            'savelag': 1}
-                        # "perturbation_choice": 'steepest',               # admissible choices: steepest, first, #
-
-stability_parameters = {"order": 4,
-                        "projection": 'none',
-                        'maxmodes': 5,
-                        'checkstability': True,
-                        'continuation': False,
-                        'cont_rtol': 1e-5,
-                        'inactiveset_atol': 1e-5
-                        }
-petsc_options_alpha_snes = {
-    "alpha_snes_type": "vinewtonrsls",
-    "alpha_snes_stol": 1e-5,
-    "alpha_snes_atol": 1e-5,
-    "alpha_snes_rtol": 1e-5,
-    "alpha_snes_max_it": 500,
-    "alpha_ksp_type": "preonly",
-    "alpha_pc_type": "lu",
-    "alpha_linesearch_type": 'basic',
-    'alpha_pc_factor_mat_solver_type': 'mumps'}
-
-# petsc_options_alpha_tao = {"tao_type": "gpcg",
-#                            "tao_ls_type": "gpcg",
-#                            "tao_gpcg_maxpgits": 50,
-#                            "tao_max_it": 300,
-#                            "tao_steptol": 1e-7,
-#                            "tao_gatol": 1e-5,
-#                            "tao_grtol": 1e-5,
-#                            "tao_gttol": 1e-5,
-#                            "tao_catol": 0.,
-#                            "tao_crtol": 0.,
-#                            "tao_ls_ftol": 1e-6,
-#                            "tao_ls_gtol": 1e-6,
-#                            "tao_ls_rtol": 1e-6,
-#                            "ksp_rtol": 1e-6,
-#                            "tao_ls_stepmin": 1e-8,  #
-#                            "tao_ls_stepmax": 1e6,  #
-#                            "pc_type": "bjacobi",
-#                            "tao_monitor": "",  # "tao_ls_type": "more-thuente"
-#                            }
-
-petsc_options_u = {
-    "u_snes_type": "newtontr",
-    "u_snes_stol": 1e-6,
-    "u_snes_atol": 1e-6,
-    "u_snes_rtol": 1e-6,
-    "u_snes_max_it": 1000,
-    "u_snes_monitor": ''}
-
-alt_min_parameters = {"max_it": 300,
-                      "tol": 1.e-5,
-                      "solver_alpha": "snes",
-                      "solver_u": petsc_options_u,
-                     "solver_alpha_snes": petsc_options_alpha_snes
-                     }
-
-numerical_parameters = {"alt_min": alt_min_parameters,
-                      "stability": stability_parameters,
-                      "loading": timestepping_parameters}
-
 versions = get_versions()
 versions.update({'filename': os.path.basename(__file__)})
-parameters = {"alt_min": alt_min_parameters,
-                "stability": stability_parameters,
-                "loading": timestepping_parameters,
-                "material": {},
-                "geometry": {},
-                "experiment": {},
-                "code": versions
-                }
 
 dolfin.parameters["std_out_all_processes"] = False
 dolfin.parameters["form_compiler"].update(form_compiler_parameters)
@@ -130,22 +60,11 @@ def traction_1d(
     configString='',
     parameters = '',
 ):
-    # constants
-    # ell = ell
-    # Lx = Lx
-    # load_min = load_min
-    # load_max = load_max
-    # nsteps = nsteps
-    # outdir = outdir
-    # loads=loads
+
     parameters_file = parameters
 
     savelag = 1
-    # ell = dolfin.Constant(ell)
-    # E0 = dolfin.Constant(E)
-    # sigma_D0 = E0
-    # n = n
-    # continuation = continuation
+
     config = json.loads(configString) if configString != '' else ''
 
     with open('../parameters/form_compiler.yml') as f:
@@ -161,7 +80,7 @@ def traction_1d(
         timestepping_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
 
     with open('../parameters/stability.yaml') as f:
-        stability = yaml.load(f, Loader=yaml.FullLoader)['stability']
+        stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
 
     # with open('../parameters/geometry.yaml') as f:
     geometry_parameters = {'Lx': 1., 'n': 3}
@@ -191,7 +110,6 @@ def traction_1d(
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
     outdir += '-{}'.format(signature)
 
-
     print(parameters)
 
     # outdir += '-{}'.format(cmd_parameters['loading']['postfix'])
@@ -219,7 +137,6 @@ def traction_1d(
     Lx = parameters['geometry']['Lx']
     n = parameters['geometry']['n']
     ell = parameters['material']['ell']
-
 
     mesh = dolfin.IntervalMesh(int(float(n * Lx / ell)), -Lx/2., Lx/2.)
     meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
