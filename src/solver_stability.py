@@ -34,8 +34,6 @@ class EigenSolver(object):
                 ):
         self.comm = comm
 
-        OptDB = PETSc.Options()
-        OptDB.view()
 
         # import pdb; pdb.set_trace()
         self.slepc_options = slepc_options
@@ -187,6 +185,9 @@ class StabilitySolver(object):
     """solves second order stability problem"""
     def __init__(self, mesh, energy, state, bcs, z, rayleigh=None,
         nullspace=None, parameters=None):
+        OptDB = PETSc.Options()
+        OptDB.view()
+
         self.i = 0
         self.parameters = self.default_parameters()
         if parameters is not None: self.parameters.update(parameters)                                                         # for debug purposes
@@ -542,7 +543,7 @@ class StabilitySolver(object):
         if True:
             eigs = []
         # solve full eigenvalue problem
-            eigen_tol = self.parameters['eig_rtol']
+            eigen_tol = self.eigen_parameters['eig_rtol']
             if hasattr(self, 'H2'):
                 log(LogLevel.PROGRESS, 'PROGRESS: Full eig: Using user-provided Hessian')
                 log(LogLevel.PROGRESS, 'PROGRESS: Norm provided {}'.format(dolfin.assemble(self.H2).norm('frobenius')))
@@ -604,11 +605,6 @@ class StabilitySolver(object):
                     eig, u_r, u_im, err = eigen.get_eigenpair(n)
 
                     order = self.parameters['order']
-                    # h, en_diff, interval, energy = self.linesearch(v_n, beta_n, order, n)
-
-                    # linsearch.append({'n': n, 'lambda_n': eig.real,'hstar': h, 'en_diff': en_diff,
-                    #     'v_n': v_n, 'beta_n': beta_n, 'order': order,
-                    #     'interval': interval, 'energy': energy})
 
                     linsearch.append({'n': n, 'lambda_n': eig.real,
                         'v_n': v_n, 'beta_n': beta_n})
@@ -617,6 +613,7 @@ class StabilitySolver(object):
             self.eigs = eigs[:,0]
             self.mineig = eig.real
             # self.stable = negev <= 0  # based on inertia
+
             self.negev = negev  # based on inertia
             self.linsearch = linsearch
 
@@ -628,9 +625,11 @@ class StabilitySolver(object):
                 self.eigendata = linsearch
 
             self.i +=1
-            log(LogLevel.INFO, 'negative ev (inertia) {}'.format(negev))
-            log(LogLevel.INFO, 'counting neg. ev. : stable :{}'.format(not (negev > 0)))
-            log(LogLevel.INFO, 'computing min. ev.: stable {}'.format(eig.real > 0))
-            self.stable = eig.real > 0  # based on eigenvalue
+            log(LogLevel.INFO, 'Negative eigenvalues (based on inertia) {}'.format(negev))
+            log(LogLevel.INFO, 'Stable (counting neg. eigs) :{}'.format(not (negev > 0)))
+            log(LogLevel.INFO, 'Stable (Computing min. ev) {}'.format(eig.real > float(self.eigen_parameters['eig_rtol'])))
+
+            self.stable = eig.real > float(self.eigen_parameters['eig_rtol'])  # based on eigenvalue
+
         return (self.stable, int(negev))
 
