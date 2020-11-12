@@ -165,172 +165,174 @@ class DamageProblemTAO(OptimisationProblem):
         cub = conditional(self.alpha < self.ub + tol, 0.0, 1.0)
         return cub
 
-class AlternateMinimizationSolver(object):
+# class AlternateMinimizationSolver(object):
 
-    def __init__(self, energy, state, bcs, state_0=None, parameters=default_parameters, nullspace=None):
-        self.energy = energy
-        self.u = state[0]
-        self.alpha = state[1]
-        self.bcs_u = bcs[0]
-        self.bcs_alpha = bcs[1]
-        if state_0:
-            self.u_init = state_0[0]
-            self.alpha_init = state_0[1]
-        else:
-            self.u_init = self.u.copy(deepcopy=True)
-            self.alpha_init = self.alpha.copy(deepcopy=True)
+#     def __init__(self, energy, state, bcs, state_0=None, parameters=default_parameters, nullspace=None):
+#         self.energy = energy
+#         self.u = state[0]
+#         self.alpha = state[1]
+#         self.bcs_u = bcs[0]
+#         self.bcs_alpha = bcs[1]
+#         if state_0:
+#             self.u_init = state_0[0]
+#             self.alpha_init = state_0[1]
+#         else:
+#             self.u_init = self.u.copy(deepcopy=True)
+#             self.alpha_init = self.alpha.copy(deepcopy=True)
 
-        self.V_alpha = self.alpha.function_space()
-        # import pdb; pdb.set_trace()
-        self.parameters = parameters
-        self.problem_u = ElasticityProblem(self.energy, self.u, self.bcs_u, nullspace=nullspace)
-        self.set_solver_u()
-        if self.parameters["solver_alpha"] == "snes":
-            self.set_solver_alpha_snes()
-        # elif self.parameters["solver_alpha"] == "snes2":
-        #     self.set_solver_alpha_snes2()
-        elif self.parameters["solver_alpha"] == "tao":
-            self.set_solver_alpha_tao()
+#         self.V_alpha = self.alpha.function_space()
+#         # import pdb; pdb.set_trace()
+#         self.parameters = parameters
+#         self.problem_u = ElasticityProblem(self.energy, self.u, self.bcs_u, nullspace=nullspace)
+#         self.set_solver_u()
+#         if self.parameters["solver_alpha"] == "snes":
+#             self.set_solver_alpha_snes()
+#         # elif self.parameters["solver_alpha"] == "snes2":
+#         #     self.set_solver_alpha_snes2()
+#         elif self.parameters["solver_alpha"] == "tao":
+#             self.set_solver_alpha_tao()
 
-    def set_solver_u(self):
-        for option, value in self.parameters["solver_u"].items():
-            print("setting ", option,value)
-            PETScOptions.set(option, value)
-        solver = PETScSNESSolver()
-        snes = solver.snes()
-        snes.setOptionsPrefix("u_")
-        snes.setType(self.parameters["solver_u"]["u_snes_type"])
-        ksp = snes.getKSP()
-        ksp.setType("preonly")
-        pc = ksp.getPC()
-        pc.setType("lu")
+#     def set_solver_u(self):
+#         for option, value in self.parameters["solver_u"].items():
+#             print("setting ", option,value)
+#             PETScOptions.set(option, value)
+#         solver = PETScSNESSolver()
+#         snes = solver.snes()
+#         snes.setOptionsPrefix("u_")
+#         snes.setType(self.parameters["solver_u"]["u_snes_type"])
+#         ksp = snes.getKSP()
+#         ksp.setType("preonly")
+#         pc = ksp.getPC()
+#         pc.setType("lu")
 
-        # Namespace mismatch between petsc4py 3.7 and 3.9.
-        if hasattr(pc, 'setFactorSolverType'):
-            pc.setFactorSolverType("mumps")
-        elif hasattr(pc, 'setFactorSolverPackage'):
-            pc.setFactorSolverPackage('mumps')
-        else:
-            log(LogLevel.WARNING,'Could not configure preconditioner')
-        solver.set_from_options()
-        snes.setFromOptions()
-        self.solver_u = solver
+#         # Namespace mismatch between petsc4py 3.7 and 3.9.
+#         if hasattr(pc, 'setFactorSolverType'):
+#             pc.setFactorSolverType("mumps")
+#         elif hasattr(pc, 'setFactorSolverPackage'):
+#             pc.setFactorSolverPackage('mumps')
+#         else:
+#             log(LogLevel.WARNING,'Could not configure preconditioner')
+#         solver.set_from_options()
+#         snes.setFromOptions()
+#         self.solver_u = solver
 
-    # def set_solver_alpha_snes2(self):
-    #     V = self.alpha.function_space()
-    #     denergy = derivative(self.energy, self.alpha, TestFunction(V))
-    #     ddenergy = derivative(denergy, self.alpha, TrialFunction(V))
-    #     self.lb = self.alpha_init # interpolate(Constant("0."), V)
-    #     ub = interpolate(Constant("1."), V)
-    #     self.problem_alpha = NonlinearVariationalProblem(
-    #         denergy, self.alpha, self.bcs_alpha, J=ddenergy)
-    #     self.problem_alpha.set_bounds(self.lb, ub)
-    #     self.problem_alpha.lb = self.lb
-    #     # set up the solver
-    #     solver = NonlinearVariationalSolver(self.problem_alpha)
+#     # def set_solver_alpha_snes2(self):
+#     #     V = self.alpha.function_space()
+#     #     denergy = derivative(self.energy, self.alpha, TestFunction(V))
+#     #     ddenergy = derivative(denergy, self.alpha, TrialFunction(V))
+#     #     self.lb = self.alpha_init # interpolate(Constant("0."), V)
+#     #     ub = interpolate(Constant("1."), V)
+#     #     self.problem_alpha = NonlinearVariationalProblem(
+#     #         denergy, self.alpha, self.bcs_alpha, J=ddenergy)
+#     #     self.problem_alpha.set_bounds(self.lb, ub)
+#     #     self.problem_alpha.lb = self.lb
+#     #     # set up the solver
+#     #     solver = NonlinearVariationalSolver(self.problem_alpha)
         
-    #     snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
-    #                                      "snes_solver": {"linear_solver": "mumps",
-    #                                                      "maximum_iterations": 300,
-    #                                                      "report": True,
-    #                                                      "line_search": "basic",
-    #                                                      "method": "vinewtonrsls",
-    #                                                      "absolute_tolerance": 1e-5,
-    #                                                      "relative_tolerance": 1e-5,
-    #                                                      "solution_tolerance": 1e-5}}
-    #     solver.parameters.update(snes_solver_parameters_bounds)
-    #     #solver.solve()
-    #     self.solver = solver
+#     #     snes_solver_parameters_bounds = {"nonlinear_solver": "snes",
+#     #                                      "snes_solver": {"linear_solver": "mumps",
+#     #                                                      "maximum_iterations": 300,
+#     #                                                      "report": True,
+#     #                                                      "line_search": "basic",
+#     #                                                      "method": "vinewtonrsls",
+#     #                                                      "absolute_tolerance": 1e-5,
+#     #                                                      "relative_tolerance": 1e-5,
+#     #                                                      "solution_tolerance": 1e-5}}
+#     #     solver.parameters.update(snes_solver_parameters_bounds)
+#     #     #solver.solve()
+#     #     self.solver = solver
 
-    def set_solver_alpha_tao(self):
-        self.problem_alpha = DamageProblemTAO(
-            self.energy, self.alpha, self.bcs_alpha, lb=self.alpha_init)
-        solver = PETScTAOSolver()
-        for option, value in self.parameters["solver_alpha_tao"].items():
-            PETScOptions.set(option, value)
-            # PETScOptions.set('help', 1)
-            print('setting {} {}'.format(option, value))
-        self.solver_alpha = solver
+#     def set_solver_alpha_tao(self):
+#         self.problem_alpha = DamageProblemTAO(
+#             self.energy, self.alpha, self.bcs_alpha, lb=self.alpha_init)
+#         solver = PETScTAOSolver()
+#         for option, value in self.parameters["solver_alpha_tao"].items():
+#             PETScOptions.set(option, value)
+#             # PETScOptions.set('help', 1)
+#             print('setting {} {}'.format(option, value))
+#         self.solver_alpha = solver
 
-    def update(self):
-        # if self.parameters["solver_alpha"] == "snes2":
-        #     self.problem_alpha.lb.assign(self.alpha)
-        #     self.problem_alpha.set_bounds(self.alpha, interpolate(Constant("2."), self.alpha.function_space()))
-        #     print('Updated irreversibility')
-        # else:
-        self.problem_alpha.update_lb()
-        print('Updated irreversibility')
+#     def update(self):
+#         # if self.parameters["solver_alpha"] == "snes2":
+#         #     self.problem_alpha.lb.assign(self.alpha)
+#         #     self.problem_alpha.set_bounds(self.alpha, interpolate(Constant("2."), self.alpha.function_space()))
+#         #     print('Updated irreversibility')
+#         # else:
+#         self.problem_alpha.update_lb()
+#         print('Updated irreversibility')
 
-    def solve(self):
-        # initialization
-        par = self.parameters
-        it = 0
-        err_alpha = 1
-        u = self.u
-        alpha = self.alpha
-        alpha_old = alpha.copy(deepcopy=True)
-        alpha_error = alpha.copy(deepcopy=True)
-        criterion = 1
+#     def solve(self):
+#         # initialization
+#         par = self.parameters
+#         it = 0
+#         err_alpha = 1
+#         u = self.u
+#         alpha = self.alpha
+#         alpha_old = alpha.copy(deepcopy=True)
+#         alpha_error = alpha.copy(deepcopy=True)
+#         criterion = 1
 
-        alt_min_data = {
-            "iterations": [],
-            "alpha_error": [],
-            "alpha_max": []}
-        import pdb; pdb.set_trace()
+#         alt_min_data = {
+#             "iterations": [],
+#             "alpha_error": [],
+#             "alpha_max": []}
+#         import pdb; pdb.set_trace()
 
-        while criterion > self.parameters["tol"] and it < self.parameters["max_it"]:
-            it = it + 1
-            (u_it, u_reason) = self.solver_u.solve(
-                self.problem_u, self.u.vector())
+#         while criterion > self.parameters["tol"] and it < self.parameters["max_it"]:
+#             it = it + 1
+#             (u_it, u_reason) = self.solver_u.solve(
+#                 self.problem_u, self.u.vector())
 
-            # if self.parameters["solver_alpha"] == "snes2":
-            #     self.set_solver_alpha_snes2()
-            #     (alpha_it, alpha_reason) = self.solver.solve()
+#             # if self.parameters["solver_alpha"] == "snes2":
+#             #     self.set_solver_alpha_snes2()
+#             #     (alpha_it, alpha_reason) = self.solver.solve()
 
-            if self.parameters["solver_alpha"] == "snes":
-                self.set_solver_alpha_snes()
-                import pdb; pdb.set_trace()
-                (alpha_it, alpha_reason) = self.solver_alpha.solve(
-                    self.problem_alpha,
-                    self.alpha.vector(),
-                    )
-                del self.solver_alpha
+#             if self.parameters["solver_alpha"] == "snes":
+#                 self.set_solver_alpha_snes()
+#                 import pdb; pdb.set_trace()
+#                 (alpha_it, alpha_reason) = self.solver_alpha.solve(
+#                     self.problem_alpha,
+#                     self.alpha.vector(),
+#                     )
+#                 del self.solver_alpha
 
-            elif self.parameters["solver_alpha"] == "tao":
-                (alpha_it, alpha_reason) = self.solver_alpha.solve(
-                    self.problem_alpha,
-                    self.alpha.vector(),
-                    self.problem_alpha.lb.vector(),
-                    self.problem_alpha.ub.vector()
-                )
-                irrev = alpha.vector()-self.problem_alpha.lb.vector()
-                if min(irrev[:]) >=0:
-                    log(LogLevel.INFO, '')
-                else: log(LogLevel.WARNING,'Pointwise irrev {}'.format(' NOK'))
+#             elif self.parameters["solver_alpha"] == "tao":
+#                 (alpha_it, alpha_reason) = self.solver_alpha.solve(
+#                     self.problem_alpha,
+#                     self.alpha.vector(),
+#                     self.problem_alpha.lb.vector(),
+#                     self.problem_alpha.ub.vector()
+#                 )
+#                 irrev = alpha.vector()-self.problem_alpha.lb.vector()
+#                 if min(irrev[:]) >=0:
+#                     log(LogLevel.INFO, '')
+#                 else: log(LogLevel.WARNING,'Pointwise irrev {}'.format(' NOK'))
 
 
-            alpha_error.vector()[:] = alpha.vector() - alpha_old.vector()
-            # crit: energy norm
-            err_alpha = abs(alpha_error.vector().max())
-            # err_alpha = norm(alpha_error,'h1')
-            criterion = err_alpha
+#             alpha_error.vector()[:] = alpha.vector() - alpha_old.vector()
+#             # crit: energy norm
+#             err_alpha = abs(alpha_error.vector().max())
+#             # err_alpha = norm(alpha_error,'h1')
+#             criterion = err_alpha
 
-            alt_min_data["iterations"].append(it)
-            alt_min_data["alpha_error"].append(err_alpha)
-            alt_min_data["alpha_max"].append(alpha.vector().max())
+#             alt_min_data["iterations"].append(it)
+#             alt_min_data["alpha_error"].append(err_alpha)
+#             alt_min_data["alpha_max"].append(alpha.vector().max())
 
-            log(LogLevel.INFO,
-                "Iteration #{:2d}: alpha_error={:.4g}, alpha_max={:.4g}".format(
-                    it,
-                    err_alpha,
-                    alpha.vector().max()
-                )
-            )
+#             log(LogLevel.INFO,
+#                 "Iteration #{:2d}: alpha_error={:.4g}, alpha_max={:.4g}".format(
+#                     it,
+#                     err_alpha,
+#                     alpha.vector().max()
+#                 )
+#             )
 
-            # update
-            alpha_old.assign(alpha)
+#             # update
+#             alpha_old.assign(alpha)
 
-        return (take_last(alt_min_data), alt_min_data)
+#         return (take_last(alt_min_data), alt_min_data)
+
+set_log_level(LogLevel.INFO)
 
 class EquilibriumSolver:
     """docstring for EquilibriumSolver"""
@@ -362,8 +364,8 @@ class EquilibriumSolver:
 
         # import pdb; pdb.set_trace()
 
-        self.elasticity_solver = ElasticitySolver(energy, state, bcs['elastic'], parameters['elasticity'])
-        self.damage_solver = DamageSolver(energy, state, bcs['damage'], parameters['damage'])
+        self.elasticity = ElasticitySolver(energy, state, bcs['elastic'], parameters['elasticity'])
+        self.damage = DamageSolver(energy, state, bcs['damage'], parameters['damage'])
 
     def solve(self):
         parameters = self.parameters
@@ -380,41 +382,23 @@ class EquilibriumSolver:
             "alpha_error": [],
             "alpha_max": []}
 
-        log(LogLevel.WARNING,'self.damage_solver.problem.lb[:]')
-        log(LogLevel.WARNING, '{}'.format(self.damage_solver.problem.lb[:]))
+        log(LogLevel.WARNING,'self.damage.problem.lb[:]')
+        log(LogLevel.WARNING, '{}'.format(self.damage.problem.lb[:]))
 
         while criterion > self.parameters["tol"] and it < self.parameters["max_it"]:
             it = it + 1
-            (u_it, u_reason) = self.elasticity_solver.solve()
-            (alpha_it, alpha_reason) = self.damage_solver.solve()
+            (u_it, u_reason) = self.elasticity.solve()
+            (alpha_it, alpha_reason) = self.damage.solve()
 
-            # if parameters["solver_alpha"] == "snes":
-            #     # self.set_solver_alpha_snes()
-            #     # Solve the problem
-            #     # import pdb; pdb.set_trace()
-            #     # (alpha_it, alpha_reason) = 
-                # (alpha_it, alpha_reason) = self.solver_alpha.solve(
-                #     self.problem_alpha,
-                #     self.alpha.vector())
-                # del self.solver_alpha
-
-            # elif parameters["solver_alpha"] == "tao":
-            #     (alpha_it, alpha_reason) = self.solver_alpha.solve(
-            #         self.problem_alpha,
-            #         self.alpha.vector(),
-            #         self.problem_alpha.lb.vector(),
-            #         self.problem_alpha.ub.vector()
-            #     )
-            # import pdb; pdb.set_trace()
-            irrev = alpha.vector()-self.damage_solver.problem.lb
+            irrev = alpha.vector()-self.damage.problem.lb
             if min(irrev[:]) >=0:
-              log(LogLevel.INFO, '')
+              log(LogLevel.INFO,'')
             else: 
               log(LogLevel.INFO,'Pointwise irrev {}'.format(' NOK'))
 
-            if not np.all(alpha.vector()[:] >=self.damage_solver.problem.lb):
+            if not np.all(alpha.vector()[:] >=self.damage.problem.lb):
                 # import pdb; pdb.set_trace()
-                pd = np.where(alpha.vector()[:]-self.damage_solver.problem.lb[:] < 0)[0]
+                pd = np.where(alpha.vector()[:]-self.damage.problem.lb[:] < 0)[0]
                 log(LogLevel.WARNING, 'Pointwise irreversibility issues on dofs {}'.format(pd))
 
                 # log(LogLevel.WARNING, 'diff = {}'
@@ -427,12 +411,9 @@ class EquilibriumSolver:
             # err_alpha = norm(alpha_error,'h1')
             criterion = err_alpha
 
-            alt_min_data["iterations"].append(it)
-            alt_min_data["alpha_error"].append(err_alpha)
-            alt_min_data["alpha_max"].append(alpha.vector().max())
 
             log(LogLevel.INFO,
-                "iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}".format(
+                "   AM iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}".format(
                     it,
                     err_alpha,
                     alpha.vector().max()
@@ -441,10 +422,18 @@ class EquilibriumSolver:
 
             # update
             alpha_old.assign(alpha)
+
+        alt_min_data["alpha_error"].append(err_alpha)
+        alt_min_data["alpha_max"].append(alpha.vector().max())
+        alt_min_data["iterations"].append(it)
+
+        log(LogLevel.INFO,
+                "AM converged in {} iterations, err = {}".format(it, err_alpha))
+
         return (alt_min_data, it)
 
     def update(self):
-        self.damage_solver.problem.update_lower_bound()
+        self.damage.problem.update_lower_bound()
         log(LogLevel.PROGRESS, 'PROGRESS: Updated irreversibility')
 
         # if self.parameters["solver_alpha"] == "snes2":
@@ -568,7 +557,7 @@ class DamageSolver:
         #         # Break if the resolution is ok
         #         break
         #     except:
-        #         log(LogLevel.WARNING,
+        #         log(LogLevel.INFO,
         #                 "Damage solver 1 failed, trying with damage solver 2")
         #         continue
 
@@ -730,5 +719,4 @@ class DamageProblemSNES(NonlinearProblem):
         # self.lb = alpha.copy(deepcopy = True).vector().vec()
         self.lb = alpha.copy(deepcopy = True).vector()
         log(LogLevel.CRITICAL, 'CRITICAL: Updated irreversibility')
-
 
