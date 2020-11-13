@@ -95,14 +95,14 @@ def plot_fills(ax, ell, tc):
     ax.add_patch(patches.Rectangle((t_stab(ell), 0), 10, 10, facecolor = localis, fill=True, alpha=.3))
     return ax
 
-def plot_spectrum(parameters, outdir, data, tc, ax=None, tol=1e-12):
+def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
     E0 = parameters['material']['E']
     w1 = parameters['material']['sigma_D0']**2/E0
     ell = parameters['material']['ell']
     fig = plt.figure()
     for i,d in enumerate(data['eigs']):
-        if d is not (None and np.inf and np.nan):
-            lend = len(d) if isinstance(d, list) else 1
+        if d is not (np.inf or np.nan or float('inf')):
+            lend = len(d) if isinstance(d, np.ndarray) else 1
             plt.scatter([(data['load'].values)[i]]*lend, d,
                        c=np.where(np.array(d)<tol, 'red', 'C2'))
                        # c=np.where(np.array(d)<tol, 'C1', 'C2'))
@@ -118,7 +118,7 @@ def plot_spectrum(parameters, outdir, data, tc, ax=None, tol=1e-12):
     plot_loadticks(ax1, tc, ell)
 
     ax2 = plt.twinx()
-    ax2.plot(data['load'].values, data['alpha_max'].values, label='$$max(\\alpha)$$')
+    # ax2.plot(data['load'].values, data['alpha_max'].values, label='$$max(\\alpha)$$')
     plt.legend()
     tbif = t_bif(ell)
     tstab = t_stab(ell)
@@ -143,7 +143,7 @@ def plot_spectrum(parameters, outdir, data, tc, ax=None, tol=1e-12):
     plot_fills(ax, ell, tc)
 
     plt.legend(loc="upper left")
-    plt.savefig(os.path.join(outdir, 'spectrum.pdf'))
+    # plt.savefig(os.path.join(outdir, 'spectrum.pdf'))
 
     # ax1.get_yaxis().set_major_formatter(ScalarFormatter())
 
