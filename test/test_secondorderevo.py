@@ -164,9 +164,9 @@ def numerical_test(
     eps = sym(grad(u))
     lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
     mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
-    Wu = 1. / 2. * lmbda0 * tr(eps) ** 2 + mu0 * inner(eps, eps)
+    Wu = lmbda0 * tr(eps) ** 2 + mu0 * inner(eps, eps)
 
-    energy = 1./2.* a * Wu * dx + w_1 *( alpha +  parameters['material']['ell']** 2.*alpha.dx(0)**2.)*dx
+    energy = 1./2.* a * Wu * dx + w_1 *( alpha +  parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
 
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True

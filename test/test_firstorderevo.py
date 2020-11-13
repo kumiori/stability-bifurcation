@@ -2,6 +2,7 @@
 # from post_processing import compute_sig, local_project
 import site
 import sys
+sys.path.append("../src/")
 
 
 import pandas as pd
@@ -46,7 +47,8 @@ dolfin.parameters["std_out_all_processes"] = False
 
 from dolfin import *
 import yaml
-
+from utils import get_versions
+code_parameters = get_versions()
 
 set_log_level(LogLevel.INFO)
 
@@ -439,9 +441,11 @@ def numerical_test(
 ):
 
     # Create mesh and define function space
-    Lx = 1; Ly = .1
-    Lx = 1.; Ly = .1
+    # Lx = 1.; Ly = .1
     n = 3
+    geometry_parameters = {'Lx': 1., 'Ly': .1, 'n': 3}
+    Lx = geometry_parameters['Lx']; Ly = geometry_parameters['Ly']
+
     comm = MPI.comm_world
     # mesh = RectangleMesh(Point(-Lx/2, 0.), Point(Lx/2, Ly), 50, 10)
     geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
@@ -470,13 +474,13 @@ def numerical_test(
 
     print('Outdir is: '+outdir)
 
-    geometry_parameters = {'Lx': 1., 'n': 3}
 
     default_parameters = {'solver':{**solver_parameters},
         'compiler': {**form_compiler_parameters},
         'loading': {**loading_parameters},
         'material': {**material_parameters},
-        'geometry': {**geometry_parameters}
+        'geometry': {**geometry_parameters},
+        'code': {**code_parameters}
         }
 
     default_parameters.update(user_parameters)
@@ -518,27 +522,24 @@ def numerical_test(
 
     bcs_alpha_l = DirichletBC(V_alpha,  Constant(0.0), left)
     bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
-    bcs_alpha =[bcs_alpha_l, bcs_alpha_r]
-    # bcs_alpha = []
+    # bcs_alpha =[bcs_alpha_l, bcs_alpha_r]
+    bcs_alpha = []
 
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 
-    # import pdb; pdb.set_trace()
-
-    ell = parameters['material']['ell']
-
     # Problem definition
-
-    k_ell = 1e-8
-    a = (1 - alpha) ** 2. + k_ell
+    k_res = parameters['material']['k_res']
+    a = (1 - alpha) ** 2. + k_res
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
     w = w_1 * alpha
     eps = sym(grad(u))
     lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
     mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
-    Wu = 1. / 2. * lmbda0 * tr(eps) ** 2 + mu0 * inner(eps, eps)
+    Wu = 1./2.* lmbda0 * tr(eps)**2. + mu0 * inner(eps, eps)
 
-    energy = 1./2.* a * Wu * dx + w_1 *( alpha +  parameters['material']['ell']** 2.*alpha.dx(0)**2.)*dx
+    energy = a * Wu * dx + w_1 *( alpha + \
+            parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
+    # import pdb; pdb.set_trace()
 
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True
@@ -555,6 +556,10 @@ def numerical_test(
     time_data = []
     time_data_pd = []
     spacetime = []
+
+
+    # compute signature (incl bcs)
+    # dump parameters?
 
     for it, load in enumerate(load_steps):
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
@@ -636,6 +641,8 @@ def numerical_test(
     # plt.ylim(0., 1.)
     plt.savefig(os.path.join(outdir, 'profile.pdf'))
 
+
+
     return time_data_pd, outdir
 
 def get_trace(alpha, xresol = 100):
@@ -654,7 +661,32 @@ if __name__ == "__main__":
     data, experiment = numerical_test(user_parameters = parameters)
 
     log(LogLevel.INFO, "Postprocess")
+    import postprocess as pp
+
     with open(os.path.join(experiment, 'parameters.yaml')) as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
+    lab = '\\ell={}, E={}, \\sigma_D = {}'.format(
+        parameters['material']['ell'],
+        parameters['material']['E'],
+        parameters['material']['sigma_D0'])
+    tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
+    ell = parameters['material']['ell']
+    fig1, ax1 =pp.plot_energy(parameters, data, tc)
+    # visuals.setspines2()
+    mu = parameters['material']['E']/2.
+    # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
+    Lx = 1.
+    Ly = .1
+    Omega = Lx*Ly
+    elast_en = [1./2.*parameters['material']['E']*eps**2 for eps in data['load']]
+    plt.plot(data['load'], elast_en, c='k', label='analytic')
+    plt.legend()
+    # import pdb; pdb.set_trace()
+
+    plt.ylim(0, 1.)
+    plt.title('${}$'.format(lab))
+
+
+    fig1.savefig(os.path.join(experiment, "energy.pdf"), bbox_inches='tight')
 
