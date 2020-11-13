@@ -455,12 +455,13 @@ class StabilitySolver(object):
             if self.bcs:
                 for bc in bc_a: bc.apply(beta.vector())
             return beta
-        elif mode == 'none':
+        elif mode == 'None':
             if self.bcs:
                 for bc in bc_a: bc.apply(beta.vector())
             return beta
         else:
-            return -1
+            raise RuntimeError("Cannot project perturbation")
+
 
     def is_compatible(self, bcs, v, homogeneous = False, tol=dolfin.DOLFIN_EPS_LARGE):
         V = v.function_space()
@@ -503,6 +504,7 @@ class StabilitySolver(object):
         #     log(LogLevel.WARNING, 'Continuing')
 
         # A convoluted way to do a simple thing. FIXME
+        # import pdb; pdb.set_trace()
         _alpha_old = dolfin.Function(self.alpha.function_space())
         _alpha_old.vector()[:] = self.alpha_old[:] 
         self.assigner.assign(self.z_old, [self.u_zero, _alpha_old])

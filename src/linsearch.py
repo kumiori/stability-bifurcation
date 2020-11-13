@@ -76,15 +76,16 @@ class LineSearch(object):
         u_0 = self.u_0
         alpha_0 = self.alpha_0
 
-        u = state[0]
-        alpha = state[1]
-        alpha_old = state[2]
+        u = state['u']
+        alpha = state['alpha']
+
+        if 'alpha_old' in state.keys():
+            alpha_old = state['alpha_old']
 
         u_0[:] = u.vector()[:]
         alpha_0[:] = alpha.vector()[:]
 
         (self.hmin, self.hmax) = self.admissible_interval(alpha, alpha_old, beta_n)
-
 
         htest = np.linspace(self.hmin, self.hmax, m+1)
 
@@ -93,9 +94,9 @@ class LineSearch(object):
             aval = alpha_0[:] + h*beta_n.vector()[:]
 
             if not np.all(aval - alpha_old.vector()[:] + dolfin.DOLFIN_EPS_LARGE >= 0.):
-                raise Exception('damage test field doesn\'t verify sharp irrev from below')
+                raise Exception('Damage test field doesn\'t verify sharp irrev from below')
             if not np.all(aval <= self.upperbound):
-                raise Exception('damage test field doesn\'t verify irrev from above')
+                raise Exception('Damage test field doesn\'t verify irrev from above')
 
             u.vector()[:] = uval
             alpha.vector()[:] = aval
