@@ -12,13 +12,14 @@ import petsc4py
 from petsc4py import PETSc
 from dolfin import MPI
 import matplotlib.pyplot as plt
-from dolfin.cpp.log import log, LogLevel
+from dolfin.cpp.log import log, LogLevel, get_log_level
 import mpi4py
 import yaml 
 
 comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
+log_level = get_log_level()
 
 class EigenSolver(object):
     def __init__(self,
@@ -183,7 +184,7 @@ class EigenSolver(object):
 
 class StabilitySolver(object):
     """solves second order stability problem"""
-    def __init__(self, mesh, energy, state, bcs, z, rayleigh=None,
+    def __init__(self, energy, state, bcs, rayleigh=None,
         nullspace=None, parameters=None):
         OptDB = PETSc.Options()
         OptDB.view()
@@ -195,11 +196,14 @@ class StabilitySolver(object):
         self.alpha = state['alpha']
         self._u = dolfin.Vector(self.u.vector())
         self._alpha = dolfin.Vector(self.alpha.vector())
-        self.meshsize = (mesh.hmax()+mesh.hmax())/2.
-        self.mesh = mesh
+        self.mesh = state['alpha'].function_space().mesh()
+        self.meshsize = (self.mesh.hmax()+self.mesh.hmax())/2.
 
-        self.Z = z.function_space()
-        self.z = z
+        # self.Z = z.function_space()
+        # self.z = z
+        self.Z = dolfin.FunctionSpace(self.mesh, 
+            dolfin.MixedElement([self.u.ufl_element(),self.alpha.ufl_element()]))
+        self.z = dolfin.Function(self.Z)
 
         with open('../parameters/eigensolver.yml') as f:
             self.inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
@@ -214,7 +218,7 @@ class StabilitySolver(object):
         v, beta = dolfin.split(zeta)
 
         cdm = dolfin.project(dolfin.CellDiameter(self.mesh)**2., dolfin.FunctionSpace(self.mesh, 'CG', 1))
-        self.cellarea = dolfin.Function(z.function_space())
+        self.cellarea = dolfin.Function(self.z.function_space())
         self.cellarea.assign(cdm)
 
         self.ownership = self.Z.dofmap().ownership_range()
@@ -375,7 +379,6 @@ class StabilitySolver(object):
         mask = Ealpha[:] < tol
 
         inactive_set_alpha = set(np.where(mask == True)[0])
-        # import pdb; pdb.set_trace()
 
         # from subspace to global numbering
         global_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
@@ -481,7 +484,7 @@ class StabilitySolver(object):
         return ret
 
     def solve(self, alpha_old):
-        debug = False
+        # debug = False
         self.alpha_old = alpha_old
         postfix = 'seq' if size == 1 else 'mpi'
 
@@ -491,7 +494,7 @@ class StabilitySolver(object):
         numbcs = np.array(0.,'d')
         comm.Reduce(locnumbcs, numbcs, op=mpi4py.MPI.SUM, root=0)
 
-        if debug and rank == 0:
+        if get_log_level==LogLevel.DEBUG and rank == 0:
             log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
 
         # if not np.all(self.alpha.vector()[:] >=self.alpha_old[:]):
@@ -591,13 +594,13 @@ class StabilitySolver(object):
 
             if negconv > 0:
                 for n in range(negconv) if negconv < maxmodes else range(maxmodes):
-                    log(LogLevel.INFO, 'Perturbation mode {}'.format(n))
+                    log(LogLevel.INFO, 'Processing perturbation mode {}'.format(n))
                     eig, u_r, u_im, err = eigen.get_eigenpair(n)
                     err2 = eigen.E.computeError(0, SLEPc.EPS.ErrorType.ABSOLUTE)
                     v_n, beta_n = u_r.split(deepcopy=True)
                     # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
 
-                    if debug and size == 1:
+                    if  log_level == LogLevel.DEBUG and size == 1:
                         plt.clf()
                         plt.colorbar(dolfin.plot(dot(v_n, v_n)**(.5)))
                         plt.savefig('data/vn-{}-{}.pdf'.format(rank, n))

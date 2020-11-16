@@ -55,7 +55,7 @@ import yaml
 from utils import get_versions
 code_parameters = get_versions()
 
-set_log_level(LogLevel.INFO)
+set_log_level(LogLevel.DEBUG)
 
 
 def numerical_test(
@@ -74,10 +74,10 @@ def numerical_test(
     bifurcation_loads = []
 
     # Create mesh and define function space
-    geometry_parameters = {'Lx': 1., 'n': 5}
+    geometry_parameters = {'Lx': 1., 'Ly': .1, 'n': 5}
 
     # Define Dirichlet boundaries
-    outdir = '../test/output/test_1dcheck'
+    outdir = '../test/output/test_film'
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
 
@@ -87,7 +87,7 @@ def numerical_test(
     with open('../parameters/solvers_default.yml') as f:
         solver_parameters = yaml.load(f, Loader=yaml.FullLoader)
 
-    with open('../parameters/model1d.yaml') as f:
+    with open('../parameters/film.yaml') as f:
         material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
 
     with open('../parameters/loading.yaml') as f:
@@ -98,7 +98,7 @@ def numerical_test(
 
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
-    print('Outdir is: '+outdir)
+    log(LogLevel.INFO, 'INFO: Outdir is: '+outdir)
 
     default_parameters = {
         'code': {**code_parameters},
@@ -117,17 +117,16 @@ def numerical_test(
     with open(os.path.join(outdir, 'parameters.yaml'), "w") as f:
         yaml.dump(parameters, f, default_flow_style=False)
 
-    Lx = parameters['geometry']['Lx']; 
-    # Ly = parameters['geometry']['Ly']
+    Lx = parameters['geometry']['Lx']
+    Ly = parameters['geometry']['Ly']
     ell =  parameters['material']['ell']
-    # comm = MPI.comm_world
-    # geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
+    comm = MPI.comm_world
+    geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
     # import pdb; pdb.set_trace()
     # resolution = max(geometry_parameters['n'] * Lx / ell, 1/(Ly*10))
-    # resolution = max(geometry_parameters['n'] * Lx / ell, 5/(Ly*10))
-    resolution = 50
-    mesh = dolfin.IntervalMesh(50, -Lx/2., Lx/2.)
-    # mesh = dolfin.IntervalMesh(int(float(geometry_parameters['n'] * Lx / ell)), -Lx/2., Lx/2.)
+    resolution = max(geometry_parameters['n'] * Lx / ell, 5/(Ly*10))
+    resolution = 130
+    mesh = mshr.generate_mesh(geom,  resolution)
     meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
     meshf << mesh
     plot(mesh)
@@ -136,7 +135,7 @@ def numerical_test(
     savelag = 1
     left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
     right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
-    # left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
+    left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
 
     mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
     right.mark(mf, 1)
@@ -146,10 +145,12 @@ def numerical_test(
     dx = dolfin.Measure("dx", metadata=form_compiler_parameters, domain=mesh)
 
     # Function Spaces
-    V_u = dolfin.FunctionSpace(mesh, "CG", 1)
+    V_u = dolfin.VectorFunctionSpace(mesh, "CG", 1)
     V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
     u = dolfin.Function(V_u, name="Total displacement")
+    u.rename('u', 'u')
     alpha = Function(V_alpha)
+    alpha.rename('alpha', 'alpha')
     dalpha = TrialFunction(V_alpha)
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
@@ -162,13 +163,17 @@ def numerical_test(
     v, beta = dolfin.split(z)
 
     ut = dolfin.Expression("t", t=0.0, degree=0)
-    bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant(0), left),
-             dolfin.DirichletBC(V_u, ut, right),
+    # bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0,0)), left),
+             # dolfin.DirichletBC(V_u, dolfin.Constant((0,0)), right),
              # dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")
-             ]
-
-    bcs_alpha_l = DirichletBC(V_alpha,  Constant(0.0), left)
-    bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
+             # ]
+    bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0,0)), 'on_boundary')]
+    # bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), left),
+    #          dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), right),
+    #          dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")
+    #          ]
+    # bcs_alpha_l = DirichletBC(V_alpha,  Constant(0.0), left)
+    # bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
     # bcs_alpha =[bcs_alpha_l, bcs_alpha_r]
     bcs_alpha = []
 
@@ -184,16 +189,43 @@ def numerical_test(
     a = (1 - alpha) ** 2. + k_res
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
     w = w_1 * alpha
-    eps = u.dx(0)
-    # lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
-    mu0 = parameters['material']['E']/ 2.
-    Wu = mu0 * inner(eps, eps)
+    eps = sym(grad(u))
+    eps0t=Expression([['t', 0.],[0.,'t']], t=0., degree=0)
+    lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
+    mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
+    nu = parameters['material']['nu']
+    Wt = a*parameters['material']['E']*nu/(2*(1-nu**2.)) * tr(eps-eps0t)**2.                                \
+        + a*parameters['material']['E']*(inner(eps-eps0t, eps-eps0t)/(2.*(1+nu)))                           \
+    + 1./2.*1./parameters['material']['ell_e']**2.*dot(u, u)
 
-    energy = a * Wu * dx + w_1 *( alpha + \
-            parameters['material']['ell']** 2.* alpha.dx(0)**2.)*dx
+    energy = Wt * dx + w_1 *( alpha + parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
+    # import pdb; pdb.set_trace()
 
+    # # Rayleigh Ratio
+    da = dolfin.diff(a, alpha)
+    dda = dolfin.diff(dolfin.diff(a, alpha), alpha)
+    ddw = dolfin.diff(dolfin.diff(w, alpha), alpha)
     eps_ = variable(eps)
-    sigma = diff(a * Wu, eps_)
+    # sigma = derivative(Wt, eps, eps_)
+    sigma = a*parameters['material']['E'] * ((nu/(1-nu**2.) * tr(eps-eps0t)*Identity(parameters['general']['dim']))) \
+            + a*parameters['material']['E'] * ((eps-eps0t)/((1+nu)))
+    sigmav = a*parameters['material']['E'] * ((nu/(1-nu**2.) * tr(sym(grad(v))-eps0t)*Identity(parameters['general']['dim']))) \
+            + a*parameters['material']['E'] * ((sym(grad(v))-eps0t)/((1+nu)))
+    sigma0 = a*parameters['material']['E'] * ((nu/(1-nu**2.) * tr(eps0t)*Identity(parameters['general']['dim']))) \
+            + a*parameters['material']['E'] * (eps0t/((1+nu)))
+
+    rP = inner(dolfin.sqrt(a)*sigmav + da/dolfin.sqrt(a)*(sigma-sigma0)*beta, \
+            dolfin.sqrt(a)*sym(grad(v)) + dolfin.diff(a, alpha)/dolfin.sqrt(a)*(eps-eps0t)*beta)*dx \
+        + 1./parameters['material']['ell_e']**2 * dot(v, v)*dx \
+        + 2*w_1*parameters['material']['ell'] ** 2 * dot(grad(beta), grad(beta))*dx
+
+    rN = -((dda - da**2.)/a*1./2.*inner(sigma-sigma0, eps-eps0t))*beta**2.*dx
+    import pdb; pdb.set_trace()
+
+
+    # eps_ = variable(eps)
+    # sigma = diff(a * Wt, eps_)
+    # e1 = dolfin.Constant([1, 0])
 
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True
@@ -213,16 +245,17 @@ def numerical_test(
 
 
     solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
-    stability = StabilitySolver(mesh, energy, state, bcs, z, parameters = parameters['stability'])
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
+    # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh= [rP, rN])
 
     load_steps = np.linspace(parameters['loading']['load_min'],
         parameters['loading']['load_max'],
         parameters['loading']['n_steps'])
-    xs = np.linspace(-parameters['geometry']['Lx']/2., parameters['geometry']['Lx']/2, 50)
+
     for it, load in enumerate(load_steps):
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
-        ut.t = load
+        eps0t.t = load
         (time_data_i, am_iter) = solver.solve()
 
         # Second order stability conditions
@@ -242,7 +275,7 @@ def numerical_test(
             bifurcated = True
 
             # save 3 bif modes
-            print('About to bifurcate load ', load, 'step', it)
+            log(LogLevel.INFO, 'INFO: About to bifurcate load {} step {}'.format(load, it))
             bifurcation_loads.append(load)
             modes = np.where(stability.eigs < 0)[0]
 
@@ -262,19 +295,22 @@ def numerical_test(
         time_data_i["load"] = load
         time_data_i["alpha_max"] = max(alpha.vector()[:])
         time_data_i["elastic_energy"] = dolfin.assemble(
-            1./2.* material_parameters['E']*a*eps**2. *dx)
+            a * Wt * dx)
         time_data_i["dissipated_energy"] = dolfin.assemble(
-    # e1 = dolfin.Constant([1, 0])
-            (w + w_1 * material_parameters['ell'] ** 2. * alpha.dx(0)**2.)*dx)
+            (w + w_1 * material_parameters['ell'] ** 2. * inner(grad(alpha), grad(alpha)))*dx)
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
 
+        # eps_ = variable(eps)
+        # import pdb; pdb.set_trace()
+
+        # sigma = derivative( 1./2.* lmbda0 * tr(eps-eps0t)**2. + mu0 * inner(eps-eps0t, eps-eps0t), eps, eps_)
         # snn = dolfin.dot(dolfin.dot(sigma, e1), e1)
-        time_data_i["sigma"] = dolfin.assemble(a*mu0*eps*ds(1))
+        # time_data_i["sigma"] = 1/parameters['geometry']['Ly'] * dolfin.assemble(snn*ds(1))
 
         log(LogLevel.INFO,
-            "Load/time step {:.4g}: iteration: {:3d}, err_alpha={:.4g}".format(
+            "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4g}".format(
                 time_data_i["load"],
                 time_data_i["iterations"][0],
                 time_data_i["alpha_error"][0]))
@@ -292,7 +328,7 @@ def numerical_test(
 
             time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
-        spacetime.append([alpha(x) for x in xs])
+        spacetime.append(get_trace(alpha))
 
 
         if save_current_bifurcation:
@@ -319,7 +355,6 @@ def numerical_test(
                 _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
                 _v.rename('perturbation displacement', 'perturbation displacement')
                 _beta.rename('perturbation damage', 'perturbation damage')
-                # import pdb; pdb.set_trace()
                 f.write(_v, load)
                 f.write(_beta, load)
 
@@ -345,7 +380,7 @@ def numerical_test(
     plt.xlabel('$x$')
     plt.ylabel('$t$')
     plt.savefig(os.path.join(outdir, "spacetime.pdf".format(load)), bbox_inches="tight")
-
+    plt.clf()
     spacetime.to_json(os.path.join(outdir + "/spacetime.json"))
 
     from matplotlib.ticker import FuncFormatter, MaxNLocator
@@ -354,11 +389,11 @@ def numerical_test(
     log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
 
 
-    xs = np.linspace(-Lx/2., Lx/2., 100)
-    profile = np.array([alpha(x) for x in xs])
+    xs = np.linspace(-Lx/2., Lx/2., 300)
+    profile = np.array([alpha(x, 0) for x in xs])
     plt.figure()
     plt.plot(xs, profile, marker='o')
-    plt.plot(xs, np.array([u(x) for x in xs]))
+    plt.plot(xs, np.array([u(x, 0) for x in xs]))
     # plt.ylim(0., 1.)
     plt.savefig(os.path.join(outdir, 'profile.pdf'))
 
@@ -376,21 +411,21 @@ from test_firstorderevo import get_trace
 if __name__ == "__main__":
 
     # Parameters
-    with open('../parameters/tractionbar.yml') as f:
+    with open('../parameters/film.yaml') as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     data, experiment = numerical_test(user_parameters = parameters)
     print(data)
 
-    log(LogLevel.INFO, '________________________ VIZ _________________________')
     log(LogLevel.INFO, "Postprocess")
     import postprocess as pp
 
     with open(os.path.join(experiment, 'parameters.yaml')) as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
-    lab = '\\ell={}, E={}, \\sigma_D = {}'.format(
+    lab = '\\ell={}, ell_e={}, E={}, \\sigma_D = {}'.format(
         parameters['material']['ell'],
+        parameters['material']['ell_e'],
         parameters['material']['E'],
         parameters['material']['sigma_D0'])
     tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
@@ -398,13 +433,15 @@ if __name__ == "__main__":
     # import pdb; pdb.set_trace()
     fig1, ax1 =pp.plot_energy(parameters, data, tc)
     # visuals.setspines2()
-    plt.plot(data.load.values, 1-data.load.values**(-2.)*tc**2)
-
     # print(data['elastic_energy'])
     mu = parameters['material']['E']/2.
-    elast_en = [1./2.*parameters['material']['E']*eps**2 for eps in data['load']]
-    plt.plot(data['load'], elast_en, c='k', label='analytic')
-    plt.axhline(1., c='k')
+    # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
+    # Lx = 1.
+    # Ly = .1
+    # Omega = Lx*Ly
+    # elast_en = [1./2.*parameters['material']['E']*eps**2 for eps in data['load']]
+    # plt.plot(data['load'], elast_en, c='k', label='analytic')
+    plt.axhline(parameters['geometry']['Ly'], c='k')
     plt.legend()
 
     plt.ylim(0, 1.)

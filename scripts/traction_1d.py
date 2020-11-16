@@ -15,14 +15,13 @@ import os
 import pandas as pd
 import sympy
 import numpy as np
-import post_processing as pp
+import postprocess as pp
 import petsc4py
 from functools import reduce
 import ufl
 petsc4py.init(sys.argv)
 from petsc4py import PETSc
 from hashlib import md5
-from post_processing import plot_global_data
 from pathlib import Path
 import json
 import hashlib
@@ -223,7 +222,7 @@ def traction_1d(
     V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
     u = dolfin.Function(V_u, name="Total displacement")
     alpha = dolfin.Function(V_alpha, name="Damage")
-    state = [u, alpha]
+    state = {'u': u, 'alpha': alpha }
 
     Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
     z = dolfin.Function(Z)
@@ -238,6 +237,7 @@ def traction_1d(
     bcs_alpha = []
 
     # bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(1.), right)]
+    bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 
     # Files for output
     ColorPrint.print_warn('Outdir = {}'.format(outdir))
@@ -276,21 +276,20 @@ def traction_1d(
 
     # ------------------------------
 
-    model = DamageElasticityModel1D(state, E0, ell, sigma_D0)
-    model.dx = dx
+    # model = DamageElasticityModel1D(state, parameters)
+    # model.dx = dx
     # energy = model.total_energy_density(u, alpha)*model.dx
     energy = 1./2.* parameters['material']['E']*a*eps**2. * dx + (w + w_1 * parameters['material']['ell'] ** 2. * alpha.dx(0)**2.)*dx
-    rP = model.rP(u, alpha, v, beta)*model.dx
-    rN = model.rN(u, alpha, beta)*model.dx
+    # rP = model.rP(u, alpha, v, beta)*dx
+    # rN = model.rN(u, alpha, beta)*dx
 
     # Alternate minimisation solver
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     solver = solvers.AlternateMinimizationSolver(energy,
-        [u, alpha], [bcs_u, bcs_alpha], parameters=parameters['alt_min'])
+        state, bcs, parameters=parameters['alt_min'])
 
-    stability = StabilitySolver(mesh, energy,
-        [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
-    # stability = StabilitySolver(mesh, energy, [u, alpha], [bcs_u, bcs_alpha], z, parameters = parameters['stability'])
+    # stability = StabilitySolver(mesh, energy, state, [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
 
     # Time iterations
     load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
