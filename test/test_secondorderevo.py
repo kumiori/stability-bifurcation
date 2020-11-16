@@ -109,9 +109,8 @@ def numerical_test(
 
     print('Outdir is: '+outdir)
 
-    geometry_parameters = {'Lx': 1., 'n': 6}
-
     default_parameters = {
+        'code': {**code_parameters},
         'compiler': {**form_compiler_parameters},
         'geometry': {**geometry_parameters},
         'loading': {**loading_parameters},
@@ -253,7 +252,7 @@ def numerical_test(
         time_data_i["elastic_energy"] = dolfin.assemble(
             1./2.* material_parameters['E']*a*eps**2. *dx)
         time_data_i["dissipated_energy"] = dolfin.assemble(
-            (w + w_1 * material_parameters['ell'] ** 2. * alpha.dx(0)**2.)*dx)
+            (w + w_1 * material_parameters['ell'] ** 2. * inner(grad(alpha), grad(alpha)))*dx)
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
@@ -349,12 +348,14 @@ def numerical_test(
 
     return time_data_pd, outdir
 
-def get_trace(alpha, xresol = 100):
-    X =alpha.function_space().tabulate_dof_coordinates()
-    xs = np.linspace(min(X[:, 0]),max(X[:, 0]), xresol)
-    alpha0 = [alpha(x, 0) for x in xs]
 
-    return alpha0
+from test_firstorderevo import get_trace
+# def get_trace(alpha, xresol = 100):
+#     X =alpha.function_space().tabulate_dof_coordinates()
+#     xs = np.linspace(min(X[:, 0]),max(X[:, 0]), xresol)
+#     alpha0 = [alpha(x, 0) for x in xs]
+
+#     return alpha0
 
 if __name__ == "__main__":
 
@@ -377,24 +378,23 @@ if __name__ == "__main__":
         parameters['material']['sigma_D0'])
     tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
     ell = parameters['material']['ell']
+    # import pdb; pdb.set_trace()
     fig1, ax1 =pp.plot_energy(parameters, data, tc)
     # visuals.setspines2()
+    print(data['elastic_energy'])
     mu = parameters['material']['E']/2.
     # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
-    Lx = 1.
-    Ly = .1
-    Omega = Lx*Ly
+    # Lx = 1.
+    # Ly = .1
+    # Omega = Lx*Ly
     elast_en = [1./2.*parameters['material']['E']*eps**2 for eps in data['load']]
     plt.plot(data['load'], elast_en, c='k', label='analytic')
+    plt.axhline(parameters['geometry']['Ly'], c='k')
     plt.legend()
 
     plt.ylim(0, 1.)
     plt.title('${}$'.format(lab))
 
+
     fig1.savefig(os.path.join(experiment, "energy.pdf"), bbox_inches='tight')
-
-    # import pdb; pdb.set_trace()
-
-    (fig2, ax1, ax2) =pp.plot_spectrum(parameters, data, tc)
-    fig2.savefig(os.path.join(experiment, "spectrum.pdf"), bbox_inches='tight')
 

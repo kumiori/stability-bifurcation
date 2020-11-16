@@ -96,13 +96,16 @@ def numerical_test(
     print('Outdir is: '+outdir)
 
 
-    default_parameters = {'solver':{**solver_parameters},
+    default_parameters = {
+        'code': {**code_parameters},
         'compiler': {**form_compiler_parameters},
+        'geometry': {**geometry_parameters},
         'loading': {**loading_parameters},
         'material': {**material_parameters},
-        'geometry': {**geometry_parameters},
-        'code': {**code_parameters}
+        'solver':{**solver_parameters},
         }
+
+    # import pdb; pdb.set_tracec()
 
     default_parameters.update(user_parameters)
     # FIXME: Not nice
@@ -194,7 +197,7 @@ def numerical_test(
         time_data_i["elastic_energy"] = dolfin.assemble(
             1./2.* material_parameters['E']*a*eps**2. *dx)
         time_data_i["dissipated_energy"] = dolfin.assemble(
-            (w + w_1 * material_parameters['ell'] ** 2. * alpha.dx(0)**2.)*dx)
+            (w + w_1 * material_parameters['ell'] ** 2. * inner(grad(alpha), grad(alpha)))*dx)
 
         log(LogLevel.CRITICAL,
             "Load/time step {:.4g}: iteration: {:3d}, err_alpha={:.4g}".format(
@@ -293,17 +296,18 @@ if __name__ == "__main__":
         parameters['material']['sigma_D0'])
     tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
     ell = parameters['material']['ell']
+    import pdb; pdb.set_trace()
     fig1, ax1 =pp.plot_energy(parameters, data, tc)
     # visuals.setspines2()
+    print(data['elastic_energy'])
     mu = parameters['material']['E']/2.
     # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
-    Lx = 1.
-    Ly = .1
-    Omega = Lx*Ly
+    # Lx = 1.
+    # Ly = .1
+    # Omega = Lx*Ly
     elast_en = [1./2.*parameters['material']['E']*eps**2 for eps in data['load']]
     plt.plot(data['load'], elast_en, c='k', label='analytic')
     plt.legend()
-    # import pdb; pdb.set_trace()
 
     plt.ylim(0, 1.)
     plt.title('${}$'.format(lab))
