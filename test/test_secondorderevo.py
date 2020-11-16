@@ -161,8 +161,8 @@ def numerical_test(
 
     bcs_alpha_l = DirichletBC(V_alpha,  Constant(0.0), left)
     bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
-    bcs_alpha =[bcs_alpha_l, bcs_alpha_r]
-    # bcs_alpha = []
+    # bcs_alpha =[bcs_alpha_l, bcs_alpha_r]
+    bcs_alpha = []
 
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 
@@ -183,6 +183,10 @@ def numerical_test(
 
     energy = a * Wu * dx + w_1 *( alpha + \
             parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
+
+    eps_ = variable(eps)
+    sigma = diff(a * Wu, eps_)
+    e1 = dolfin.Constant([1, 0])
 
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True
@@ -256,6 +260,9 @@ def numerical_test(
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
+
+        snn = dolfin.dot(dolfin.dot(sigma, e1), e1)
+        time_data_i["sigma"] = 1/parameters['geometry']['Ly'] * dolfin.assemble(snn*ds(1))
 
         log(LogLevel.INFO,
             "Load/time step {:.4g}: iteration: {:3d}, err_alpha={:.4g}".format(
@@ -395,6 +402,11 @@ if __name__ == "__main__":
     plt.ylim(0, 1.)
     plt.title('${}$'.format(lab))
 
-
     fig1.savefig(os.path.join(experiment, "energy.pdf"), bbox_inches='tight')
+
+    (fig2, ax1, ax2) =pp.plot_spectrum(params, data, tc)
+    plt.legend(loc='lower left')
+    ax1.set_ylim(-1e-7, 2e-7)
+    fig1.savefig(os.path.join(experiment, "spectrum.pdf"), bbox_inches='tight')
+
 
