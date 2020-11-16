@@ -126,6 +126,7 @@ def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
     ax2.set_yticks([0, 1.])
     ax2.set_yticklabels(['0','1'])
     ax2.set_ylim(0, 1.1)
+    # import pdb; pdb.set_trace()
 
     ax = plt.gca()
     ax.set_xlim(parameters['loading']['load_min'], parameters['loading']['load_max'])

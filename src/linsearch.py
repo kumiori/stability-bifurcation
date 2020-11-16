@@ -94,8 +94,10 @@ class LineSearch(object):
             aval = alpha_0[:] + h*beta_n.vector()[:]
 
             if not np.all(aval - alpha_old.vector()[:] + dolfin.DOLFIN_EPS_LARGE >= 0.):
+                import pdb; pdb.set_trace()
                 raise Exception('Damage test field doesn\'t verify sharp irrev from below')
             if not np.all(aval <= self.upperbound):
+                import pdb; pdb.set_trace()
                 raise Exception('Damage test field doesn\'t verify irrev from above')
 
             u.vector()[:] = uval

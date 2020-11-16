@@ -44,6 +44,7 @@ dolfin.parameters["std_out_all_processes"] = False
 
 from solvers import EquilibriumSolver
 from solver_stability import StabilitySolver
+from linsearch import LineSearch
 
 # from dolfin import NonlinearProblem, derivative, \
 #         TrialFunction, TestFunction, inner, assemble, sqrt, \
@@ -55,7 +56,9 @@ import yaml
 from utils import get_versions
 code_parameters = get_versions()
 
-set_log_level(LogLevel.INFO)
+set_log_level(LogLevel.DEBUG)
+
+
 
 
 def numerical_test(
@@ -151,6 +154,7 @@ def numerical_test(
     u = dolfin.Function(V_u, name="Total displacement")
     alpha = Function(V_alpha)
     dalpha = TrialFunction(V_alpha)
+    alpha_old = dolfin.Function(V_alpha)
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
 
@@ -167,8 +171,8 @@ def numerical_test(
              # dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")
              ]
 
-    bcs_alpha_l = DirichletBC(V_alpha,  Constant(0.0), left)
-    bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
+    # bcs_alpha_l = DirichletBC(V_alpha,  Constant(0.0), left)
+    # bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
     # bcs_alpha =[bcs_alpha_l, bcs_alpha_r]
     bcs_alpha = []
 
@@ -192,6 +196,27 @@ def numerical_test(
     energy = a * Wu * dx + w_1 *( alpha + \
             parameters['material']['ell']** 2.* alpha.dx(0)**2.)*dx
 
+    def rP(u, alpha, v, beta):
+        # w_1 = w(1)
+        sigma = lambda v: parameters['material']['E']*v.dx(0)
+        eps = u.dx(0)
+        # import pdb; pdb.set_trace()
+        return (sqrt(a)*sigma(v) + diff(a, alpha)/sqrt(a)*sigma(u)*beta)* \
+                    (sqrt(a)*v.dx(0) + diff(a, alpha)/sqrt(a)*eps*beta) + \
+                    2*w_1*ell ** 2 * beta.dx(0)*beta.dx(0)
+
+    def rN(u, alpha, beta):
+        sigma = lambda v: parameters['material']['E']*v.dx(0)
+        eps = u.dx(0)
+        da = diff(a, alpha)
+        dda = diff(diff(a, alpha), alpha)
+        # ddw = diff(diff(w, alpha), alpha)
+
+        return -(1./2.*(dda - 2*da**2./a)*inner(sigma(u), eps))*beta**2.
+
+    rP = rP(u, alpha, v, beta)*dx
+    rN = rN(u, alpha, beta)*dx
+
     eps_ = variable(eps)
     sigma = diff(a * Wu, eps_)
 
@@ -213,13 +238,17 @@ def numerical_test(
 
 
     solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
-    stability = StabilitySolver(mesh, energy, state, bcs, z, parameters = parameters['stability'])
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh=[rP, rN])
+    linesearch = LineSearch(energy, state)
 
     load_steps = np.linspace(parameters['loading']['load_min'],
         parameters['loading']['load_max'],
         parameters['loading']['n_steps'])
     xs = np.linspace(-parameters['geometry']['Lx']/2., parameters['geometry']['Lx']/2, 50)
+    log(LogLevel.INFO, '====================== EVO ==========================')
+    log(LogLevel.INFO, '{}'.format(parameters))
     for it, load in enumerate(load_steps):
+        alpha_old.assign(alpha)
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
         ut.t = load
@@ -232,17 +261,51 @@ def numerical_test(
 
         # we postpone the update after the stability check
         solver.update()
+        # if stable:
+            # solver.update()
+        # else:
+            # perturbation_v    = stability.perturbation_v
+            # perturbation_beta = stability.perturbation_beta
+            # import pdb; pdb.set_trace()
+
+            # h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
+            #     {'u': u, 'alpha':alpha, 'alpha_old':alpha_old},
+            #     perturbation_v, perturbation_beta)
+
+            # if h_opt != 0:
+            #     save_current_bifurcation = True
+            #     alpha_bif.assign(alpha)
+            #     alpha_bif_old.assign(alpha_old)
+            #     # admissible
+            #     uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
+            #     aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
+
+            #     u.vector()[:] = uval
+            #     alpha.vector()[:] = aval
+
+            #     u.vector().vec().ghostUpdate()
+            #     alpha.vector().vec().ghostUpdate()
+
+            #     # import pdb; pdb.set_trace()
+            #     (time_data_i, am_iter) = solver.solve()
+            #     (stable, negev) = stability.solve(alpha_old)
+            #     ColorPrint.print_pass('    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
+            #     iteration += 1
+
+            # else:
+            #     # warn
+            #     ColorPrint.print_warn('WARNING: Found zero increment, we are stuck in the matrix')
+                # log(LogLevel.WARNING, 'WARNING: Continuing load program')
+                # break
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
-        log(LogLevel.INFO, 'INFO: lmbda min {}'.format(lmbda_min_prev))
-        log(LogLevel.INFO, 'INFO: mineig {}'.format(mineig))
         Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
 
         if (mineig + Deltav)*(lmbda_min_prev+dolfin.DOLFIN_EPS) < 0 and not bifurcated:
             bifurcated = True
 
             # save 3 bif modes
-            print('About to bifurcate load ', load, 'step', it)
+            log(LogLevel.CRITICAL, 'About to bifurcate load {} step {}'.format(load, it))
             bifurcation_loads.append(load)
             modes = np.where(stability.eigs < 0)[0]
 
@@ -258,6 +321,7 @@ def numerical_test(
             bifurc_i += 1
 
         lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
+
 
         time_data_i["load"] = load
         time_data_i["alpha_max"] = max(alpha.vector()[:])
@@ -286,9 +350,21 @@ def numerical_test(
             with file_out as f:
                 f.write(alpha, load)
                 f.write(u, load)
-            with dolfin.XDMFFile(os.path.join(outdir, "output_postproc.xdmf")) as f:
+            with file_postproc as f:
                 f.write_checkpoint(alpha, "alpha-{}".format(it), 0, append = True)
                 log(LogLevel.PROGRESS, 'PROGRESS: written step {}'.format(it))
+
+        if save_current_bifurcation == True:
+            with file_eig as f:
+                _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
+                _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
+                _v.rename('perturbation displacement', 'perturbation displacement')
+                _beta.rename('perturbation damage', 'perturbation damage')
+                # import pdb; pdb.set_trace()
+                f.write(_v, load)
+                f.write(_beta, load)
+                f.write_checkpoint(_v, 'perturbation_v', 0, append=True)
+                f.write_checkpoint(_beta, 'perturbation_beta', 0, append=True)
 
             time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
@@ -414,7 +490,7 @@ if __name__ == "__main__":
 
     (fig2, ax1, ax2) =pp.plot_spectrum(parameters, data, tc)
     plt.legend(loc='lower left')
-    ax2.set_ylim(-1e-7, 2e-4)
+    # ax1.set_ylim(-1e-7, 2e-4)
     fig2.savefig(os.path.join(experiment, "spectrum.pdf"), bbox_inches='tight')
 
 

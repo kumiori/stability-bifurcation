@@ -437,7 +437,7 @@ class StabilitySolver(object):
         # import pdb; pdb.set_trace()
         # myviewer = PETSc.Viewer().createASCII("test.txt", mode=PETSc.Viewer.Format.ASCII_COMMON,comm= PETSc.COMM_WORLD)
         (neg, zero, pos) = Fm.getInertia()
-        log(LogLevel.INFO, "#Eigenvalues of E'': (%s [neg], %s [zero], %s [pos])" % (neg, zero, pos))
+        log(LogLevel.INFO, "INFO: #Eigenvalues of E'': (%s [neg], %s [zero], %s [pos])" % (neg, zero, pos))
         if neg:
             self.stable = False
         else:
@@ -573,12 +573,14 @@ class StabilitySolver(object):
 
             eigs = eigen.get_eigenvalues(nconv)
             negconv = sum(eigs[:,0]<0)
+            zeroconv = sum(abs(eigs[:,0])<3*float(self.eigen_parameters['eig_rtol']))
             # sanity check
             if nconv and negconv != negev:
                 log(LogLevel.WARNING, 'Eigen solver found {} negative evs '.format(negconv))
             if nconv == 0 and negev>0:
                 log(LogLevel.WARNING, 'Full eigensolver did not converge but inertia yields {} neg eigen'.format(negev))
                 return
+            log(LogLevel.WARNING, 'Eigen solver found {} (approx.) zero evs '.format(zeroconv))
 
             # eigen.save_eigenvectors(nconv)
 
@@ -588,7 +590,25 @@ class StabilitySolver(object):
                 log(LogLevel.INFO, "---------------------------")
                 for (i, k) in enumerate(eigs):
                     log(LogLevel.INFO,  "%d %12e %12e" %(i, k[0], k[1]) )
+
+                for (i, k) in enumerate(eigs):
+                    log(LogLevel.INFO, 'Processing perturbation mode {}'.format(i))
+                    eig, u_r, u_im, err = eigen.get_eigenpair(i)
+                    err2 = eigen.E.computeError(0, SLEPc.EPS.ErrorType.ABSOLUTE)
+                    v_n, beta_n = u_r.split(deepcopy=True)
+                    self.normalise_eigen(v_n, beta_n, mode='max')
+                    plt.clf()
+                    import pdb; pdb.set_trace()
+                    plt.colorbar(dolfin.plot(dot(v_n, v_n)**(.5)))
+                    plt.savefig('data/vn-{}.pdf'.format(i))
+                    plt.clf()
+                    plt.colorbar(dolfin.plot(beta_n))
+                    plt.savefig('data/betan-{}.pdf'.format(i))
+
+                    # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
+
                 log(LogLevel.INFO, '')
+
 
             linsearch = []
 
@@ -600,7 +620,8 @@ class StabilitySolver(object):
                     v_n, beta_n = u_r.split(deepcopy=True)
                     # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
 
-                    if  log_level == LogLevel.DEBUG and size == 1:
+                    # if  log_level == LogLevel.DEBUG
+                    if size == 1:
                         plt.clf()
                         plt.colorbar(dolfin.plot(dot(v_n, v_n)**(.5)))
                         plt.savefig('data/vn-{}-{}.pdf'.format(rank, n))
@@ -634,7 +655,8 @@ class StabilitySolver(object):
             log(LogLevel.INFO, 'Negative eigenvalues (based on inertia) {}'.format(negev))
             log(LogLevel.INFO, 'Stable (counting neg. eigs) {}'.format(not (negev > 0)))
             log(LogLevel.INFO, 'Stable (Computing min. ev) {}'.format(eig.real > float(self.eigen_parameters['eig_rtol'])))
-
+            log(LogLevel.INFO, 'INFO: mineig {}'.format(self.mineig))
+        
             self.stable = eig.real > float(self.eigen_parameters['eig_rtol'])  # based on eigenvalue
 
         return (self.stable, int(negev))
