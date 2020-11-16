@@ -382,8 +382,8 @@ class EquilibriumSolver:
             "alpha_error": [],
             "alpha_max": []}
 
-        log(LogLevel.WARNING,'self.damage.problem.lb[:]')
-        log(LogLevel.WARNING, '{}'.format(self.damage.problem.lb[:]))
+        # log(LogLevel.WARNING,'self.damage.problem.lb[:]')
+        # log(LogLevel.WARNING, '{}'.format(self.damage.problem.lb[:]))
 
         while criterion > self.parameters["tol"] and it < self.parameters["max_it"]:
             it = it + 1
@@ -509,6 +509,7 @@ class ElasticitySolver:
 
     def solve(self):
         # Get the problem
+        log(LogLevel.INFO, '________________________ EQUILIBRIUM _________________________')
         log(LogLevel.INFO, "Solving elasticity")
         problem = self.problem
         # Get the vector
@@ -718,5 +719,6 @@ class DamageProblemSNES(NonlinearProblem):
         # Update the current bound values
         # self.lb = alpha.copy(deepcopy = True).vector().vec()
         self.lb = alpha.copy(deepcopy = True).vector()
+        log(LogLevel.CRITICAL, '________________________ IRREV _________________________')
         log(LogLevel.CRITICAL, 'CRITICAL: Updated irreversibility')
 

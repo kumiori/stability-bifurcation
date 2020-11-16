@@ -404,7 +404,7 @@ class StabilitySolver(object):
         for parameter, value in self.inertia_parameters.items():
             # import pdb; pdb.set_trace()
             dolfin.PETScOptions.set(parameter, value)
-            log(LogLevel.INFO, 'INFO: Setting up inertia solver: {}: {}'.format(parameter, value))
+            log(LogLevel.DEBUG, 'DEBUG: Setting up inertia solver: {}: {}'.format(parameter, value))
 
         # dolfin.PETScOptions.set("inertia_ksp_type", "preonly")
         dolfin.PETScOptions.set("inertia_pc_type", "cholesky")
@@ -414,7 +414,7 @@ class StabilitySolver(object):
         # dolfin.PETScOptions.set("inertia_eps_monitor", 1)
 
         self.pc.setFromOptions()
-        self.pc.view()
+        # self.pc.view()
 
     def get_inertia(self, Mat = None, restricted_dof_is=None):
         if Mat == None:
@@ -627,8 +627,9 @@ class StabilitySolver(object):
                 self.eigendata = linsearch
 
             self.i +=1
+            log(LogLevel.INFO, '________________________ STABILITY _________________________')
             log(LogLevel.INFO, 'Negative eigenvalues (based on inertia) {}'.format(negev))
-            log(LogLevel.INFO, 'Stable (counting neg. eigs) :{}'.format(not (negev > 0)))
+            log(LogLevel.INFO, 'Stable (counting neg. eigs) {}'.format(not (negev > 0)))
             log(LogLevel.INFO, 'Stable (Computing min. ev) {}'.format(eig.real > float(self.eigen_parameters['eig_rtol'])))
 
             self.stable = eig.real > float(self.eigen_parameters['eig_rtol'])  # based on eigenvalue

@@ -74,10 +74,10 @@ def numerical_test(
     bifurcation_loads = []
 
     # Create mesh and define function space
-    geometry_parameters = {'Lx': 1., 'Ly': .1, 'n': 5}
+    geometry_parameters = {'Lx': 1., 'n': 5}
 
     # Define Dirichlet boundaries
-    outdir = '../test/output/test_secondorderevo'
+    outdir = '../test/output/test_1dcheck'
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
 
@@ -117,15 +117,17 @@ def numerical_test(
     with open(os.path.join(outdir, 'parameters.yaml'), "w") as f:
         yaml.dump(parameters, f, default_flow_style=False)
 
-    Lx = parameters['geometry']['Lx']; Ly = parameters['geometry']['Ly']
+    Lx = parameters['geometry']['Lx']; 
+    # Ly = parameters['geometry']['Ly']
     ell =  parameters['material']['ell']
-    comm = MPI.comm_world
-    geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
+    # comm = MPI.comm_world
+    # geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
     # import pdb; pdb.set_trace()
     # resolution = max(geometry_parameters['n'] * Lx / ell, 1/(Ly*10))
-    resolution = max(geometry_parameters['n'] * Lx / ell, 5/(Ly*10))
+    # resolution = max(geometry_parameters['n'] * Lx / ell, 5/(Ly*10))
     resolution = 50
-    mesh = mshr.generate_mesh(geom,  resolution)
+    mesh = dolfin.IntervalMesh(50, -Lx/2., Lx/2.)
+    # mesh = dolfin.IntervalMesh(int(float(geometry_parameters['n'] * Lx / ell)), -Lx/2., Lx/2.)
     meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
     meshf << mesh
     plot(mesh)
@@ -134,7 +136,7 @@ def numerical_test(
     savelag = 1
     left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
     right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
-    left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
+    # left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
 
     mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
     right.mark(mf, 1)
@@ -144,7 +146,7 @@ def numerical_test(
     dx = dolfin.Measure("dx", metadata=form_compiler_parameters, domain=mesh)
 
     # Function Spaces
-    V_u = dolfin.VectorFunctionSpace(mesh, "CG", 1)
+    V_u = dolfin.FunctionSpace(mesh, "CG", 1)
     V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
     u = dolfin.Function(V_u, name="Total displacement")
     alpha = Function(V_alpha)
@@ -160,9 +162,10 @@ def numerical_test(
     v, beta = dolfin.split(z)
 
     ut = dolfin.Expression("t", t=0.0, degree=0)
-    bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), left),
-             dolfin.DirichletBC(V_u.sub(0), ut, right),
-             dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
+    bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant(0), left),
+             dolfin.DirichletBC(V_u, ut, right),
+             # dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")
+             ]
 
     bcs_alpha_l = DirichletBC(V_alpha,  Constant(0.0), left)
     bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
@@ -181,17 +184,16 @@ def numerical_test(
     a = (1 - alpha) ** 2. + k_res
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
     w = w_1 * alpha
-    eps = sym(grad(u))
-    lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
-    mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
-    Wu = 1./2.* lmbda0 * tr(eps)**2. + mu0 * inner(eps, eps)
+    eps = u.dx(0)
+    # lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
+    mu0 = parameters['material']['E']/ 2.
+    Wu = mu0 * inner(eps, eps)
 
     energy = a * Wu * dx + w_1 *( alpha + \
-            parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
+            parameters['material']['ell']** 2.* alpha.dx(0)**2.)*dx
 
     eps_ = variable(eps)
     sigma = diff(a * Wu, eps_)
-    e1 = dolfin.Constant([1, 0])
 
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True
@@ -216,7 +218,7 @@ def numerical_test(
     load_steps = np.linspace(parameters['loading']['load_min'],
         parameters['loading']['load_max'],
         parameters['loading']['n_steps'])
-
+    xs = np.linspace(-parameters['geometry']['Lx']/2., parameters['geometry']['Lx']/2, 50)
     for it, load in enumerate(load_steps):
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
@@ -262,13 +264,14 @@ def numerical_test(
         time_data_i["elastic_energy"] = dolfin.assemble(
             1./2.* material_parameters['E']*a*eps**2. *dx)
         time_data_i["dissipated_energy"] = dolfin.assemble(
-            (w + w_1 * material_parameters['ell'] ** 2. * inner(grad(alpha), grad(alpha)))*dx)
+    # e1 = dolfin.Constant([1, 0])
+            (w + w_1 * material_parameters['ell'] ** 2. * alpha.dx(0)**2.)*dx)
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
 
-        snn = dolfin.dot(dolfin.dot(sigma, e1), e1)
-        time_data_i["sigma"] = 1/parameters['geometry']['Ly'] * dolfin.assemble(snn*ds(1))
+        # snn = dolfin.dot(dolfin.dot(sigma, e1), e1)
+        time_data_i["sigma"] = dolfin.assemble(a*mu0*eps*ds(1))
 
         log(LogLevel.INFO,
             "Load/time step {:.4g}: iteration: {:3d}, err_alpha={:.4g}".format(
@@ -289,7 +292,7 @@ def numerical_test(
 
             time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
-        spacetime.append(get_trace(alpha))
+        spacetime.append([alpha(x) for x in xs])
 
 
         if save_current_bifurcation:
@@ -352,10 +355,10 @@ def numerical_test(
 
 
     xs = np.linspace(-Lx/2., Lx/2., 100)
-    profile = np.array([alpha(x, 0) for x in xs])
+    profile = np.array([alpha(x) for x in xs])
     plt.figure()
     plt.plot(xs, profile, marker='o')
-    plt.plot(xs, np.array([u(x, 0) for x in xs]))
+    plt.plot(xs, np.array([u(x) for x in xs]))
     # plt.ylim(0., 1.)
     plt.savefig(os.path.join(outdir, 'profile.pdf'))
 
@@ -379,6 +382,7 @@ if __name__ == "__main__":
     data, experiment = numerical_test(user_parameters = parameters)
     print(data)
 
+    log(LogLevel.INFO, '________________________ VIZ _________________________')
     log(LogLevel.INFO, "Postprocess")
     import postprocess as pp
 
@@ -394,7 +398,7 @@ if __name__ == "__main__":
     # import pdb; pdb.set_trace()
     fig1, ax1 =pp.plot_energy(parameters, data, tc)
     # visuals.setspines2()
-    print(data['elastic_energy'])
+    # print(data['elastic_energy'])
     mu = parameters['material']['E']/2.
     # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
     # Lx = 1.
@@ -402,7 +406,7 @@ if __name__ == "__main__":
     # Omega = Lx*Ly
     elast_en = [1./2.*parameters['material']['E']*eps**2 for eps in data['load']]
     plt.plot(data['load'], elast_en, c='k', label='analytic')
-    plt.axhline(parameters['geometry']['Ly'], c='k')
+    plt.axhline(1., c='k')
     plt.legend()
 
     plt.ylim(0, 1.)
