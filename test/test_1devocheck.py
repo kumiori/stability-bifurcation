@@ -163,6 +163,8 @@ def numerical_test(
     Z = dolfin.FunctionSpace(mesh, 
             dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
     z = dolfin.Function(Z)
+    z2 = dolfin.Function(Z)
+    dz = dolfin.TestFunction(Z)
     v, beta = dolfin.split(z)
 
     ut = dolfin.Expression("t", t=0.0, degree=0)
@@ -196,26 +198,40 @@ def numerical_test(
     energy = a * Wu * dx + w_1 *( alpha + \
             parameters['material']['ell']** 2.* alpha.dx(0)**2.)*dx
 
-    def rP(u, alpha, v, beta):
+    def rP(z, z2):
         # w_1 = w(1)
-        sigma = lambda v: parameters['material']['E']*v.dx(0)
-        eps = u.dx(0)
+        # z.split returns Coefficient
+        # split(z) returns Indexed(Coefficient)
         # import pdb; pdb.set_trace()
+        u, alpha = z.split()
+        v, beta = dolfin.split(z2)
+        sigma = lambda v: parameters['material']['E']*v.dx(0)
+        # s = lambda alpha: a
+        eps = u.dx(0)
+        # eps = lambda v: v.dx(0)
         return (sqrt(a)*sigma(v) + diff(a, alpha)/sqrt(a)*sigma(u)*beta)* \
-                    (sqrt(a)*v.dx(0) + diff(a, alpha)/sqrt(a)*eps*beta) + \
+                (sqrt(a)*v.dx(0) + diff(a, alpha)/sqrt(a)*eps*beta) + \
                     2*w_1*ell ** 2 * beta.dx(0)*beta.dx(0)
 
-    def rN(u, alpha, beta):
+    def rN(z, z2):
+        u, alpha = z.split()
+        v, beta = dolfin.split(z2)
         sigma = lambda v: parameters['material']['E']*v.dx(0)
         eps = u.dx(0)
         da = diff(a, alpha)
         dda = diff(diff(a, alpha), alpha)
-        # ddw = diff(diff(w, alpha), alpha)
 
-        return -(1./2.*(dda - 2*da**2./a)*inner(sigma(u), eps))*beta**2.
+        return -((dda - 2*da**2./a)*1./2.*inner(sigma(u), eps))*beta**2.
 
-    rP = rP(u, alpha, v, beta)*dx
-    rN = rN(u, alpha, beta)*dx
+    # linear form
+    rP = rP(z, z2)*dx
+    rN = rN(z, z2)*dx
+
+    (zu, za) = dolfin.split(z)
+    mixener = ufl.replace(energy, {u: zu, alpha: za})
+    Hessian = derivative(derivative(mixener, z, TestFunction(Z)), z, TrialFunction(Z))
+
+    # import pdb; pdb.set_trace()
 
     eps_ = variable(eps)
     sigma = diff(a * Wu, eps_)
@@ -238,7 +254,8 @@ def numerical_test(
 
 
     solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
-    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh=[rP, rN])
+    # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh=[rP, rN])
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], Hessian=Hessian)
     linesearch = LineSearch(energy, state)
 
     load_steps = np.linspace(parameters['loading']['load_min'],

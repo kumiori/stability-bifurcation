@@ -16,6 +16,8 @@ from dolfin.cpp.log import log, LogLevel, get_log_level
 import mpi4py
 import yaml 
 
+from dolfin import derivative, assemble
+
 comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
@@ -51,13 +53,13 @@ class EigenSolver(object):
 
         if type(a_k) == ufl.form.Form:
             # a form to be assembled
-            self.K = dolfin.as_backend_type(dolfin.assemble(a_k)).mat()
+            self.K = dolfin.as_backend_type(assemble(a_k)).mat()
         elif type(a_k) == petsc4py.PETSc.Mat:
             # an assembled petsc matrix
             self.K = a_k
 
         if a_m is not None and type(a_m) == ufl.form.Form:
-            self.M = dolfin.as_backend_type(dolfin.assemble(a_m)).mat()
+            self.M = dolfin.as_backend_type(assemble(a_m)).mat()
         elif a_m is not None and type(a_m) == petsc4py.PETSc.Mat:
             self.M = a_m
 
@@ -184,7 +186,7 @@ class EigenSolver(object):
 
 class StabilitySolver(object):
     """solves second order stability problem"""
-    def __init__(self, energy, state, bcs, rayleigh=None,
+    def __init__(self, energy, state, bcs, rayleigh=None, Hessian = None,
         nullspace=None, parameters=None):
         OptDB = PETSc.Options()
         OptDB.view()
@@ -245,24 +247,36 @@ class StabilitySolver(object):
         self.negev = -1
 
 
-        self.Ealpha = dolfin.derivative(energy, self.alpha, dolfin.TestFunction(self.alpha.ufl_function_space()))
+        self.Ealpha = derivative(energy, self.alpha, dolfin.TestFunction(self.alpha.ufl_function_space()))
         self.energy = energy
 
         (z_u, z_a) = dolfin.split(self.z)
         # energy = ufl.replace(energy, {self.u: z_u, self.alpha: z_a})
         energy = ufl.replace(energy, {state['u']: z_u, state['alpha']: z_a})
-        self.J = dolfin.derivative(energy, self.z, dolfin.TestFunction(self.Z))
-        self.H = dolfin.derivative(self.J, self.z, dolfin.TrialFunction(self.Z))
+        self.J = derivative(energy, self.z, dolfin.TestFunction(self.Z))
+        self.H = derivative(self.J, self.z, dolfin.TrialFunction(self.Z))
 
         self.nullspace = nullspace
 
         if rayleigh:
             rP = rayleigh[0]
             rN = rayleigh[1]
-            self.rP = dolfin.derivative(dolfin.derivative(rP, self.z, dolfin.TestFunction(self.Z)),
+            import pdb; pdb.set_trace()
+            # rN = ufl.replace(rN, {state['u']: z_u, state['alpha']: z_a})
+            # rP = ufl.replace(rP, {state['u']: z_u, state['alpha']: z_a})
+
+            self.rayleigh = {'rP': rP, 'rN': rN}
+            self.rP = derivative(rP, self.z, dolfin.TrialFunction(self.Z))
+            self.rN = derivative(rN, self.z, dolfin.TrialFunction(self.Z))
+
+            self.rP = derivative(derivative(rP, self.z, dolfin.TestFunction(self.Z)),
                                                               self.z, dolfin.TrialFunction(self.Z))
-            self.rN = dolfin.derivative(dolfin.derivative(rN, self.z, dolfin.TestFunction(self.Z)),
+            self.rN = derivative(derivative(rN, self.z, dolfin.TestFunction(self.Z)),
                                                               self.z, dolfin.TrialFunction(self.Z))
+        if Hessian:
+            self.Hessian =  Hessian
+            # self.Hessian =  derivative(derivative(Hessian, self.z, dolfin.TestFunction(self.Z)),
+                                                              # self.z, dolfin.TrialFunction(self.Z))
 
         self.ownership_range = self.Z.dofmap().ownership_range()
         if len(bcs)>0:
@@ -356,18 +370,26 @@ class StabilitySolver(object):
         self.bcs_Z = bcs_Z
         return self.bc_dofs
 
-    def is_elastic(self, z, z_old):
-        tol = 1e-6
-        elastic_dofs = ((z.vector() - z_old.vector()) < tol)
+    def is_elastic(self):
+        # tol = 1e-6
+        # elastic_dofs = ((z.vector() - z_old.vector()) < tol)
 
-        return np.all(elastic_dofs)
+        Ealpha = assemble(self.Ealpha)
+        vec = dolfin.PETScVector(MPI.comm_self)
+        Ealpha.gather(vec, np.array(range(self.Z.sub(1).dim()), "intc"))
+
+        if np.all(Ealpha[:]>0):
+            return True
+        else:
+            return False
+        # return np.all(elastic_dofs)
 
     def get_inactive_set(self):
         tol = self.parameters['inactiveset_atol']
         debug= False
-        log(LogLevel.DEBUG, 'Inactive set tolerance {}'.format(self.parameters['inactiveset_atol']))
+        log(LogLevel.DEBUG, 'DEBUG: Inactive set tolerance {}'.format(self.parameters['inactiveset_atol']))
 
-        Ealpha = dolfin.assemble(self.Ealpha)
+        Ealpha = assemble(self.Ealpha)
         vec = dolfin.PETScVector(MPI.comm_self)
         Ealpha.gather(vec, np.array(range(self.Z.sub(1).dim()), "intc"))
 
@@ -389,8 +411,8 @@ class StabilitySolver(object):
         return inactive_set
 
     def reduce_Hessian(self, Hessian=None, restricted_dofs_is=None):
-        if not Hessian: H = dolfin.as_backend_type(dolfin.assemble(self.H)).mat()
-        else: H = dolfin.as_backend_type(dolfin.assemble(Hessian)).mat()
+        if not Hessian: H = dolfin.as_backend_type(assemble(self.H)).mat()
+        else: H = dolfin.as_backend_type(assemble(Hessian)).mat()
         if restricted_dofs_is is not None:
             try:
                 H_reduced = H.createSubMatrix(restricted_dofs_is, restricted_dofs_is)
@@ -421,7 +443,7 @@ class StabilitySolver(object):
 
     def get_inertia(self, Mat = None, restricted_dof_is=None):
         if Mat == None:
-            H = dolfin.as_backend_type(dolfin.assemble(self.H)).mat()
+            H = dolfin.as_backend_type(assemble(self.H)).mat()
         else:
             H = Mat
         if restricted_dof_is is not None:
@@ -465,7 +487,6 @@ class StabilitySolver(object):
         else:
             raise RuntimeError("Cannot project perturbation")
 
-
     def is_compatible(self, bcs, v, homogeneous = False, tol=dolfin.DOLFIN_EPS_LARGE):
         V = v.function_space()
         v_array = v.vector()[:]
@@ -508,12 +529,13 @@ class StabilitySolver(object):
 
         # A convoluted way to do a simple thing. FIXME
         # import pdb; pdb.set_trace()
-        _alpha_old = dolfin.Function(self.alpha.function_space())
-        _alpha_old.vector()[:] = self.alpha_old[:] 
-        self.assigner.assign(self.z_old, [self.u_zero, _alpha_old])
-        self.assigner.assign(self.z, [self.u_zero, self.alpha])
+        # _alpha_old = dolfin.Function(self.alpha.function_space())
+        # _alpha_old.vector()[:] = self.alpha_old[:] 
+        self.assigner.assign(self.z, [self.u, self.alpha])
+        # self.assigner.assign(self.z_old, [self.u_zero, _alpha_old])
+        # self.assigner.assign(self.z, [self.u_zero, self.alpha])
 
-        if self.is_elastic(self.z, self.z_old):
+        if self.is_elastic():
             log(LogLevel.INFO, 'Current state: elastic')
             self.stable = True
             self.negev = np.nan
@@ -533,16 +555,20 @@ class StabilitySolver(object):
             self.H2 = self.rP - self.rN
             import pdb; pdb.set_trace()
 
-        if hasattr(self, 'H2'):
+        if hasattr(self, 'Hessian'):
             log(LogLevel.INFO, 'Inertia: Using user-provided Hessian')
-            self.H_reduced = self.reduce_Hessian(self.H2, restricted_dofs_is = index_set)
+            self.H_reduced = self.reduce_Hessian(self.Hessian, restricted_dofs_is = index_set)
+            log(LogLevel.INFO, 'Hessian norm {}'.format(assemble(self.Hessian).norm('frobenius')))
         else:
             log(LogLevel.INFO, 'Inertia: Using computed Hessian')
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
 
+        log(LogLevel.INFO, 'H norm {}'.format(assemble(self.H).norm('frobenius')))
+
         self.inertia_setup()
 
         negev = self.get_inertia(self.H_reduced)
+        # import pdb; pdb.set_trace()
 
         # if negev > 0:
         if True:
@@ -551,14 +577,14 @@ class StabilitySolver(object):
             eigen_tol = self.eigen_parameters['eig_rtol']
             if hasattr(self, 'H2'):
                 log(LogLevel.PROGRESS, 'PROGRESS: Full eig: Using user-provided Hessian')
-                log(LogLevel.PROGRESS, 'PROGRESS: Norm provided {}'.format(dolfin.assemble(self.H2).norm('frobenius')))
+                log(LogLevel.PROGRESS, 'PROGRESS: Norm provided {}'.format(assemble(self.H2).norm('frobenius')))
                 eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
             else:
                 log(LogLevel.PROGRESS, 'PROGRESS: Full eig: Using computed Hessian')
                 eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
-            log(LogLevel.PROGRESS, 'PROGRESS: Norm computed {}'.format(dolfin.assemble(self.H).norm('frobenius')))
-            self.computed.append(dolfin.assemble(self.H).norm('frobenius'))
-            if hasattr(self, 'H2'): self.provided.append(dolfin.assemble(self.H2).norm('frobenius'))
+            log(LogLevel.PROGRESS, 'PROGRESS: Norm computed {}'.format(assemble(self.H).norm('frobenius')))
+            self.computed.append(assemble(self.H).norm('frobenius'))
+            if hasattr(self, 'H2'): self.provided.append(assemble(self.H2).norm('frobenius'))
 
             maxmodes = self.parameters['maxmodes']
 
@@ -598,11 +624,15 @@ class StabilitySolver(object):
                     v_n, beta_n = u_r.split(deepcopy=True)
                     self.normalise_eigen(v_n, beta_n, mode='max')
                     plt.clf()
-                    import pdb; pdb.set_trace()
-                    plt.colorbar(dolfin.plot(dot(v_n, v_n)**(.5)))
+                    # import pdb; pdb.set_trace()
+                    # plt.colorbar(
+                    dolfin.plot(dot(v_n, v_n)**(.5))
+                        # )
                     plt.savefig('data/vn-{}.pdf'.format(i))
                     plt.clf()
-                    plt.colorbar(dolfin.plot(beta_n))
+                    # plt.colorbar(
+                    dolfin.plot(beta_n)
+                    # )
                     plt.savefig('data/betan-{}.pdf'.format(i))
 
                     # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
@@ -623,8 +653,10 @@ class StabilitySolver(object):
                     # if  log_level == LogLevel.DEBUG
                     if size == 1:
                         plt.clf()
-                        plt.colorbar(dolfin.plot(dot(v_n, v_n)**(.5)))
-                        plt.savefig('data/vn-{}-{}.pdf'.format(rank, n))
+                        # plt.colorbar(
+                        dolfin.plot(dot(v_n, v_n)**(.5))
+                        # )
+                        plt.savefig('data/neg-vn-{}-{}.pdf'.format(rank, n))
 
                     self.normalise_eigen(v_n, beta_n, mode='max')
                     beta_n = self.project(beta_n, mode=self.parameters['projection'])
