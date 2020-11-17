@@ -531,6 +531,7 @@ class StabilitySolver(object):
 
         if hasattr(self, 'rP') and hasattr(self, 'rN'):
             self.H2 = self.rP - self.rN
+            import pdb; pdb.set_trace()
 
         if hasattr(self, 'H2'):
             log(LogLevel.INFO, 'Inertia: Using user-provided Hessian')
@@ -540,7 +541,6 @@ class StabilitySolver(object):
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
 
         self.inertia_setup()
-        # import pdb; pdb.set_trace()
 
         negev = self.get_inertia(self.H_reduced)
 
