@@ -212,10 +212,15 @@ def numerical_test(
 
     solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
     stability = StabilitySolver(mesh, energy, state, bcs, z, parameters = parameters['stability'])
+    linesearch = LineSearch(energy, state)
+
+    xs = np.linspace(-parameters['geometry']['Lx']/2., parameters['geometry']['Lx']/2, 50)
 
     load_steps = np.linspace(parameters['loading']['load_min'],
         parameters['loading']['load_max'],
         parameters['loading']['n_steps'])
+    log(LogLevel.INFO, '====================== EVO ==========================')
+    log(LogLevel.INFO, '{}'.format(parameters))
 
     for it, load in enumerate(load_steps):
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
