@@ -254,8 +254,9 @@ def numerical_test(
 
 
     solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
     # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh=[rP, rN])
-    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], Hessian=Hessian)
+    # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], Hessian=Hessian)
     linesearch = LineSearch(energy, state)
 
     load_steps = np.linspace(parameters['loading']['load_min'],

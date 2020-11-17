@@ -508,6 +508,7 @@ class StabilitySolver(object):
         # debug = False
         self.alpha_old = alpha_old
         postfix = 'seq' if size == 1 else 'mpi'
+        self.H_norm = assemble(self.H).norm('frobenius')
 
         locnumbcs = np.array(len(self.bc_dofs))
         # if debug:
@@ -559,6 +560,7 @@ class StabilitySolver(object):
             log(LogLevel.INFO, 'Inertia: Using user-provided Hessian')
             self.H_reduced = self.reduce_Hessian(self.Hessian, restricted_dofs_is = index_set)
             log(LogLevel.INFO, 'Hessian norm {}'.format(assemble(self.Hessian).norm('frobenius')))
+            self.Hessian_norm = assemble(self.Hessian).norm('frobenius')
         else:
             log(LogLevel.INFO, 'Inertia: Using computed Hessian')
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
@@ -576,13 +578,17 @@ class StabilitySolver(object):
         # solve full eigenvalue problem
             eigen_tol = self.eigen_parameters['eig_rtol']
             if hasattr(self, 'H2'):
-                log(LogLevel.PROGRESS, 'PROGRESS: Full eig: Using user-provided Hessian')
-                log(LogLevel.PROGRESS, 'PROGRESS: Norm provided {}'.format(assemble(self.H2).norm('frobenius')))
+                log(LogLevel.INFO, 'INFO: Full eigenvalue: Using user-provided Rayleigh quotient')
+                log(LogLevel.INFO, 'INFO: Norm provided {}'.format(assemble(self.H2).norm('frobenius')))
                 eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
+            elif hasattr(self, 'Hessian'):
+                log(LogLevel.INFO, 'INFO: Full eigenvalue: Using user-provided Hessian')
+                log(LogLevel.INFO, 'INFO: Norm provided {}'.format(assemble(self.Hessian).norm('frobenius')))
+                eigen = EigenSolver(self.Hessian, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
             else:
-                log(LogLevel.PROGRESS, 'PROGRESS: Full eig: Using computed Hessian')
+                log(LogLevel.INFO, 'INFO: Full eig: Using computed Hessian')
                 eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
-            log(LogLevel.PROGRESS, 'PROGRESS: Norm computed {}'.format(assemble(self.H).norm('frobenius')))
+            log(LogLevel.INFO, 'INFO: Norm computed {}'.format(assemble(self.H).norm('frobenius')))
             self.computed.append(assemble(self.H).norm('frobenius'))
             if hasattr(self, 'H2'): self.provided.append(assemble(self.H2).norm('frobenius'))
 
@@ -625,6 +631,7 @@ class StabilitySolver(object):
                     self.normalise_eigen(v_n, beta_n, mode='max')
                     plt.clf()
                     # import pdb; pdb.set_trace()
+                if  log_level == LogLevel.DEBUG and size == 1:
                     # plt.colorbar(
                     dolfin.plot(dot(v_n, v_n)**(.5))
                         # )
@@ -650,8 +657,8 @@ class StabilitySolver(object):
                     v_n, beta_n = u_r.split(deepcopy=True)
                     # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
 
-                    # if  log_level == LogLevel.DEBUG
-                    if size == 1:
+                    if  log_level == LogLevel.DEBUG and size == 1:
+                    # if size == 1:
                         plt.clf()
                         # plt.colorbar(
                         dolfin.plot(dot(v_n, v_n)**(.5))
