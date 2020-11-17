@@ -130,6 +130,7 @@ try:
         plt.plot(xs, field, label="{}".format(name))
         np.save(os.path.join(experiment, name), fieldv,
             allow_pickle=True, fix_imports=True)
+    plt.savefig(os.path.join(experiment, "fields.pdf"), bbox_inches='tight')
     plt.clf()
     plt.figure()
     for n in range(maxmodes):
