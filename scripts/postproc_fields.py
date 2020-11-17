@@ -37,6 +37,7 @@ args, unknown = parser.parse_known_args()
 print(args)
 if args.experiment is not None:
     rootdir = args.experiment
+    experiment = args.experiment
 print(rootdir)
 stride = args.stride
 
@@ -121,18 +122,24 @@ try:
         file.read_checkpoint(alpha_bif, 'alpha-bif')
     
     plt.figure()
+    plt.clf()
     for field, name in zip(fields, ['beta0', 'alpha_old', 'alpha_bif', 'alpha0']):
         if onedim:
             fieldv = [field(x) for x in xs]
         else:
             fieldv = [field(x, h0) for x in xs]
+
         log(LogLevel.INFO, 'INFO: saving {}'.format(name))
-        plt.plot(xs, field, label="{}".format(name))
+        plt.plot(xs, fieldv, label=r"${}$".format(name))
         np.save(os.path.join(experiment, name), fieldv,
             allow_pickle=True, fix_imports=True)
+
+    plt.legend(loc='lower left')
     plt.savefig(os.path.join(experiment, "fields.pdf"), bbox_inches='tight')
+
     plt.clf()
     plt.figure()
+
     for n in range(maxmodes):
         modename = 'beta%d'%(n)
         log(LogLevel.INFO, 'INFO: Reading mode: {}'.format(modename))
@@ -146,6 +153,8 @@ try:
         np.save(os.path.join(experiment, "beta-{}".format(n)), betanv,
             allow_pickle=True, fix_imports=True)
         plt.plot(xs, betanv, label="beta-{}".format(n))
+
+    plt.legend(loc='lower left')
     plt.savefig(os.path.join(experiment, "betan.pdf"), bbox_inches='tight')
 
 except Exception as e: 
