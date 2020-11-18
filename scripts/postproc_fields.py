@@ -53,7 +53,7 @@ load_max = params['loading']['load_max']
 nsteps = params['loading']['n_steps']
 Lx = params['geometry']['Lx']
 
-onedim = True
+onedim = False
 if not onedim:
 	Ly = params['geometry']['Ly']
 

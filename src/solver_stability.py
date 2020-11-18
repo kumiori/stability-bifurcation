@@ -631,17 +631,17 @@ class StabilitySolver(object):
                     self.normalise_eigen(v_n, beta_n, mode='max')
                     plt.clf()
                     # import pdb; pdb.set_trace()
-                if  log_level == LogLevel.DEBUG and size == 1:
+                if size == 1:
+                # if  log_level == LogLevel.DEBUG and size == 1:
                     # plt.colorbar(
-                    dolfin.plot(dot(v_n, v_n)**(.5))
+                    plt.colorbar(dolfin.plot(dot(v_n, v_n)**(.5)))
                         # )
                     plt.savefig('data/vn-{}.pdf'.format(i))
                     plt.clf()
                     # plt.colorbar(
-                    dolfin.plot(beta_n)
+                    plt.colorbar(dolfin.plot(beta_n))
                     # )
                     plt.savefig('data/betan-{}.pdf'.format(i))
-
                     # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
 
                 log(LogLevel.INFO, '')

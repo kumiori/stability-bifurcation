@@ -1,12 +1,12 @@
 import dolfin
 import numpy as np
-from utils import ColorPrint
-
+# from utils import log
 import mpi4py
 
 comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
+from dolfin.cpp.log import log, LogLevel, set_log_level
 
 
 class LineSearch(object):
@@ -53,14 +53,14 @@ class LineSearch(object):
         hmin = float(hmin_glob)
 
         if hmin>0:
-            ColorPrint.print_warn('Line search troubles: found hmin>0')
-            return 0., np.nan, (0., 0.), 0.
+            log(LogLevel.INFO, 'Line search troubles: found hmin>0')
+            return (0., 0.)
         if hmax==0 and hmin==0:
-            ColorPrint.print_warn('Line search failed: found zero step size')
-            return 0., np.nan, (0., 0.), 0.
+            log(LogLevel.INFO, 'Line search failed: found zero step size')
+            return (0., 0.)
         if hmax < hmin:
-            ColorPrint.print_warn('Line search failed: optimal h* not admissible')
-            return 0., np.nan, (0., 0.), 0.
+            log(LogLevel.INFO, 'Line search failed: optimal h* not admissible')
+            return (0., 0.)
             # get next perturbation mode
 
         return hmin, hmax
@@ -89,48 +89,50 @@ class LineSearch(object):
 
         htest = np.linspace(self.hmin, self.hmax, m+1)
 
-        for h in htest:
-            uval = u_0[:]     + h*v_n.vector()[:]
-            aval = alpha_0[:] + h*beta_n.vector()[:]
 
-            if not np.all(aval - alpha_old.vector()[:] + dolfin.DOLFIN_EPS_LARGE >= 0.):
-                import pdb; pdb.set_trace()
-                raise Exception('Damage test field doesn\'t verify sharp irrev from below')
-            if not np.all(aval <= self.upperbound):
-                import pdb; pdb.set_trace()
-                raise Exception('Damage test field doesn\'t verify irrev from above')
+        if self.hmin == 0. and self.hmax == 0.:
+            return 0., (0., 0.), [] 
+        else: 
+            for h in htest:
+                uval = u_0[:]     + h*v_n.vector()[:]
+                aval = alpha_0[:] + h*beta_n.vector()[:]
 
-            u.vector()[:] = uval
-            alpha.vector()[:] = aval
+                if not np.all(aval - alpha_old.vector()[:] + dolfin.DOLFIN_EPS_LARGE >= 0.):
+                    raise Exception('Damage test field doesn\'t verify sharp irrev from below')
+                if not np.all(aval <= self.upperbound):
+                    raise Exception('Damage test field doesn\'t verify irrev from above')
 
-            u.vector().vec().ghostUpdate()
-            alpha.vector().vec().ghostUpdate()
+                u.vector()[:] = uval
+                alpha.vector()[:] = aval
 
-            en.append(dolfin.assemble(self.energy)-en0)
-            # if debug and size == 1:
-                # ax2.plot(xs, [self.alpha(x, 0) for x in xs], label='$\\alpha+h \\beta_{{{}}}$, h={:.3f}'.format(mode, h), lw=.5, c='C1' if h>0 else 'C4')
+                u.vector().vec().ghostUpdate()
+                alpha.vector().vec().ghostUpdate()
 
-        z = np.polyfit(htest, en, m)
-        p = np.poly1d(z)
-        # import pdb; pdb.set_trace()
+                en.append(dolfin.assemble(self.energy)-en0)
+                # if debug and size == 1:
+                    # ax2.plot(xs, [self.alpha(x, 0) for x in xs], label='$\\alpha+h \\beta_{{{}}}$, h={:.3f}'.format(mode, h), lw=.5, c='C1' if h>0 else 'C4')
+    
+            z = np.polyfit(htest, en, m)
+            p = np.poly1d(z)
 
-        if m==2:
-            ColorPrint.print_info('Line search using quadratic interpolation')
-            h_opt = - z[1]/(2*z[0])
-        else:
-            ColorPrint.print_info('Line search using polynomial interpolation (order {})'.format(m))
-            h = np.linspace(self.hmin, self.hmax, 100)
-            h_opt = h[np.argmin(p(h))]
 
-        if h_opt < self.hmin or h_opt > self.hmax:
-            ColorPrint.print_warn('Line search failed, h_opt={:3e} not in feasible interval'.format(h_opt))
-            return h_opt, self.hmin, self.hmax
+            if m==2:
+                log(LogLevel.INFO, 'Line search using quadratic interpolation')
+                h_opt = - z[1]/(2*z[0])
+            else:
+                log(LogLevel.INFO, 'Line search using polynomial interpolation (order {})'.format(m))
+                h = np.linspace(self.hmin, self.hmax, 100)
+                h_opt = h[np.argmin(p(h))]
 
-        ColorPrint.print_info('Line search h_opt = {:3f} in ({:.3f}, {:.3f}), h_opt/hmax {:3f}\
+            if h_opt < self.hmin or h_opt > self.hmax:
+                log(LogLevel.INFO, 'Line search failed, h_opt={:3e} not in feasible interval'.format(h_opt))
+                return h_opt, self.hmin, self.hmax
+
+        log(LogLevel.INFO, 'Line search h_opt = {:3f} in ({:.3f}, {:.3f}), h_opt/hmax {:3f}\
             '.format(h_opt, self.hmin, self.hmax, h_opt/self.hmax))
-        ColorPrint.print_info('Line search polynomial approximation =\n {}'.format(p))
-        ColorPrint.print_info('h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
-        ColorPrint.print_warn('Line search estimate, relative energy variation={:.2f}%'.format((p(h_opt))/en0*100))
+        log(LogLevel.INFO, 'Line search polynomial approximation =\n {}'.format(p))
+        log(LogLevel.INFO, 'h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
+        log(LogLevel.INFO, 'Line search estimate, relative energy variation={:.2f}%'.format((p(h_opt))/en0*100))
 
         # restore solution
         u.vector()[:] = u_0[:]
