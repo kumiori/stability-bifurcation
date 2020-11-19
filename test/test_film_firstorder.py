@@ -56,7 +56,7 @@ import yaml
 from utils import get_versions
 code_parameters = get_versions()
 
-set_log_level(LogLevel.PROGRESS)
+set_log_level(LogLevel.DEBUG)
 
 def compile_continuation_data(state, energy):
     continuation_data_i = {}
@@ -84,7 +84,7 @@ def numerical_test(
 
     # Define Dirichlet boundaries
     comm = MPI.comm_world
-    outdir = '../test/output/test_film'
+    outdir = '../test/output/test_film_firstorder'
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     with open('../parameters/form_compiler.yml') as f:
@@ -133,8 +133,6 @@ def numerical_test(
         meshf << mesh
         plot(mesh)
         plt.savefig(os.path.join(outdir, "mesh.pdf"), bbox_inches='tight')
-
-    plt.savefig(os.path.join(outdir, "mesh.pdf"), bbox_inches='tight')
 
     with open(os.path.join(outdir, 'parameters.yaml'), "w") as f:
         yaml.dump(parameters, f, default_flow_style=False)
@@ -255,8 +253,7 @@ def numerical_test(
     alpha_bif_old = dolfin.Function(V_alpha)
     bifurcation_loads = []
     perturb = False
-    _file = dolfin.XDMFFile(os.path.join(outdir, "test.xdmf"))
-    
+
     for step, load in enumerate(load_steps):
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
@@ -284,104 +281,112 @@ def numerical_test(
             bifurcation_loads.append(load)
             modes = np.where(stability.eigs < 0)[0]
 
-            with file_bif_postproc as file:
-                leneigs = len(modes)
-                maxmodes = min(3, leneigs)
-                for n in range(maxmodes):
-                    mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
-                    modename = 'beta-%d'%n
-                    print(modename)
-                    file.write_checkpoint(mode, modename, 0, append=True)
+            # with dolfin.XDMFFile(os.path.join(outdir, "postproc.xdmf")) as file:
+            #     leneigs = len(modes)
+            #     maxmodes = min(3, leneigs)
+            #     for n in range(maxmodes):
+            #         mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
+            #         modename = 'beta-%d'%n
+            #         print(modename)
+            #         file.write_checkpoint(mode, modename, 0, append=True)
 
             bifurc_i += 1
 
         lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
 
         # we postpone the update after the stability check
-        if stable:
-            solver.update()
-            log(LogLevel.INFO,'    Current state is{}stable'.format(' ' if stable else ' un'))
-        else:
-            # Continuation
-            iteration = 1
-            while stable == False:
-                # linesearch
-                save_current_bifurcation = True
+        # solver.update()
+        log(LogLevel.INFO,'    Current state is{}stable'.format(' ' if stable else ' un'))
 
-                cont_data_pre = compile_continuation_data(state, energy)
-                perturbation_v    = stability.perturbation_v
-                perturbation_beta = stability.perturbation_beta
+        if not stable:
+            save_current_bifurcation = True
+            perturbation_v    = stability.perturbation_v
+            perturbation_beta = stability.perturbation_beta
+            h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
+                {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
+                perturbation_v, perturbation_beta)
 
-                # import pdb; pdb.set_trace()
+        # else:
+        #     # Continuation
+        #     iteration = 1
+        #     while stable == False:
+        #         # linesearch
+        #         save_current_bifurcation = True
 
-                h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
-                    {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
-                    perturbation_v, perturbation_beta)
+        #         cont_data_pre = compile_continuation_data(state, energy)
+        #         perturbation_v    = stability.perturbation_v
+        #         perturbation_beta = stability.perturbation_beta
 
-                stable = True
+        #         # import pdb; pdb.set_trace()
 
-                if h_opt != 0:
-                    log(LogLevel.INFO, '    Bifurcarting')
-                    save_current_bifurcation = True
-                    alpha_bif.assign(alpha)
-                    alpha_bif_old.assign(alpha_old)
+        #         h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
+        #             {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
+        #             perturbation_v, perturbation_beta)
 
-                    # # admissible
-                    uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
-                    aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
+        #         stable = True
 
-                    u.vector()[:] = uval
-                    alpha.vector()[:] = aval
+        #         if h_opt != 0:
+        #             log(LogLevel.INFO, '    Bifurcarting')
+        #             save_current_bifurcation = True
+        #             alpha_bif.assign(alpha)
+        #             alpha_bif_old.assign(alpha_old)
 
-                    u.vector().vec().ghostUpdate()
-                    alpha.vector().vec().ghostUpdate()
+        #             # # admissible
+        #             uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
+        #             aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
 
-                    # # import pdb; pdb.set_trace()
-                    (time_data_i, am_iter) = solver.solve()
-                    (stable, negev) = stability.solve(solver.damage.problem.lb)
-                    log(LogLevel.INFO, '    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
-                    iteration += 1
-                    cont_data_post = compile_continuation_data(state, energy)
+        #             u.vector()[:] = uval
+        #             alpha.vector()[:] = aval
 
-                    # # import pdb; pdb.set_trace()
+        #             u.vector().vec().ghostUpdate()
+        #             alpha.vector().vec().ghostUpdate()
 
-                    criterion = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy'] < parameters['stability']['cont_rtol']
-                    log(LogLevel.INFO, 'INFO: Continuation criterion {}'.format(criterion))
-                else:
-                    # warn
-                    log(LogLevel.WARNING, 'Found zero increment, we are stuck in the matrix')
-                    log(LogLevel.WARNING, 'Continuing load program')
-                    break
+        #             # # import pdb; pdb.set_trace()
+        #             (time_data_i, am_iter) = solver.solve()
+        #             (stable, negev) = stability.solve(solver.damage.problem.lb)
+        #             log(LogLevel.INFO, '    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
+        #             iteration += 1
+        #             cont_data_post = compile_continuation_data(state, energy)
 
-            solver.update()
+        #             # # import pdb; pdb.set_trace()
+
+        #             criterion = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy'] < parameters['stability']['cont_rtol']
+        #             log(LogLevel.INFO, 'INFO: Continuation criterion {}'.format(criterion))
+        #         else:
+        #             # warn
+        #             log(LogLevel.WARNING, 'Found zero increment, we are stuck in the matrix')
+        #             log(LogLevel.WARNING, 'Continuing load program')
+        #             break
+
+        solver.update()
 
             # import pdb; pdb.set_trace()
-            if save_current_bifurcation:
-                # modes = np.where(stability.eigs < 0)[0]
+        if save_current_bifurcation:
+            # modes = np.where(stability.eigs < 0)[0]
 
-                time_data_i['h_opt'] = h_opt
-                time_data_i['max_h'] = hmax
-                time_data_i['min_h'] = hmin
+            time_data_i['h_opt'] = h_opt
+            time_data_i['max_h'] = hmax
+            time_data_i['min_h'] = hmin
 
-                with file_bif_postproc as file:
-                    # leneigs = len(modes)
-                    # maxmodes = min(3, leneigs)
-                    beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
-                    log(LogLevel.DEBUG, 'DEBUG: irrev {}'.format(alpha.vector()-alpha_old.vector()))
-                    file.write_checkpoint(beta0v, 'beta0', 0, append = True)
-                    file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
-                    file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
-                    file.write_checkpoint(alpha, 'alpha', 0, append=True)
+            with file_bif_postproc as file:
+                # leneigs = len(modes)
+                # maxmodes = min(3, leneigs)
+                beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
+                log(LogLevel.DEBUG, 'DEBUG: irrev {}'.format(alpha.vector()-alpha_old.vector()))
+                file.write_checkpoint(beta0v, 'beta0', 0, append = True)
+                file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
+                file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
+                file.write_checkpoint(alpha, 'alpha', 0, append=True)
 
-                    np.save(os.path.join(outdir, 'energy_perturbations'), energy_perturbations, allow_pickle=True, fix_imports=True)
+                np.save(os.path.join(outdir, 'energy_perturbations'), energy_perturbations, allow_pickle=True, fix_imports=True)
 
-                with file_eig as file:
-                    _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
-                    _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
-                    _v.rename('perturbation displacement', 'perturbation displacement')
-                    _beta.rename('perturbation damage', 'perturbation damage')
-                    file.write(_v, load)
-                    file.write(_beta, load)
+            with file_eig as file:
+                _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
+                _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
+                _v.rename('perturbation displacement', 'perturbation displacement')
+                _beta.rename('perturbation damage', 'perturbation damage')
+                file.write(_v, load)
+                file.write(_beta, load)
 
         time_data_i["load"] = load
         time_data_i["alpha_max"] = max(alpha.vector()[:])
@@ -393,8 +398,15 @@ def numerical_test(
         time_data_i["# neg ev"] = stability.negev
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
 
+        # eps_ = variable(eps)
+        # import pdb; pdb.set_trace()
+
+        # sigma = derivative( 1./2.* lmbda0 * tr(eps-eps0t)**2. + mu0 * inner(eps-eps0t, eps-eps0t), eps, eps_)
+        # snn = dolfin.dot(dolfin.dot(sigma, e1), e1)
+        # time_data_i["sigma"] = 1/parameters['geometry']['Ly'] * dolfin.assemble(snn*ds(1))
+
         log(LogLevel.INFO,
-            "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4e}".format(
+            "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4g}".format(
                 time_data_i["load"],
                 time_data_i["iterations"][0],
                 time_data_i["alpha_error"][0]))
@@ -411,13 +423,6 @@ def numerical_test(
             file.write_checkpoint(u, "u-{}".format(step), step, append = True)
             log(LogLevel.INFO, 'INFO: written postprocessing step {}'.format(step))
 
-            # step = it
-            # for s in range(step):
-                # log(LogLevel.INFO, 'INFO: reading step {}'.format(s))
-                # f.read_checkpoint(alpha, "alpha-{}".format(s))
-            # log(LogLevel.INFO, 'INFO: read step {}'.format(step))
-                # f.close()
-            # import pdb; pdb.set_trace()
 
         spacetime.append(get_trace(alpha))
 

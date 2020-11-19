@@ -53,7 +53,7 @@ load_max = params['loading']['load_max']
 nsteps = params['loading']['n_steps']
 Lx = params['geometry']['Lx']
 
-onedim = False
+onedim = params['general']['dim'] == 1
 if not onedim:
 	Ly = params['geometry']['Ly']
 
@@ -68,25 +68,31 @@ alpha_old = dolfin.Function(V_alpha)
 alpha_bif = dolfin.Function(V_alpha)
 
 file_bif = dolfin.XDMFFile(os.path.join(rootdir, "bifurcation_postproc.xdmf"))
-file_out = dolfin.XDMFFile(os.path.join(rootdir, "output_postproc.xdmf"))
+file_out = dolfin.XDMFFile(os.path.join(rootdir, "output.xdmf"))
+file_pproc = dolfin.XDMFFile(os.path.join(rootdir, "postprocess.xdmf"))
 
 maxmodes = 2
 
 alpha = dolfin.Function(V_alpha)
 alphas = []
 
-# file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "output_postproc.xdmf"))
+# file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "postprocess.xdmf"))
 # file_postproc = dolfin.XDMFFile(os.path.join(rootdir, "output.xdmf"))
 # file_postproc.parameters["functions_share_mesh"] = True
 # file_postproc.parameters["flush_output"] = True
 # import pdb; pdb.set_trace()
 
 # stride = 10
+
+# Postprocess solution 
+
 for (step, load) in enumerate(load_steps):
 	if not step % stride:
-		with file_out as file:
-			print('DEBUG: reading file', os.path.join(rootdir, "output_postproc.xdmf"))
+		with file_pproc as file:
+			print('DEBUG: reading file', os.path.join(rootdir, "postprocess.xdmf"))
 			print('DEBUG: reading step', step)
+			print('DEBUG: reading alpha-{}, {}'.format(step, 0))
+
 			try:
 				file.read_checkpoint(alpha, 'alpha-{}'.format(step), 0)
 			except Exception as e:
@@ -100,11 +106,12 @@ for (step, load) in enumerate(load_steps):
 np.save(os.path.join(rootdir, "alpha"), alphas,
 	allow_pickle=True, fix_imports=True)
 print('Saved {}'.format(os.path.join(rootdir, 'alpha.npy')))
-data = np.load(os.path.join(rootdir, "alpha.npy".format(0)))
+data = np.load(os.path.join(rootdir, "alpha.npy"))
 
+
+# Postprocess perturbations 
 
 perturbations = []
-
 
 # if params['stability']['continuation']:
 betan = dolfin.Function(V_alpha)
