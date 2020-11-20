@@ -56,7 +56,7 @@ import yaml
 from utils import get_versions
 code_parameters = get_versions()
 
-set_log_level(LogLevel.PROGRESS)
+set_log_level(LogLevel.DEBUG)
 
 def compile_continuation_data(state, energy):
     continuation_data_i = {}
@@ -89,18 +89,22 @@ def numerical_test(
 
     with open('../parameters/form_compiler.yml') as f:
         form_compiler_parameters = yaml.load(f, Loader=yaml.FullLoader)
-
     with open('../parameters/solvers_default.yml') as f:
         solver_parameters = yaml.load(f, Loader=yaml.FullLoader)
-
+    with open('../parameters/solvers_default.yml') as f:
+        damage_parameters = yaml.load(f, Loader=yaml.FullLoader)['damage']
+    with open('../parameters/solvers_default.yml') as f:
+        elasticity_parameters = yaml.load(f, Loader=yaml.FullLoader)['elasticity']
     with open('../parameters/film.yaml') as f:
         material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
-
     with open('../parameters/loading.yaml') as f:
         loading_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
-
     with open('../parameters/stability.yaml') as f:
-        stability_parameters = yaml.load(f, Loader=yaml.FullLoader)
+        stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
+    with open('../parameters/stability.yaml') as f:
+        inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
+    with open('../parameters/stability.yaml') as f:
+        eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
 
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
@@ -109,11 +113,15 @@ def numerical_test(
     default_parameters = {
         'code': {**code_parameters},
         'compiler': {**form_compiler_parameters},
+        'eigen': {**eigen_parameters},
         'geometry': {**geometry_parameters},
+        'inertia': {**inertia_parameters},
         'loading': {**loading_parameters},
         'material': {**material_parameters},
         'solver':{**solver_parameters},
         'stability': {**stability_parameters},
+        'elasticity': {**elasticity_parameters},
+        'damage': {**damage_parameters},
         }
 
     default_parameters.update(user_parameters)
@@ -234,8 +242,8 @@ def numerical_test(
 
     # import pdb; pdb.set_trace()
     log(LogLevel.INFO, '{}'.format(parameters['stability']))
-    solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
-    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
+    solver = EquilibriumSolver(energy, state, bcs, parameters=parameters)
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters)
     # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh= [rP, rN])
     linesearch = LineSearch(energy, state)
 
@@ -335,7 +343,7 @@ def numerical_test(
 
                     # # import pdb; pdb.set_trace()
 
-                    criterion = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy'] < parameters['stability']['stability']['cont_rtol']
+                    criterion = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy'] < parameters['stability']['cont_rtol']
                     log(LogLevel.INFO, 'INFO: Continuation criterion {}'.format(criterion))
                 else:
                     # warn

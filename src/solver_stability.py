@@ -126,7 +126,7 @@ class EigenSolver(object):
 
         self.set_options(self.slepc_options)
         E.setFromOptions()
-        E.view()
+        # E.view()
         # import pdb; pdb.set_trace()
 
         return E

@@ -507,12 +507,16 @@ class ElasticitySolver:
 
         prefix = "elasticity_"
         snes.setOptionsPrefix(prefix)
-
         for parameter, value in parameters.items():
-            log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value))
-            PETScOptions.set(prefix + parameter, value)
-        snes.setFromOptions()
+            if value is not None:
+                log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value)) 
+                PETScOptions.set(prefix + parameter, value)
+            else:
+                log(LogLevel.INFO, "Set: {}".format(prefix + parameter)) 
+                PETScOptions.set(prefix + parameter)
 
+        snes.setFromOptions()
+        # snes.view()
     def solve(self):
         # Get the problem
         log(LogLevel.INFO, '________________________ EQUILIBRIUM _________________________')
