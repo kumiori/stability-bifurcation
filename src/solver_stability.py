@@ -30,7 +30,7 @@ class EigenSolver(object):
                  a_m=None,                                   # optional, for eigpb of the type (K-lambda M)x=0
                  bcs=None,
                  restricted_dofs_is=None,
-                 slepc_options={'eps_max_it':100},
+                 slepc_options='',
                  option_prefix='eigen_',
                  comm=MPI.comm_world, 
                  slepc_eigensolver = None
@@ -125,8 +125,9 @@ class EigenSolver(object):
         E.setFromOptions()
 
         self.set_options(self.slepc_options)
-        # import pdb; pdb.set_trace()
         E.setFromOptions()
+        E.view()
+        # import pdb; pdb.set_trace()
 
         return E
 
@@ -146,13 +147,17 @@ class EigenSolver(object):
         log(LogLevel.INFO, "Number of converged/requested eigenvalues with {:d} iterations  : {:d}/{:d}".format(its,self.nconv,self.nev))
         return self.nconv, its
 
-    def set_options(self,slepc_options):
+    def set_options(self, slepc_options):
+        # import pdb; pdb.set_trace()   
         log(LogLevel.INFO, "---- Setting additional slepc options for eigen solver -----")
         prefix = 'eigen_'
         for (parameter, value) in slepc_options.items():
-            # log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value))
-            log(LogLevel.INFO, "INFO: setting {} {}".format(prefix + parameter, value))
-            dolfin.PETScOptions.set(prefix + parameter, value)
+            if value is not None:
+                log(LogLevel.INFO, "INFO: setting {} {}".format(prefix + parameter, value))
+                dolfin.PETScOptions.set(prefix + parameter, value)
+            else:
+                log(LogLevel.INFO, "INFO: setting {}".format(prefix + parameter))
+                dolfin.PETScOptions.set(prefix + parameter)
         log(LogLevel.INFO, "------------------------------------------------------------")
 
         # self.E.setFromOptions()
@@ -226,7 +231,6 @@ class StabilitySolver(object):
         if 'stability' in parameters:
             self.stability_parameters.update(parameters['stability'])
 
-        # import pdb; pdb.set_trace()   
 
         # self.Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([state[0].ufl_element(), state[1].ufl_element()]))
         # self.z = dolfin.Function(self.Z)
@@ -582,21 +586,29 @@ class StabilitySolver(object):
             if hasattr(self, 'H2'):
                 log(LogLevel.INFO, 'INFO: Full eigenvalue: Using user-provided Rayleigh quotient')
                 log(LogLevel.INFO, 'INFO: Norm provided {}'.format(assemble(self.H2).norm('frobenius')))
-                eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set)
+                eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
             elif hasattr(self, 'Hessian'):
                 log(LogLevel.INFO, 'INFO: Full eigenvalue: Using user-provided Hessian')
                 log(LogLevel.INFO, 'INFO: Norm provided {}'.format(assemble(self.Hessian).norm('frobenius')))
-                eigen = EigenSolver(self.Hessian, self.z, restricted_dofs_is = index_set)
+                eigen = EigenSolver(self.Hessian, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
             else:
                 log(LogLevel.INFO, 'INFO: Full eig: Using computed Hessian')
-                eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set)
+                # import pdb; pdb.set_trace()
+                eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
+                # eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
             log(LogLevel.INFO, 'INFO: Norm computed {}'.format(assemble(self.H).norm('frobenius')))
-            self.computed.append(assemble(self.H).norm('frobenius'))
-            if hasattr(self, 'H2'): self.provided.append(assemble(self.H2).norm('frobenius'))
-    
-            # import pdb; pdb.set_trace()
 
+            self.computed.append(assemble(self.H).norm('frobenius'))
+
+            if hasattr(self, 'H2'): self.provided.append(assemble(self.H2).norm('frobenius'))
+
+            import pdb; pdb.set_trace()   
+    
             maxmodes = self.stability_parameters['maxmodes']
+            
+            tol, maxit = eigen.E.getTolerances()
+            log(LogLevel.INFO, "Eigensolver stopping condition: tol={:.4g}, maxit={:d}".format(tol, maxit))
+
             nconv, it = eigen.solve(min(maxmodes, negev))
 
             if nconv == 0:

@@ -14,12 +14,12 @@ inertia:
     pc_factor_mat_solver_type: "mumps"
     mat_mumps_icntl_24: 1
     mat_mumps_icntl_13: 1
-    eps_monitor: 1
+    eps_monitor:
 
 eigen:
     eps_type: "krylovschur"
-    eig_rtol: 1e-3
-    eps_monitor: 1
+    eig_tol: 1e-3
+    eps_monitor:
     eps_max_it: 100
     # E.setType(SLEPc.EPS.Type.KRYLOVSCHUR)
     # E.setProblemType(SLEPc.EPS.ProblemType.HEP)

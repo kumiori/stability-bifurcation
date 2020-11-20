@@ -89,18 +89,18 @@ def numerical_test(
 
     with open('../parameters/form_compiler.yml') as f:
         form_compiler_parameters = yaml.load(f, Loader=yaml.FullLoader)
-
     with open('../parameters/solvers_default.yml') as f:
         solver_parameters = yaml.load(f, Loader=yaml.FullLoader)
-
     with open('../parameters/film.yaml') as f:
         material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
-
     with open('../parameters/loading.yaml') as f:
         loading_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
-
     with open('../parameters/stability.yaml') as f:
         stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
+    with open('../parameters/stability.yaml') as f:
+        inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
+    with open('../parameters/stability.yaml') as f:
+        eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
 
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
@@ -109,7 +109,9 @@ def numerical_test(
     default_parameters = {
         'code': {**code_parameters},
         'compiler': {**form_compiler_parameters},
+        'eigen': {**eigen_parameters},
         'geometry': {**geometry_parameters},
+        'inertia': {**inertia_parameters},
         'loading': {**loading_parameters},
         'material': {**material_parameters},
         'solver':{**solver_parameters},
@@ -122,7 +124,6 @@ def numerical_test(
 
     R = parameters['geometry']['R']
     geom = mshr.Circle(dolfin.Point(0., 0.), R)
-    # import pdb; pdb.set_trace()
     # resolution = max(geometry_parameters['n'] * Lx / ell, 1/(Ly*10))
     resolution = max(parameters['geometry']['n'] * R / ell, (10/R))
     # resolution = 10
@@ -211,7 +212,6 @@ def numerical_test(
 
     energy = Wt * dx + w_1 *( alpha + parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
 
-    # import pdb; pdb.set_trace()
 
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True
@@ -229,9 +229,10 @@ def numerical_test(
     file_bif_postproc.parameters["functions_share_mesh"] = True
     file_bif_postproc.parameters["flush_output"] = True
 
+    # import pdb; pdb.set_trace()
 
     solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
-    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters)
     # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh= [rP, rN])
     linesearch = LineSearch(energy, state)
 
@@ -252,7 +253,7 @@ def numerical_test(
     bifurcation_loads = []
     perturb = False
     _file = dolfin.XDMFFile(os.path.join(outdir, "test.xdmf"))
-    
+    log(LogLevel.INFO, '{}'.format(parameters))
     for step, load in enumerate(load_steps):
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
@@ -264,7 +265,6 @@ def numerical_test(
 
         (stable, negev) = stability.solve(solver.damage.problem.lb)
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
-
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
         log(LogLevel.INFO, 'INFO: lmbda min {}'.format(lmbda_min_prev))
@@ -323,7 +323,6 @@ def numerical_test(
                     u.vector().vec().ghostUpdate()
                     alpha.vector().vec().ghostUpdate()
 
-                    # # import pdb; pdb.set_trace()
                     (time_data_i, am_iter) = solver.solve()
                     (stable, negev) = stability.solve(solver.damage.problem.lb)
                     log(LogLevel.INFO, '    Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
