@@ -387,15 +387,15 @@ class EquilibriumSolver:
         # log(LogLevel.WARNING, '{}'.format(self.damage.problem.lb[:]))
         self.damage.solver.solver.setVariableBounds(self.damage.problem.lb.vec(),
             self.damage.problem.ub.vec())
+        # import pdb; pdb.set_trace()
 
-        while criterion > self.parameters["tol"] and it < self.parameters["max_it"]:
+        while criterion > self.parameters['solver']['equilibrium']["tol"] and it < self.parameters['solver']['equilibrium']["max_it"]:
             it = it + 1
             (u_it, u_reason) = self.elasticity.solve()
             (alpha_it, alpha_reason) = self.damage.solve()
 
 
             # if not np.all(alpha.vector()[:] >=self.damage.problem.lb):
-            #     import pdb; pdb.set_trace()
             #     pd = np.where(alpha.vector()[:]-self.damage.problem.lb[:] < 0)[0]
             #     log(LogLevel.WARNING, 'Pointwise irreversibility issues on dofs {}'.format(pd))
 

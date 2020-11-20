@@ -91,6 +91,10 @@ def numerical_test(
         form_compiler_parameters = yaml.load(f, Loader=yaml.FullLoader)
     with open('../parameters/solvers_default.yml') as f:
         solver_parameters = yaml.load(f, Loader=yaml.FullLoader)
+    with open('../parameters/solvers_default.yml') as f:
+        damage_parameters = yaml.load(f, Loader=yaml.FullLoader)['damage']
+    with open('../parameters/solvers_default.yml') as f:
+        elasticity_parameters = yaml.load(f, Loader=yaml.FullLoader)['elasticity']
     with open('../parameters/film.yaml') as f:
         material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
     with open('../parameters/loading.yaml') as f:
@@ -105,6 +109,7 @@ def numerical_test(
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     log(LogLevel.INFO, 'INFO: Outdir is: '+outdir)
+    # import pdb; pdb.set_trace()
 
     default_parameters = {
         'code': {**code_parameters},
@@ -116,6 +121,8 @@ def numerical_test(
         'material': {**material_parameters},
         'solver':{**solver_parameters},
         'stability': {**stability_parameters},
+        'elasticity': {**elasticity_parameters},
+        'damage': {**damage_parameters},
         }
 
     default_parameters.update(user_parameters)
@@ -144,7 +151,6 @@ def numerical_test(
     R = parameters['geometry']['R']
     ell =  parameters['material']['ell']
 
-    # import pdb; pdb.set_trace()
 
 
     savelag = 1
@@ -231,7 +237,7 @@ def numerical_test(
 
     # import pdb; pdb.set_trace()
 
-    solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
+    solver = EquilibriumSolver(energy, state, bcs, parameters=parameters)
     stability = StabilitySolver(energy, state, bcs, parameters = parameters)
     # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh= [rP, rN])
     linesearch = LineSearch(energy, state)
@@ -331,7 +337,7 @@ def numerical_test(
 
                     # # import pdb; pdb.set_trace()
 
-                    criterion = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy'] < parameters['stability']['stability']['cont_rtol']
+                    criterion = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy'] < parameters['stability']['cont_rtol']
                     log(LogLevel.INFO, 'INFO: Continuation criterion post energy {} - pre energy'.format(cont_data_post['energy'], cont_data_pre['energy']))
                     log(LogLevel.INFO, 'INFO: Continuation criterion {}'.format(criterion))
                 else:
