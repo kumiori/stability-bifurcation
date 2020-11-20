@@ -123,7 +123,7 @@ def numerical_test(
     Ly = parameters['geometry']['Ly']
     Lx = parameters['geometry']['Lx']
     geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     # resolution = max(geometry_parameters['n'] * Lx / ell, 1/(Ly*10))
     resolution = max(geometry_parameters['n'] * Lx / ell, 5/(Ly*10))
     resolution = 150

@@ -100,7 +100,7 @@ def numerical_test(
         loading_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
 
     with open('../parameters/stability.yaml') as f:
-        stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
+        stability_parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
@@ -215,7 +215,6 @@ def numerical_test(
 
     energy = Wt * dx + w_1 *( alpha + parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
 
-    # import pdb; pdb.set_trace()
 
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True
@@ -233,7 +232,8 @@ def numerical_test(
     file_bif_postproc.parameters["functions_share_mesh"] = True
     file_bif_postproc.parameters["flush_output"] = True
 
-
+    # import pdb; pdb.set_trace()
+    log(LogLevel.INFO, '{}'.format(parameters['stability']))
     solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
     stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
     # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh= [rP, rN])

@@ -40,8 +40,6 @@ class EigenSolver(object):
 
         # import pdb; pdb.set_trace()
         self.slepc_options = slepc_options
-        # if option_prefix:
-            # self.E.setOptionsPrefix(option_prefix)
         self.V = u.function_space()
         self.index_set_not_bc = None
         if type(bcs) == list:
@@ -113,8 +111,7 @@ class EigenSolver(object):
     def eigensolver_setup(self, prefix=None):
         E = SLEPc.EPS()
         E.create()
-        if prefix:
-            E.setOptionsPrefix(prefix)
+
         E.setType(SLEPc.EPS.Type.KRYLOVSCHUR)
         E.setProblemType(SLEPc.EPS.ProblemType.HEP)
         E.setWhichEigenpairs(E.Which.TARGET_REAL)
@@ -122,8 +119,11 @@ class EigenSolver(object):
         st = E.getST()
         st.setType('sinvert')
         st.setShift(-1.e-3)
+        if prefix:
+            E.setOptionsPrefix(prefix)
 
         E.setFromOptions()
+        # import pdb; pdb.set_trace()
 
         # .set_options(self.slepc_options)
 
@@ -147,11 +147,14 @@ class EigenSolver(object):
 
     def set_options(self,slepc_options):
         print("---- setting additional slepc options -----")
+        prefix = 'eigen_'
         for (opt, value) in slepc_options.items():
-            log(LogLevel.INFO, "INFO: setting {} {}".format(opt,value))
-            dolfin.PETScOptions.set(opt, value) 
+            # log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value))
+            log(LogLevel.INFO, "INFO: setting {} {}".format(prefix + opt,value))
+            dolfin.PETScOptions.set(prefix + opt, value) 
         print("-------------------------------------------")
-        # self.E.setFromOptions()
+
+        self.E.setFromOptions()
 
     def get_eigenpair(self,i):
         u_r = dolfin.Function(self.V)
@@ -261,7 +264,6 @@ class StabilitySolver(object):
         if rayleigh:
             rP = rayleigh[0]
             rN = rayleigh[1]
-            import pdb; pdb.set_trace()
             # rN = ufl.replace(rN, {state['u']: z_u, state['alpha']: z_a})
             # rP = ufl.replace(rP, {state['u']: z_u, state['alpha']: z_a})
 
@@ -427,19 +429,18 @@ class StabilitySolver(object):
             self.pc.setOptionsPrefix(prefix)
 
         for parameter, value in self.inertia_parameters.items():
-            # import pdb; pdb.set_trace()
             dolfin.PETScOptions.set(parameter, value)
-            log(LogLevel.DEBUG, 'DEBUG: Setting up inertia solver: {}: {}'.format(parameter, value))
+            log(LogLevel.INFO, 'INFO: Setting up inertia solver: {}: {}'.format(prefix+parameter, value))
 
         # dolfin.PETScOptions.set("inertia_ksp_type", "preonly")
         dolfin.PETScOptions.set("inertia_pc_type", "cholesky")
         dolfin.PETScOptions.set("inertia_pc_factor_mat_solver_type", "mumps")
-        # dolfin.PETScOptions.set("inertia_mat_mumps_icntl_24", 1)
-        # dolfin.PETScOptions.set("inertia_mat_mumps_icntl_13", 1)
+        dolfin.PETScOptions.set("inertia_mat_mumps_icntl_24", 1)
+        dolfin.PETScOptions.set("inertia_mat_mumps_icntl_13", 1)
         # dolfin.PETScOptions.set("inertia_eps_monitor", 1)
 
         self.pc.setFromOptions()
-        # self.pc.view()
+        self.pc.view()
 
     def get_inertia(self, Mat = None, restricted_dof_is=None):
         if Mat == None:
@@ -466,8 +467,10 @@ class StabilitySolver(object):
             self.stable = True
         return neg
 
-    def project(self, beta, mode = 'none'):
+    def project(self, beta, mode = 'None'):
         if self.bcs: bc_a = self.bcs['damage']
+        import pdb; pdb.set_trace()
+
         if mode == 'truncate':
             mask = beta.vector()[:] < 0
             beta.vector()[np.where(mask == True)[0]] = 0
@@ -480,7 +483,7 @@ class StabilitySolver(object):
             if self.bcs:
                 for bc in bc_a: bc.apply(beta.vector())
             return beta
-        elif mode == 'None':
+        elif mode == 'None' or mode == 'none':
             if self.bcs:
                 for bc in bc_a: bc.apply(beta.vector())
             return beta
@@ -519,22 +522,8 @@ class StabilitySolver(object):
         if get_log_level==LogLevel.DEBUG and rank == 0:
             log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
 
-        # if not np.all(self.alpha.vector()[:] >=self.alpha_old[:]):
-        #     import pdb; pdb.set_trace()
-        #     pd = np.where(self.alpha.vector()[:]-self.alpha_old[:] < 0)[0]
-        #     log(LogLevel.WARNING, 'Pointwise irreversibility issues on dofs {}'.format(pd))
-
-        #     log(LogLevel.WARNING, 'diff = {}'
-        #         .format(self.alpha.vector()[pd]-self.alpha_old[pd]))
-        #     log(LogLevel.WARNING, 'Continuing')
-
-        # A convoluted way to do a simple thing. FIXME
-        # import pdb; pdb.set_trace()
-        # _alpha_old = dolfin.Function(self.alpha.function_space())
-        # _alpha_old.vector()[:] = self.alpha_old[:] 
         self.assigner.assign(self.z, [self.u, self.alpha])
-        # self.assigner.assign(self.z_old, [self.u_zero, _alpha_old])
-        # self.assigner.assign(self.z, [self.u_zero, self.alpha])
+
 
         if self.is_elastic():
             log(LogLevel.INFO, 'Current state: elastic')
