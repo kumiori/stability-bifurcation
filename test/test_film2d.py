@@ -261,8 +261,8 @@ def numerical_test(
     _file = dolfin.XDMFFile(os.path.join(outdir, "test.xdmf"))
     log(LogLevel.INFO, '{}'.format(parameters))
     for step, load in enumerate(load_steps):
-        log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
-        log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
+        log(LogLevel.INFO, '====================== STEPPING ==========================')
+        log(LogLevel.INFO, 'INFO: Solving load t = {:.2f}'.format(load))
         alpha_old.assign(alpha)
         eps0t.t = load
         (time_data_i, am_iter) = solver.solve()
@@ -270,7 +270,7 @@ def numerical_test(
         # Second order stability conditions
 
         (stable, negev) = stability.solve(solver.damage.problem.lb)
-        log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
+        log(LogLevel.INFO, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
         log(LogLevel.INFO, 'INFO: lmbda min {}'.format(lmbda_min_prev))
@@ -314,7 +314,7 @@ def numerical_test(
                 stable = True
 
                 if h_opt != 0:
-                    log(LogLevel.CRITICAL, '    Bifurcarting')
+                    log(LogLevel.INFO, '    Bifurcarting')
                     save_current_bifurcation = True
                     alpha_bif.assign(alpha)
                     alpha_bif_old.assign(alpha_old)

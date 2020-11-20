@@ -1,0 +1,18 @@
+# === General === #
+general:
+    dim: 2
+
+# === Loading === #
+loading: 
+    load_min: 0.
+    load_max: 3.
+    n_steps: 50
+
+#  === Model === #
+material:
+    E: 1
+    nu: 0.0
+    ell: 0.588235294
+    # ell: 0.2
+    k_res: 1.e-8
+    sigma_D0: 1.

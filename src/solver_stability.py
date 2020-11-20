@@ -602,8 +602,6 @@ class StabilitySolver(object):
 
             if hasattr(self, 'H2'): self.provided.append(assemble(self.H2).norm('frobenius'))
 
-            import pdb; pdb.set_trace()   
-    
             maxmodes = self.stability_parameters['maxmodes']
             
             tol, maxit = eigen.E.getTolerances()

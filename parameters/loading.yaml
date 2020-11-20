@@ -1,0 +1,4 @@
+loading: 
+    load_min: 0.0
+    load_max: 3.0
+    n_steps: 30
