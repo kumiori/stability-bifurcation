@@ -282,16 +282,7 @@ def numerical_test(
             # save 3 bif modes
             log(LogLevel.INFO, 'INFO: About to bifurcate load {} step {}'.format(load, step))
             bifurcation_loads.append(load)
-            modes = np.where(stability.eigs < 0)[0]
 
-            with file_bif_postproc as file:
-                leneigs = len(modes)
-                maxmodes = min(3, leneigs)
-                for n in range(maxmodes):
-                    mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
-                    modename = 'beta-%d'%n
-                    print(modename)
-                    file.write_checkpoint(mode, modename, 0, append=True)
 
             bifurc_i += 1
 
@@ -312,7 +303,6 @@ def numerical_test(
                 perturbation_v    = stability.perturbation_v
                 perturbation_beta = stability.perturbation_beta
 
-                # import pdb; pdb.set_trace()
 
                 h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
                     {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
@@ -345,7 +335,7 @@ def numerical_test(
 
                     # # import pdb; pdb.set_trace()
 
-                    criterion = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy'] < parameters['stability']['cont_rtol']
+                    criterion = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy'] < parameters['stability']['stability']['cont_rtol']
                     log(LogLevel.INFO, 'INFO: Continuation criterion {}'.format(criterion))
                 else:
                     # warn
@@ -355,13 +345,23 @@ def numerical_test(
 
             solver.update()
 
-            # import pdb; pdb.set_trace()
             if save_current_bifurcation:
-                # modes = np.where(stability.eigs < 0)[0]
 
                 time_data_i['h_opt'] = h_opt
                 time_data_i['max_h'] = hmax
                 time_data_i['min_h'] = hmin
+
+                modes = np.where(stability.eigs < 0)[0]
+                leneigs = len(modes)
+                maxmodes = min(3, leneigs)
+
+                with file_bif as file:
+                    for n in range(maxmodes):
+                        mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
+                        modename = 'beta-%d'%n
+                        mode.rename(modename, modename)
+                        log(LogLevel.INFO, 'Saved mode {}'.format(modename))
+                        file.write(mode, step)
 
                 with file_bif_postproc as file:
                     # leneigs = len(modes)

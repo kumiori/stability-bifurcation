@@ -123,9 +123,10 @@ class EigenSolver(object):
             E.setOptionsPrefix(prefix)
 
         E.setFromOptions()
-        # import pdb; pdb.set_trace()
 
-        # .set_options(self.slepc_options)
+        self.set_options(self.slepc_options)
+        # import pdb; pdb.set_trace()
+        E.setFromOptions()
 
         return E
 
@@ -141,20 +142,20 @@ class EigenSolver(object):
         self.nev, ncv, mpd = E.getDimensions()
         tol, maxit = E.getTolerances()
         self.nconv = E.getConverged()
-        print("Solution method: {:s}, stopping condition: tol={:.4g}, maxit={:d}".format(eps_type,tol, maxit))
-        print("Number of converged/requested eigenvalues with {:d} iterations  : {:d}/{:d}".format(its,self.nconv,self.nev))
+        log(LogLevel.INFO, "Solution method: {:s}, stopping condition: tol={:.4g}, maxit={:d}".format(eps_type,tol, maxit))
+        log(LogLevel.INFO, "Number of converged/requested eigenvalues with {:d} iterations  : {:d}/{:d}".format(its,self.nconv,self.nev))
         return self.nconv, its
 
     def set_options(self,slepc_options):
-        print("---- setting additional slepc options -----")
+        log(LogLevel.INFO, "---- Setting additional slepc options for eigen solver -----")
         prefix = 'eigen_'
-        for (opt, value) in slepc_options.items():
+        for (parameter, value) in slepc_options.items():
             # log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value))
-            log(LogLevel.INFO, "INFO: setting {} {}".format(prefix + opt,value))
-            dolfin.PETScOptions.set(prefix + opt, value) 
-        print("-------------------------------------------")
+            log(LogLevel.INFO, "INFO: setting {} {}".format(prefix + parameter, value))
+            dolfin.PETScOptions.set(prefix + parameter, value)
+        log(LogLevel.INFO, "------------------------------------------------------------")
 
-        self.E.setFromOptions()
+        # self.E.setFromOptions()
 
     def get_eigenpair(self,i):
         u_r = dolfin.Function(self.V)
@@ -195,8 +196,9 @@ class StabilitySolver(object):
         OptDB.view()
 
         self.i = 0
-        self.parameters = self.default_parameters()
-        if parameters is not None: self.parameters.update(parameters)                                                         # for debug purposes
+        # self.parameters = self.default_parameters()
+        # if parameters is not None: self.parameters.update(parameters)                                                         # for debug purposes
+        
         self.u = state['u']
         self.alpha = state['alpha']
         self._u = dolfin.Vector(self.u.vector())
@@ -210,10 +212,21 @@ class StabilitySolver(object):
             dolfin.MixedElement([self.u.ufl_element(),self.alpha.ufl_element()]))
         self.z = dolfin.Function(self.Z)
 
+        with open('../parameters/stability.yaml') as f:
+            self.stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
         with open('../parameters/eigensolver.yml') as f:
             self.inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
         with open('../parameters/eigensolver.yml') as f:
             self.eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
+
+        if 'eigen' in parameters:
+            self.eigen_parameters.update(parameters['eigen'])
+        if 'inertia' in parameters:
+            self.inertia_parameters.update(parameters['inertia'])
+        if 'stability' in parameters:
+            self.stability_parameters.update(parameters['stability'])
+
+        # import pdb; pdb.set_trace()   
 
         # self.Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([state[0].ufl_element(), state[1].ufl_element()]))
         # self.z = dolfin.Function(self.Z)
@@ -387,9 +400,9 @@ class StabilitySolver(object):
         # return np.all(elastic_dofs)
 
     def get_inactive_set(self):
-        tol = self.parameters['inactiveset_atol']
+        tol = self.stability_parameters['inactiveset_atol']
         debug= False
-        log(LogLevel.DEBUG, 'DEBUG: Inactive set tolerance {}'.format(self.parameters['inactiveset_atol']))
+        log(LogLevel.DEBUG, 'DEBUG: Inactive set tolerance {}'.format(self.stability_parameters['inactiveset_atol']))
 
         Ealpha = assemble(self.Ealpha)
         vec = dolfin.PETScVector(MPI.comm_self)
@@ -427,17 +440,18 @@ class StabilitySolver(object):
         prefix = "inertia_"
         if prefix:
             self.pc.setOptionsPrefix(prefix)
+        self.pc.setFromOptions()
 
         for parameter, value in self.inertia_parameters.items():
             dolfin.PETScOptions.set(parameter, value)
             log(LogLevel.INFO, 'INFO: Setting up inertia solver: {}: {}'.format(prefix+parameter, value))
 
-        # dolfin.PETScOptions.set("inertia_ksp_type", "preonly")
+        dolfin.PETScOptions.set("inertia_ksp_type", "preonly")
         dolfin.PETScOptions.set("inertia_pc_type", "cholesky")
         dolfin.PETScOptions.set("inertia_pc_factor_mat_solver_type", "mumps")
         dolfin.PETScOptions.set("inertia_mat_mumps_icntl_24", 1)
         dolfin.PETScOptions.set("inertia_mat_mumps_icntl_13", 1)
-        # dolfin.PETScOptions.set("inertia_eps_monitor", 1)
+        dolfin.PETScOptions.set("inertia_eps_monitor", 1)
 
         self.pc.setFromOptions()
         self.pc.view()
@@ -469,7 +483,7 @@ class StabilitySolver(object):
 
     def project(self, beta, mode = 'None'):
         if self.bcs: bc_a = self.bcs['damage']
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
 
         if mode == 'truncate':
             mask = beta.vector()[:] < 0
@@ -543,7 +557,7 @@ class StabilitySolver(object):
 
         if hasattr(self, 'rP') and hasattr(self, 'rN'):
             self.H2 = self.rP - self.rN
-            import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
 
         if hasattr(self, 'Hessian'):
             log(LogLevel.INFO, 'Inertia: Using user-provided Hessian')
@@ -559,7 +573,6 @@ class StabilitySolver(object):
         self.inertia_setup()
 
         negev = self.get_inertia(self.H_reduced)
-        # import pdb; pdb.set_trace()
 
         # if negev > 0:
         if True:
@@ -569,21 +582,22 @@ class StabilitySolver(object):
             if hasattr(self, 'H2'):
                 log(LogLevel.INFO, 'INFO: Full eigenvalue: Using user-provided Rayleigh quotient')
                 log(LogLevel.INFO, 'INFO: Norm provided {}'.format(assemble(self.H2).norm('frobenius')))
-                eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
+                eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set)
             elif hasattr(self, 'Hessian'):
                 log(LogLevel.INFO, 'INFO: Full eigenvalue: Using user-provided Hessian')
                 log(LogLevel.INFO, 'INFO: Norm provided {}'.format(assemble(self.Hessian).norm('frobenius')))
-                eigen = EigenSolver(self.Hessian, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
+                eigen = EigenSolver(self.Hessian, self.z, restricted_dofs_is = index_set)
             else:
                 log(LogLevel.INFO, 'INFO: Full eig: Using computed Hessian')
-                eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options={'eps_max_it':600, 'eps_tol': eigen_tol})
+                eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set)
             log(LogLevel.INFO, 'INFO: Norm computed {}'.format(assemble(self.H).norm('frobenius')))
             self.computed.append(assemble(self.H).norm('frobenius'))
             if hasattr(self, 'H2'): self.provided.append(assemble(self.H2).norm('frobenius'))
+    
+            # import pdb; pdb.set_trace()
 
-            maxmodes = self.parameters['maxmodes']
-
-            nconv, it = eigen.solve(min(maxmodes, negev+7))
+            maxmodes = self.stability_parameters['maxmodes']
+            nconv, it = eigen.solve(min(maxmodes, negev))
 
             if nconv == 0:
                 log(LogLevel.WARNING, 'Eigensolver did not converge')
@@ -655,10 +669,10 @@ class StabilitySolver(object):
                         plt.savefig('data/neg-vn-{}-{}.pdf'.format(rank, n))
 
                     self.normalise_eigen(v_n, beta_n, mode='max')
-                    beta_n = self.project(beta_n, mode=self.parameters['projection'])
+                    beta_n = self.project(beta_n, mode=self.stability_parameters['projection'])
                     eig, u_r, u_im, err = eigen.get_eigenpair(n)
 
-                    order = self.parameters['order']
+                    order = self.stability_parameters['order']
 
                     linsearch.append({'n': n, 'lambda_n': eig.real,
                         'v_n': v_n, 'beta_n': beta_n})
