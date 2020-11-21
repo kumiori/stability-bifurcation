@@ -509,8 +509,13 @@ class ElasticitySolver:
         snes.setOptionsPrefix(prefix)
 
         for parameter, value in parameters.items():
-            log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value))
-            PETScOptions.set(prefix + parameter, value)
+            if value is not None:
+                log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value)) 
+                PETScOptions.set(prefix + parameter, value)
+            else:
+                log(LogLevel.INFO, "Set: {}".format(prefix + parameter)) 
+                PETScOptions.set(prefix + parameter)
+
         snes.setFromOptions()
 
     def solve(self):
