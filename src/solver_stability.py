@@ -536,9 +536,10 @@ class StabilitySolver(object):
         log(LogLevel.DEBUG, 'rank, {} : {}'.format(rank, locnumbcs))
         numbcs = np.array(0.,'d')
         comm.Reduce(locnumbcs, numbcs, op=mpi4py.MPI.SUM, root=0)
+        # import pdb; pdb.set_trace()
 
-        if get_log_level==LogLevel.DEBUG and rank == 0:
-            log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
+        # if get_log_level==LogLevel.DEBUG and rank == 0:
+        #     log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
 
         self.assigner.assign(self.z, [self.u, self.alpha])
 
@@ -561,7 +562,6 @@ class StabilitySolver(object):
 
         if hasattr(self, 'rP') and hasattr(self, 'rN'):
             self.H2 = self.rP - self.rN
-            # import pdb; pdb.set_trace()
 
         if hasattr(self, 'Hessian'):
             log(LogLevel.INFO, 'Inertia: Using user-provided Hessian')

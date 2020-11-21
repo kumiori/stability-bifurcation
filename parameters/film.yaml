@@ -20,3 +20,7 @@ material:
 geometry:
     Lx: 3.
     Ly: 0.1
+    n: 9
+equilibrium:
+    tol: 1e-3,
+    max_it: 300   
