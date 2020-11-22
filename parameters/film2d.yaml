@@ -6,7 +6,7 @@ general:
 loading: 
     load_min: 0.
     load_max: 1.5
-    n_steps: 10
+    n_steps: 30
 
 #  === Model === #
 material:
