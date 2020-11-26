@@ -39,6 +39,7 @@ elasticity:
     # mg_levels_ksp_type: chebyshev
     # mg_levels_pc_type: jacobi
     # mg_levels_ksp_chebyshev_esteig_steps: 50
+    # 
     snes_type: "newtontr"
     snes_stol: 1e-6
     snes_atol: 1e-6

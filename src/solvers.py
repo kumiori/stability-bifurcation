@@ -276,7 +276,7 @@ class AlternateMinimizationSolver(object):
             "iterations": [],
             "alpha_error": [],
             "alpha_max": []}
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
 
         while criterion > self.parameters["tol"] and it < self.parameters["max_it"]:
             it = it + 1
@@ -368,7 +368,7 @@ class EquilibriumSolver:
         self.elasticity = ElasticitySolver(energy, state, bcs['elastic'], parameters['elasticity'])
         self.damage = DamageSolver(energy, state, bcs['damage'], parameters['damage'])
 
-    def solve(self):
+    def solve(self, debugpath=''):
         parameters = self.parameters
         it = 0
         err_alpha = 1
@@ -381,19 +381,26 @@ class EquilibriumSolver:
         alt_min_data = {
             "iterations": [],
             "alpha_error": [],
-            "alpha_max": []}
+            "alpha_max": [],
+            "energy": []}
 
         # log(LogLevel.WARNING,'self.damage.problem.lb[:]')
         # log(LogLevel.WARNING, '{}'.format(self.damage.problem.lb[:]))
         self.damage.solver.solver.setVariableBounds(self.damage.problem.lb.vec(),
             self.damage.problem.ub.vec())
+        
         # import pdb; pdb.set_trace()
+        if debugpath:
+            file_am = XDMFFile(os.path.join(debugpath, "am_new.xdmf"))
+        else:
+            file_am = XDMFFile("/Users/kumiori/am_new.xdmf")
+        file_am.parameters["functions_share_mesh"] = True
+        file_am.parameters["flush_output"] = True
 
-        while criterion > self.parameters['solver']['equilibrium']["tol"] and it < self.parameters['solver']['equilibrium']["max_it"]:
+        while criterion > float(self.parameters['equilibrium']["tol"]) and it < self.parameters['equilibrium']["max_it"]:
             it = it + 1
             (u_it, u_reason) = self.elasticity.solve()
             (alpha_it, alpha_reason) = self.damage.solve()
-
 
             # if not np.all(alpha.vector()[:] >=self.damage.problem.lb):
             #     pd = np.where(alpha.vector()[:]-self.damage.problem.lb[:] < 0)[0]
@@ -411,15 +418,22 @@ class EquilibriumSolver:
 
 
             log(LogLevel.INFO,
-                "   AM iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}".format(
+                "   AM iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}, energy = {:.5g}".format(
                     it,
                     err_alpha,
-                    alpha.vector().max()
+                    alpha.vector().max(),
+                    assemble(self.energy)
                 )
             )
 
             # update
             alpha_old.assign(alpha)
+
+            with file_am as file:
+                file.write(alpha, it)
+                file.write(u, it)
+
+            print('Written AM step {}'.format(it))
 
         irrev = alpha.vector()-self.damage.problem.lb
         if min(irrev[:]) >=0:
@@ -431,9 +445,10 @@ class EquilibriumSolver:
         alt_min_data["alpha_error"].append(err_alpha)
         alt_min_data["alpha_max"].append(alpha.vector().max())
         alt_min_data["iterations"].append(it)
+        alt_min_data["energy"].append(assemble(self.energy))
 
         log(LogLevel.INFO,
-                "AM converged in {} iterations, err = {}".format(it, err_alpha))
+                "AM converged in {} iterations, err = {}, energy = {}".format(it, err_alpha, assemble(self.energy)))
 
         return (alt_min_data, it)
 

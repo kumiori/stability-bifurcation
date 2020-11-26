@@ -1,5 +1,5 @@
 stability:
-    order: 4
+    order: 3
     projection: 'None'
     maxmodes: 5
     checkstability: 'True'
