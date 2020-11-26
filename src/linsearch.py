@@ -68,6 +68,7 @@ class LineSearch(object):
     def search(self, state, v_n, beta_n, m=3, mode=0):
         # m: order of polynomial approximation
         # mode: index of mode, for display purposes
+        log(LogLevel.INFO,'')
         debug = False
         # FIXME: straighten interface: get rid of n dependence and put into a dictionary
         # v_n = perturbation['v']
@@ -116,7 +117,6 @@ class LineSearch(object):
     
             z = np.polyfit(htest, en, m)
             p = np.poly1d(z)
-
 
             if m==2:
                 log(LogLevel.INFO, 'Line search using quadratic interpolation')

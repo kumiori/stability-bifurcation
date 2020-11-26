@@ -125,7 +125,7 @@ def numerical_test(
     # FIXME: Not nice
     parameters = default_parameters
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir = '../test/output/test_film2d-{}'.format(signature)
+    outdir = '../test/output/film2d/{}'.format(signature)
     # outdir = '../test/output/test_film2d-init-{}'.format(signature)
     Path(outdir).mkdir(parents=True, exist_ok=True)
     log(LogLevel.INFO, 'INFO: Outdir is: '+outdir)
@@ -374,12 +374,12 @@ def numerical_test(
             log(LogLevel.INFO,'    Current state is{}stable'.format(' ' if stable else ' un'))
         else:
             # Continuation
-        #     save_current_bifurcation = True
-        #     save_stability = stability
+            #     save_current_bifurcation = True
+            #     save_stability = stability
             iteration = 1
             while stable == False:
                 log(LogLevel.CRITICAL, 'Continuation iteration {}'.format(iteration))
-        #         # linesearch
+            #         # linesearch
 
                 cont_data_pre = compile_continuation_data(state, energy)
                 perturbation_v    = stability.perturbation_v
@@ -395,7 +395,6 @@ def numerical_test(
                     linesearch.search({'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
                     pert[n][0], pert[n][1])
 
-           
                 if size == 1:
                     fig = plt.figure(figsize=(4, 1.5), dpi=180,)
                     _nmodes = len(pert)
@@ -469,7 +468,7 @@ def numerical_test(
                     perturbation_v, perturbation_beta)
                 log(LogLevel.INFO,'h_opt {}, (hmin, hmax) {}, energy_perturbations {}'.format(h_opt, (hmin, hmax), energy_perturbations))
 
-        #         # stable = True
+                #         # stable = True
 
                 if h_opt != 0:
                     log(LogLevel.INFO, '    Bifurcating')
@@ -622,7 +621,7 @@ def numerical_test(
         # spacetime.append(get_trace(alpha))
 
 
-    time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
+        time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
     if size == 1:
         def format_space(x, pos, xresol = 100):
@@ -704,4 +703,30 @@ if __name__ == "__main__":
         # ax2.set_ylim(-1e-7, 2e-4)
         fig2.savefig(os.path.join(experiment, "spectrum.pdf"), bbox_inches='tight')
 
+    from dolfin import list_timings, TimingType, TimingClear
+
+    list_timings(TimingClear.keep, [TimingType.wall, TimingType.system])
+    t = list_timings(TimingClear.keep,
+                [TimingType.wall, TimingType.user, TimingType.system])
+    # Use different MPI reductions
+    # t_sum = MPI.sum(MPI.comm_world, t[0])
+    # t_min = MPI.min(MPI.comm_world, t[1])
+    # t_max = MPI.max(MPI.comm_world, t[2])
+    t_avg = MPI.avg(MPI.comm_world, t[3])
+
+    # Print aggregate timings to screen
+    # print('\n'+t_sum.str(True))
+    # print('\n'+t_min.str(True))
+    # print('\n'+t_max.str(True))
+    print('\n'+t_avg.str(True))
+
+    # Store to XML file on rank 0
+    if MPI.rank(MPI.comm_world) == 0:
+        f = File(MPI.comm_self, os.path.join(experiment, "timings_aggregate.xml"))
+        # f << t_sum
+        # f << t_min
+        # f << t_max
+        f << t_avg
+
+    dump_timings_to_xml(os.path.join(experiment, "timings_avg_min_max.xml"), TimingClear.clear)
 
