@@ -522,6 +522,7 @@ class ElasticitySolver:
 
         prefix = "elasticity_"
         snes.setOptionsPrefix(prefix)
+
         for parameter, value in parameters.items():
             if value is not None:
                 log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value)) 
@@ -529,6 +530,8 @@ class ElasticitySolver:
             else:
                 log(LogLevel.INFO, "Set: {}".format(prefix + parameter)) 
                 PETScOptions.set(prefix + parameter)
+
+        snes.setFromOptions()
 
         snes.setFromOptions()
         # snes.view()
