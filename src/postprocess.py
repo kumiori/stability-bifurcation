@@ -27,7 +27,6 @@ unstabl = 'C3'
 
 def load_data(rootdir):
 
-
     try:
         with open(rootdir + '/parameters.pkl', 'r') as f:
             params = json.load(f)
@@ -197,13 +196,16 @@ def plot_energy(parameters, dataf, tc):
     w1 = parameters['material']['sigma_D0']**2/E0
     ell = parameters['material']['ell']
     fig = plt.figure()
-    Lx = parameters['geometry']['Lx']
+
+    if 'Lx' in parameters['geometry']:
+        Lx = parameters['geometry']['Lx']
+    elif 'R' in parameters['geometry']:
+        Lx = np.pi*parameters['geometry']['R']**2.
     if 'Ly' in parameters['geometry']:
         Ly = parameters['geometry']['Ly']
     else: Ly = 1.
 
     En0 = w1 * Lx * Ly
-    t = np.linspace(0., 3., 100)
     fig = plt.figure()
     plt.xlabel('$$t$$')
 

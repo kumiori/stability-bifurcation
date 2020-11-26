@@ -69,7 +69,9 @@ class LineSearch(object):
         # m: order of polynomial approximation
         # mode: index of mode, for display purposes
         debug = False
-
+        # FIXME: straighten interface: get rid of n dependence and put into a dictionary
+        # v_n = perturbation['v']
+        # beta_n = perturbation['beta']
         en = []
         en0 = dolfin.assemble(self.energy)
 
@@ -132,7 +134,7 @@ class LineSearch(object):
             '.format(h_opt, self.hmin, self.hmax, h_opt/self.hmax))
         log(LogLevel.INFO, 'Line search polynomial approximation =\n {}'.format(p))
         log(LogLevel.INFO, 'h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
-        log(LogLevel.INFO, 'Line search estimate, relative energy variation={:.2f}%'.format((p(h_opt))/en0*100))
+        log(LogLevel.INFO, 'Line search estimate, relative energy variation={:.3f}%'.format((p(h_opt))/en0*100))
 
         # restore solution
         u.vector()[:] = u_0[:]
