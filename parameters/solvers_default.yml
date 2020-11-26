@@ -14,16 +14,16 @@ elasticity:
     # ksp_rtol: 1.0e-08
     # ksp_stol: 1.0e-08
     # GMRES + HYPRE (https://mooseframework.inl.gov/application_development/hypre.html)
-    # ksp_type: gmres
-    # pc_type: hypre
-    # pc_hypre_type: boomeramg
-    # pc_hypre_boomeramg_cycle_type: V
-    # pc_hypre_boomeramg_relax_type_all: backward-SOR/Jacobi # SOR/Jacobi
-    # pc_hypre_boomeramg_measure_type: global # local
-    # pc_hypre_boomeramg_coarsen_type: Falgout
-    # pc_hypre_boomeramg_strong_threshold: 0.3 # 3D: 0.7 (> 0.5)
-    # pc_hypre_boomeramg_agg_nl: 1
-    # pc_hypre_boomeramg_print_statistics: 0 
+    ksp_type: gmres
+    pc_type: hypre
+    pc_hypre_type: boomeramg
+    pc_hypre_boomeramg_cycle_type: V
+    pc_hypre_boomeramg_relax_type_all: backward-SOR/Jacobi # SOR/Jacobi
+    pc_hypre_boomeramg_measure_type: global # local
+    pc_hypre_boomeramg_coarsen_type: Falgout
+    pc_hypre_boomeramg_strong_threshold: 0.3 # 3D: 0.7 (> 0.5)
+    pc_hypre_boomeramg_agg_nl: 1
+    pc_hypre_boomeramg_print_statistics: 0 
     # GMRES + GAMG (can be tuned to be quicker)
     # ksp_type: gmres
     # pc_type: gamg
@@ -40,12 +40,12 @@ elasticity:
     # mg_levels_pc_type: jacobi
     # mg_levels_ksp_chebyshev_esteig_steps: 50
     # CG
-    snes_type: "newtontr"
-    snes_stol: 1e-6
-    snes_atol: 1e-6
-    snes_rtol: 1e-6
-    snes_max_it: 1000
-    snes_monitor:
+    # snes_type: "newtontr"
+    # snes_stol: 1e-6
+    # snes_atol: 1e-6
+    # snes_rtol: 1e-6
+    # snes_max_it: 1000
+    # snes_monitor:
 # Damage solver
 damage:
     type:
@@ -63,7 +63,7 @@ damage:
         snes_stol: 0.0 
         snes_max_it: 500
         snes_divergence_tolerance: -1.0
-        snes_monitor: ""
+        # snes_monitor: ""
     tao:
         # Options in the case of TAO solver
         # As the tao petsc4py is not accessible, these options are those from Fenics optimization problem

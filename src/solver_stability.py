@@ -126,7 +126,7 @@ class EigenSolver(object):
 
         self.set_options(self.slepc_options)
         E.setFromOptions()
-        E.view()
+        # E.view()
         # import pdb; pdb.set_trace()
 
         return E
@@ -458,7 +458,7 @@ class StabilitySolver(object):
         dolfin.PETScOptions.set("inertia_eps_monitor", 1)
 
         self.pc.setFromOptions()
-        self.pc.view()
+        # self.pc.view()
 
     def get_inertia(self, Mat = None, restricted_dof_is=None):
         if Mat == None:

@@ -4,9 +4,9 @@ general:
 
 # === Loading === #
 loading: 
-    load_min: 0.
+    load_min: 0.0
     load_max: 1.5
-    n_steps: 3
+    n_steps: 10
 
 #  === Model === #
 material:
@@ -19,8 +19,8 @@ material:
     sigma_D0: 1.
 geometry:
     Lx: 3.
-    Ly: 0.1
-    n: 9
+    Ly: 3.
+    n: 5
 equilibrium:
-    tol: 1e-3,
+    tol: 1e-6
     max_it: 300   
