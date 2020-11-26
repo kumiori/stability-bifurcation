@@ -27,12 +27,10 @@ eigen:
     eps_nev: 3
     eps_monitor:
     eps_max_it: 300
-    st_rtol: 1e-3 
-    st_atol: 1e-8 
 
 equilibrium:
     tol: 1e-5
-    max_it: 1000
+    max_it: 300
 
 elasticity:
     ksp_type: gmres
