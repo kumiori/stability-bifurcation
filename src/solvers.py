@@ -418,7 +418,7 @@ class EquilibriumSolver:
 
 
             log(LogLevel.INFO,
-                "   AM iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}, energy = {:.5g}".format(
+                "   AM iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}, energy = {:.6e}".format(
                     it,
                     err_alpha,
                     alpha.vector().max(),
