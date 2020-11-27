@@ -44,6 +44,7 @@ dolfin.parameters["std_out_all_processes"] = False
 
 from solvers import EquilibriumSolver
 from solver_stability import StabilitySolver
+from linsearch import LineSearch
 
 # from dolfin import NonlinearProblem, derivative, \
 #         TrialFunction, TestFunction, inner, assemble, sqrt, \
@@ -211,7 +212,7 @@ def numerical_test(
 
 
     solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
-    stability = StabilitySolver(mesh, energy, state, bcs, z, parameters = parameters['stability'])
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
     linesearch = LineSearch(energy, state)
 
     xs = np.linspace(-parameters['geometry']['Lx']/2., parameters['geometry']['Lx']/2, 50)
