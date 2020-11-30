@@ -210,12 +210,12 @@ class StabilitySolver(object):
         self._alpha = dolfin.Vector(self.alpha.vector())
         self.mesh = state['alpha'].function_space().mesh()
         self.meshsize = (self.mesh.hmax()+self.mesh.hmax())/2.
-
         # self.Z = z.function_space()
         # self.z = z
         self.Z = dolfin.FunctionSpace(self.mesh, 
             dolfin.MixedElement([self.u.ufl_element(),self.alpha.ufl_element()]))
         self.z = dolfin.Function(self.Z)
+        self.dm = self.Z.dofmap()
 
         with open('../parameters/stability.yaml') as f:
             self.stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
@@ -417,11 +417,11 @@ class StabilitySolver(object):
         vec = dolfin.PETScVector(MPI.comm_self)
         Ealpha.gather(vec, np.array(range(self.Z.sub(1).dim()), "intc"))
 
-        if np.all(Ealpha[:]>0):
-            return True
-        else:
-            return False
-        # return np.all(elastic_dofs)
+        # if np.all(Ealpha[:]>0):
+            # return True
+        # else:
+            # return False
+        return np.all(vec[:]>0)
 
     def get_inactive_set(self):
         tol = self.stability_parameters['inactiveset_atol']
@@ -441,11 +441,18 @@ class StabilitySolver(object):
 
         inactive_set_alpha = set(np.where(mask == True)[0])
 
-        # from subspace to global numbering
-        global_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
+        # # from subspace to global numbering
+        # global_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
 
-        # add displacement dofs
-        inactive_set = set(global_inactive_set_alpha) | set(self.Z.sub(0).dofmap().dofs())
+        # # add displacement dofs
+        # inactive_set = set(global_inactive_set_alpha) | set(self.Z.sub(0).dofmap().dofs())
+
+        # from local subspace to local mixed space numbering
+        local_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
+        # from local mixed space to global numbering
+        global_set_alpha = [self.dm.local_to_global_index(k) for k in local_inactive_set_alpha]
+        inactive_set = set(global_set_alpha) | set(self.Z.sub(0).dofmap().dofs())
+
 
         return inactive_set
 
@@ -565,6 +572,7 @@ class StabilitySolver(object):
 
         self.assigner.assign(self.z, [self.u, self.alpha])
 
+        log(LogLevel.INFO, 'H norm {}'.format(assemble(self.H).norm('frobenius')))
 
         if self.is_elastic():
             log(LogLevel.INFO, 'Current state: elastic')
@@ -595,6 +603,7 @@ class StabilitySolver(object):
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
 
         log(LogLevel.INFO, 'H norm {}'.format(assemble(self.H).norm('frobenius')))
+        log(LogLevel.INFO, 'H red norm {}'.format(self.H_reduced.norm(2)))
 
         self.inertia_setup()
 
@@ -694,16 +703,16 @@ class StabilitySolver(object):
                     self.normalise_eigen(v_n, beta_n, mode='max')
 
                     # if  log_level == LogLevel.DEBUG and size == 1:
-                    if size == 1:
-                        plt.clf()
-                        plt.colorbar(
-                            dolfin.plot(dot(v_n, v_n)**(.5))
-                        )
-                        plt.savefig('data/neg-vn-{}-new.pdf'.format(n))
+                    # if size == 1:
+                        # plt.clf()
+                        # plt.colorbar(
+                            # dolfin.plot(dot(v_n, v_n)**(.5))
+                        # )
+                        # plt.savefig('data/neg-vn-{}-new.pdf'.format(n))
 
-                        plt.clf()
-                        plt.colorbar(dolfin.plot(beta_n))
-                        plt.savefig('/Users/kumiori/neg-betan-{}-new.pdf'.format(n))
+                        # plt.clf()
+                        # plt.colorbar(dolfin.plot(beta_n))
+                        # plt.savefig('/Users/kumiori/neg-betan-{}-new.pdf'.format(n))
                         # plt.savefig('data/neg-betan-{}.pdf'.format(n))
 
 

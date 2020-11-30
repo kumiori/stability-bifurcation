@@ -393,7 +393,7 @@ class EquilibriumSolver:
         if debugpath:
             file_am = XDMFFile(os.path.join(debugpath, "am_new.xdmf"))
         else:
-            file_am = XDMFFile("/Users/kumiori/am_new.xdmf")
+            file_am = XDMFFile("./am_new.xdmf")
         file_am.parameters["functions_share_mesh"] = True
         file_am.parameters["flush_output"] = True
 
@@ -418,7 +418,7 @@ class EquilibriumSolver:
 
 
             log(LogLevel.INFO,
-                "   AM iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}, energy = {:.5g}".format(
+                "   AM iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}, energy = {:.6e}".format(
                     it,
                     err_alpha,
                     alpha.vector().max(),
@@ -448,7 +448,7 @@ class EquilibriumSolver:
         alt_min_data["energy"].append(assemble(self.energy))
 
         log(LogLevel.INFO,
-                "AM converged in {} iterations, err = {}, energy = {}".format(it, err_alpha, assemble(self.energy)))
+                "AM converged in {} iterations, err = {}, energy = {:.6g}".format(it, err_alpha, assemble(self.energy)))
 
         return (alt_min_data, it)
 

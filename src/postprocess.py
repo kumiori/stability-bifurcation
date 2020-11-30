@@ -107,7 +107,7 @@ def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
                        # c=np.where(np.array(d)<tol, 'C1', 'C2'))
 
     plt.axhline(0, c='k', lw=2.)
-    plt.xlabel('$t$')
+    plt.xlabel('t')
     plt.ylabel('Eigenvalues')
     #     plt.ylabel('$$\\lambda_m$$')
     # plt.axvline(tc, lw=.5, c='k')
@@ -117,11 +117,11 @@ def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
     plot_loadticks(ax1, tc, ell)
 
     ax2 = plt.twinx()
-    ax2.plot(data['load'].values, data['alpha_max'].values, label='$$max(\\alpha)$$')
+    ax2.plot(data['load'].values, data['alpha_max'].values, label='max(alpha)')
     plt.legend()
     tbif = t_bif(ell)
     tstab = t_stab(ell)
-    ax2.set_ylabel('max $\\alpha$')
+    ax2.set_ylabel('max alpha')
     ax2.set_yticks([0, 1.])
     ax2.set_yticklabels(['0','1'])
     ax2.set_ylim(0, 1.1)
@@ -225,9 +225,7 @@ def plot_energy(parameters, dataf, tc):
     # ax.axvline(t_stab(ell), c='k', ls='-', lw=2, label=r'$t^{cr}_s$')
     # ax.axvline(t_bif(ell), c='k', ls='-.', lw=2, label=r'$t^{cr}_b$')
     ax.set_xlim(parameters['loading']['load_min'], parameters['loading']['load_max'])
-    
-    ax.set_ylabel('Energy/$(w_1|\Omega|)$')
-    
+    # ax.set_ylabel('Energy/$(w_1|\Omega|)$')
     ax.set_ylim(0, 1.1)
     ax.set_yticks([0, 1, 1./2.])
     # ax.set_yticklabels(['$$1$$', '$$1/2$$'])
