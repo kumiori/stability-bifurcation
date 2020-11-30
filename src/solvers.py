@@ -393,11 +393,7 @@ class EquilibriumSolver:
         if debugpath:
             file_am = XDMFFile(os.path.join(debugpath, "am_new.xdmf"))
         else:
-<<<<<<< HEAD
             file_am = XDMFFile("am_new.xdmf")
-=======
-            file_am = XDMFFile("./am_new.xdmf")
->>>>>>> 077ffa373abce220d3b40e25a622613678f7210d
         file_am.parameters["functions_share_mesh"] = True
         file_am.parameters["flush_output"] = True
 
