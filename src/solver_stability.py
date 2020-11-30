@@ -210,13 +210,12 @@ class StabilitySolver(object):
         self._alpha = dolfin.Vector(self.alpha.vector())
         self.mesh = state['alpha'].function_space().mesh()
         self.meshsize = (self.mesh.hmax()+self.mesh.hmax())/2.
-
         # self.Z = z.function_space()
         # self.z = z
         self.Z = dolfin.FunctionSpace(self.mesh, 
             dolfin.MixedElement([self.u.ufl_element(),self.alpha.ufl_element()]))
         self.z = dolfin.Function(self.Z)
-        self.dm =  self.Z.dofmap()
+        self.dm = self.Z.dofmap()
 
         with open('../parameters/stability.yaml') as f:
             self.stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
@@ -411,9 +410,7 @@ class StabilitySolver(object):
         Ealpha.gather(vec, np.array(range(self.Z.sub(1).dim()), "intc"))
 
         return np.all(vec[:]>0)
-        #     return True
-        # else:
-        #     return False
+
 
     def get_inactive_set(self):
         tol = self.stability_parameters['inactiveset_atol']
@@ -555,6 +552,7 @@ class StabilitySolver(object):
 
         self.assigner.assign(self.z, [self.u, self.alpha])
 
+        log(LogLevel.INFO, 'H norm {}'.format(assemble(self.H).norm('frobenius')))
 
         if self.is_elastic():
             log(LogLevel.INFO, 'Current state: elastic')
@@ -592,6 +590,8 @@ class StabilitySolver(object):
             'Hessian norm': assemble(self.H).norm('frobenius'),
             'Hessian_reduced norm': self.H_reduced.norm(2)
         }
+        # typedef enum {NORM_1=0,NORM_2=1,NORM_FROBENIUS=2,NORM_INFINITY=3,NORM_1_AND_2=4} NormType;
+
         self.inertia_setup()
 
         # self.save_matrix(self.H_reduced, 'H-red-{}'.format(size))
@@ -704,6 +704,15 @@ class StabilitySolver(object):
                     #     plt.clf()
                     #     plt.colorbar(dolfin.plot(beta_n))
                     #     plt.savefig('/Users/kumiori/neg-betan-{}-new.pdf'.format(n))
+                        # plt.clf()
+                        # plt.colorbar(
+                            # dolfin.plot(dot(v_n, v_n)**(.5))
+                        # )
+                        # plt.savefig('data/neg-vn-{}-new.pdf'.format(n))
+
+                        # plt.clf()
+                        # plt.colorbar(dolfin.plot(beta_n))
+                        # plt.savefig('/Users/kumiori/neg-betan-{}-new.pdf'.format(n))
                         # plt.savefig('data/neg-betan-{}.pdf'.format(n))
 
 
