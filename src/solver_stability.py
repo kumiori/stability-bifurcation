@@ -216,6 +216,7 @@ class StabilitySolver(object):
         self.Z = dolfin.FunctionSpace(self.mesh, 
             dolfin.MixedElement([self.u.ufl_element(),self.alpha.ufl_element()]))
         self.z = dolfin.Function(self.Z)
+        self.dm =  self.Z.dofmap()
 
         with open('../parameters/stability.yaml') as f:
             self.stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
@@ -409,34 +410,32 @@ class StabilitySolver(object):
         vec = dolfin.PETScVector(MPI.comm_self)
         Ealpha.gather(vec, np.array(range(self.Z.sub(1).dim()), "intc"))
 
-        if np.all(Ealpha[:]>0):
-            return True
-        else:
-            return False
-        # return np.all(elastic_dofs)
+        return np.all(vec[:]>0)
+        #     return True
+        # else:
+        #     return False
 
     def get_inactive_set(self):
         tol = self.stability_parameters['inactiveset_atol']
-        log(LogLevel.INFO, 'INFO: Inactive set tolerance {}'.format(self.stability_parameters['inactiveset_atol']))
 
         Ealpha = assemble(self.Ealpha)
 
         mask = Ealpha[:] < tol
 
         inactive_set_alpha = set(np.where(mask == True)[0])
+        log(LogLevel.INFO, 'Inactive set tolerance {}'.format(self.stability_parameters['inactiveset_atol']))
 
         # from local subspace to local mixed space numbering
         local_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
-        # from local mixed space to global numbering 
-        global_set_alpha = [self.Z.dofmap().local_to_global_index(k) for k in local_inactive_set_alpha]
-
-        # add displacement dofs
+        # from local mixed space to global numbering
+        global_set_alpha = [self.dm.local_to_global_index(k) for k in local_inactive_set_alpha]
         inactive_set = set(global_set_alpha) | set(self.Z.sub(0).dofmap().dofs())
 
-        log(LogLevel.DEBUG, '{}: global_set_alpha {}'.format(rank, sorted(global_set_alpha)))
-        log(LogLevel.DEBUG, '{}: len global_set_alpha {}'.format(rank, len(global_set_alpha)))
-        log(LogLevel.DEBUG, '{}: local_inactive_set_alpha {}'.format(rank, sorted(local_inactive_set_alpha)))
-        log(LogLevel.DEBUG, '{}: len local_inactive_set_alpha {}'.format(rank, len(local_inactive_set_alpha)))
+        # log(LogLevel.CRITICAL, '{}: global_set_alpha {}'.format(rank, sorted(global_set_alpha)))
+        # log(LogLevel.CRITICAL, '{}: len global_set_alpha {}'.format(rank, len(global_set_alpha)))
+        # log(LogLevel.CRITICAL, '{}: local_inactive_set_alpha {}'.format(rank, sorted(local_inactive_set_alpha)))
+        # log(LogLevel.DEBUG,    '{}: len local_inactive_set_alpha {}'.format(rank, len(local_inactive_set_alpha)))
+        # import pdb; pdb.set_trace()   
 
         return inactive_set
 
@@ -459,7 +458,7 @@ class StabilitySolver(object):
 
         for parameter, value in self.inertia_parameters.items():
             dolfin.PETScOptions.set(parameter, value)
-            log(LogLevel.DEBUG, 'INFO: Setting up inertia solver: {}: {}'.format(prefix+parameter, value))
+            log(LogLevel.DEBUG, 'Setting up inertia solver: {}: {}'.format(prefix+parameter, value))
 
         dolfin.PETScOptions.set("inertia_ksp_type", "preonly")
         dolfin.PETScOptions.set("inertia_pc_type", "cholesky")
@@ -489,7 +488,7 @@ class StabilitySolver(object):
         # import pdb; pdb.set_trace()
         # myviewer = PETSc.Viewer().createASCII("test.txt", mode=PETSc.Viewer.Format.ASCII_COMMON,comm= PETSc.COMM_WORLD)
         (neg, zero, pos) = Fm.getInertia()
-        log(LogLevel.INFO, "INFO: #Eigenvalues of E'': (%s [neg], %s [zero], %s [pos])" % (neg, zero, pos))
+        log(LogLevel.INFO, "#Eigenvalues of E'': (%s [neg], %s [zero], %s [pos])" % (neg, zero, pos))
         if neg:
             self.stable = False
         else:
@@ -563,10 +562,10 @@ class StabilitySolver(object):
             self.negev = np.nan
             return self.stable, 0
         else:
-            log(LogLevel.INFO, 'Current state: not elastic')
+            log(LogLevel.INFO, 'Current state: inelastic')
 
         inactive_dofs = self.get_inactive_set()
-        self.inactive_set = inactive_dofs
+        # self.inactive_set = inactive_dofs
 
         free_dofs = list(sorted(inactive_dofs - self.bc_dofs))
 
@@ -586,10 +585,13 @@ class StabilitySolver(object):
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
 
         log(LogLevel.INFO, 'H norm {}'.format(assemble(self.H).norm('frobenius')))
-        log(LogLevel.INFO, 'H norm {}'.format(self.H_reduced.norm(2)))
+        log(LogLevel.INFO, 'H reduced norm {}'.format(self.H_reduced.norm(2)))
         # typedef enum {NORM_1=0,NORM_2=1,NORM_FROBENIUS=2,NORM_INFINITY=3,NORM_1_AND_2=4} NormType;
 
-
+        stability_data_i = {
+            'Hessian norm': assemble(self.H).norm('frobenius'),
+            'Hessian_reduced norm': self.H_reduced.norm(2)
+        }
         self.inertia_setup()
 
         # self.save_matrix(self.H_reduced, 'H-red-{}'.format(size))
@@ -597,25 +599,26 @@ class StabilitySolver(object):
         negev = self.get_inertia(self.H_reduced)
         # import pdb; pdb.set_trace()
 
-        # if negev > 0:
-        if True:
+        if negev > 0:
+            # import pdb; pdb.set_trace()
+        # if True:
             eigs = []
         # solve full eigenvalue problem
             eigen_tol = self.eigen_parameters['eig_rtol']
             if hasattr(self, 'H2'):
-                log(LogLevel.INFO, 'INFO: Full eigenvalue: Using user-provided Rayleigh quotient')
-                log(LogLevel.INFO, 'INFO: Norm provided {}'.format(assemble(self.H2).norm('frobenius')))
+                log(LogLevel.INFO, 'Full eigenvalue: Using user-provided Rayleigh quotient')
+                log(LogLevel.INFO, 'Norm provided {}'.format(assemble(self.H2).norm('frobenius')))
                 eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
             elif hasattr(self, 'Hessian'):
-                log(LogLevel.INFO, 'INFO: Full eigenvalue: Using user-provided Hessian')
-                log(LogLevel.INFO, 'INFO: Norm provided {}'.format(assemble(self.Hessian).norm('frobenius')))
+                log(LogLevel.INFO, 'Full eigenvalue: Using user-provided Hessian')
+                log(LogLevel.INFO, 'Norm provided {}'.format(assemble(self.Hessian).norm('frobenius')))
                 eigen = EigenSolver(self.Hessian, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
             else:
-                log(LogLevel.INFO, 'INFO: Full eig: Using computed Hessian')
+                log(LogLevel.INFO, 'Full eig: Using computed Hessian')
                 # import pdb; pdb.set_trace()
                 eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
                 # eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
-            log(LogLevel.INFO, 'INFO: Norm computed {}'.format(assemble(self.H).norm('frobenius')))
+            log(LogLevel.INFO, 'Norm computed {}'.format(assemble(self.H).norm('frobenius')))
 
             self.computed.append(assemble(self.H).norm('frobenius'))
 
@@ -691,16 +694,16 @@ class StabilitySolver(object):
                     self.normalise_eigen(v_n, beta_n, mode='max')
 
                     # if  log_level == LogLevel.DEBUG and size == 1:
-                    if size == 1:
-                        plt.clf()
-                        plt.colorbar(
-                            dolfin.plot(dot(v_n, v_n)**(.5))
-                        )
-                        plt.savefig('data/neg-vn-{}-new.pdf'.format(n))
+                    # if size == 1:
+                    #     plt.clf()
+                    #     plt.colorbar(
+                    #         dolfin.plot(dot(v_n, v_n)**(.5))
+                    #     )
+                    #     plt.savefig('data/neg-vn-{}-new.pdf'.format(n))
 
-                        plt.clf()
-                        plt.colorbar(dolfin.plot(beta_n))
-                        plt.savefig('/Users/kumiori/neg-betan-{}-new.pdf'.format(n))
+                    #     plt.clf()
+                    #     plt.colorbar(dolfin.plot(beta_n))
+                    #     plt.savefig('/Users/kumiori/neg-betan-{}-new.pdf'.format(n))
                         # plt.savefig('data/neg-betan-{}.pdf'.format(n))
 
 

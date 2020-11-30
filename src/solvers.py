@@ -393,7 +393,7 @@ class EquilibriumSolver:
         if debugpath:
             file_am = XDMFFile(os.path.join(debugpath, "am_new.xdmf"))
         else:
-            file_am = XDMFFile("/Users/kumiori/am_new.xdmf")
+            file_am = XDMFFile("am_new.xdmf")
         file_am.parameters["functions_share_mesh"] = True
         file_am.parameters["flush_output"] = True
 
@@ -747,6 +747,6 @@ class DamageProblemSNES(NonlinearProblem):
         # Update the current bound values
         # self.lb = alpha.copy(deepcopy = True).vector().vec()
         self.lb = alpha.copy(deepcopy = True).vector()
-        log(LogLevel.CRITICAL, '________________________ IRREV _________________________')
-        log(LogLevel.CRITICAL, 'CRITICAL: Updated irreversibility')
+        # log(LogLevel.INFO, '________________________ IRREV _________________________')
+        log(LogLevel.INFO, 'INFO: Updated irreversibility')
 
