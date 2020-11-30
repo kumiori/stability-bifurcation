@@ -203,9 +203,11 @@ def traction_1d(
 
 
     print('experiment = {}'.format(os.path.join('~/Documents/WIP/paper_stability_code', outdir)))
-    mesh = dolfin.IntervalMesh(int(float(n * Lx / ell)), -Lx/2., Lx/2.)
-    meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
-    meshf << mesh
+    # mesh = dolfin.IntervalMesh(int(float(n * Lx / ell)), -Lx/2., Lx/2.)
+    mesh = dolfin.IntervalMesh(10, -Lx/2., Lx/2.)
+    if size == 1:
+        meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
+        meshf << mesh
 
     left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
     right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
@@ -252,48 +254,20 @@ def traction_1d(
     file_eig.parameters["flush_output"] = True
 
     # Problem definition
-    # model = DamageElasticityModel1D(state, E0, ell, sigma_D0)
-    # 
     k_ell = 1e-8
     a = (1 - alpha) ** 2. + k_ell
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
     w = w_1 * alpha
     eps = u.dx(0)
 
-    # sigma = parameters['material']['E']*eps
-    # energy = 1./2.* parameters['material']['E']*a*eps**2. * dx + (w + w_1 * parameters['material']['ell'] ** 2. * alpha.dx(0)**2.)*dx
-
-    # # Rayleigh Ratio
-    # rP = (dolfin.sqrt(a)*sigma + dolfin.diff(a, alpha)/dolfin.sqrt(a)*sigma*beta)*(dolfin.sqrt(a)*v.dx(0) + dolfin.diff(a, alpha)/dolfin.sqrt(a)*eps*beta)*dx + \
-    #                 2*w_1*parameters['material']['ell'] ** 2 * beta.dx(0)**2*dx
-
-    # da = dolfin.diff(a, alpha)
-    # dda = dolfin.diff(dolfin.diff(a, alpha), alpha)
-    # ddw = dolfin.diff(dolfin.diff(w, alpha), alpha)
-
-    # rN = -(1./2.*(dda - da**2./a)*sigma*eps +1./2.*ddw)*beta**2.*dx
-    # import pdb; pdb.set_trace()
-
-    # ------------------------------
-
-    # model = DamageElasticityModel1D(state, parameters)
-    # model.dx = dx
-    # energy = model.total_energy_density(u, alpha)*model.dx
     energy = 1./2.* parameters['material']['E']*a*eps**2. * dx + (w + w_1 * parameters['material']['ell'] ** 2. * alpha.dx(0)**2.)*dx
-    # rP = model.rP(u, alpha, v, beta)*dx
-    # rN = model.rN(u, alpha, beta)*dx
 
-    # Alternate minimisation solver
-    import pdb; pdb.set_trace()
     solver = solvers.AlternateMinimizationSolver(energy,
         state, bcs, parameters=parameters['alt_min'])
 
-    # stability = StabilitySolver(mesh, energy, state, [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = parameters['stability'])
     stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
 
-    # Time iterations
     load_steps = np.linspace(load_min, load_max, parameters['time_stepping']['nsteps'])
-    # load_steps = np.logspace(np.log10(load_min), np.log10(load_max), parameters['time_stepping']['nsteps'])
 
     if loads:
         load_steps = loads

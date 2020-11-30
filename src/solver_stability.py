@@ -308,14 +308,6 @@ class StabilitySolver(object):
         self.perturbation_v = dolfin.Function(self.Z.sub(0).collapse())
         self.perturbation_beta = dolfin.Function(self.Z.sub(1).collapse())
 
-    # def default_parameters(self):
-    #     return {'order': 3,
-    #             'eig_rtol': 1e-8,
-    #             'projection': 'none',
-    #             "maxmodes": 1,
-    #             "inactiveset_atol": 1e-5
-    #             }
-
     def normalise_eigen(self, v, beta, mode='none'):
         if mode=='none':
             return
@@ -425,34 +417,26 @@ class StabilitySolver(object):
 
     def get_inactive_set(self):
         tol = self.stability_parameters['inactiveset_atol']
-        debug= False
-        log(LogLevel.DEBUG, 'DEBUG: Inactive set tolerance {}'.format(self.stability_parameters['inactiveset_atol']))
+        log(LogLevel.INFO, 'INFO: Inactive set tolerance {}'.format(self.stability_parameters['inactiveset_atol']))
 
         Ealpha = assemble(self.Ealpha)
-        vec = dolfin.PETScVector(MPI.comm_self)
-        Ealpha.gather(vec, np.array(range(self.Z.sub(1).dim()), "intc"))
 
-        if debug:
-            print('len vec grad', len(vec[:]))
-
-
-        # mask = Ealpha[:]/self.cellarea.vector() < tol
         mask = Ealpha[:] < tol
 
         inactive_set_alpha = set(np.where(mask == True)[0])
 
-        # # from subspace to global numbering
-        # global_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
-
-        # # add displacement dofs
-        # inactive_set = set(global_inactive_set_alpha) | set(self.Z.sub(0).dofmap().dofs())
-
         # from local subspace to local mixed space numbering
         local_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
-        # from local mixed space to global numbering
-        global_set_alpha = [self.dm.local_to_global_index(k) for k in local_inactive_set_alpha]
+        # from local mixed space to global numbering 
+        global_set_alpha = [self.Z.dofmap().local_to_global_index(k) for k in local_inactive_set_alpha]
+
+        # add displacement dofs
         inactive_set = set(global_set_alpha) | set(self.Z.sub(0).dofmap().dofs())
 
+        log(LogLevel.DEBUG, '{}: global_set_alpha {}'.format(rank, sorted(global_set_alpha)))
+        log(LogLevel.DEBUG, '{}: len global_set_alpha {}'.format(rank, len(global_set_alpha)))
+        log(LogLevel.DEBUG, '{}: local_inactive_set_alpha {}'.format(rank, sorted(local_inactive_set_alpha)))
+        log(LogLevel.DEBUG, '{}: len local_inactive_set_alpha {}'.format(rank, len(local_inactive_set_alpha)))
 
         return inactive_set
 
@@ -568,7 +552,7 @@ class StabilitySolver(object):
         # if get_log_level==LogLevel.DEBUG and rank == 0:
         #     log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
         if rank == 0:
-            log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
+            log(LogLevel.INFO, '#bc dofs = {}'.format(int(numbcs)))
 
         self.assigner.assign(self.z, [self.u, self.alpha])
 
@@ -604,10 +588,14 @@ class StabilitySolver(object):
 
         log(LogLevel.INFO, 'H norm {}'.format(assemble(self.H).norm('frobenius')))
         log(LogLevel.INFO, 'H red norm {}'.format(self.H_reduced.norm(2)))
+        # typedef enum {NORM_1=0,NORM_2=1,NORM_FROBENIUS=2,NORM_INFINITY=3,NORM_1_AND_2=4} NormType;
 
         self.inertia_setup()
 
+        # self.save_matrix(self.H_reduced, 'H-red-{}'.format(size))
+        # self.save_matrix(self.H_reduced, 'H-red-{}.txt'.format(size))
         negev = self.get_inertia(self.H_reduced)
+        # import pdb; pdb.set_trace()
 
         # if negev > 0:
         if True:
