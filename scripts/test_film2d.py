@@ -118,7 +118,7 @@ def numerical_test(
     # FIXME: Not nice
     parameters = default_parameters
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir = '../output/film2d/{}'.format(signature)
+    outdir = '../output/film2d/{}-{}CPU'.format(signature, size)
     # outdir = '../output/film2d-param/{}'.format(signature)
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
@@ -336,87 +336,94 @@ def numerical_test(
             # Continuation
             iteration = 1
 
-            pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
-            if size == 1:
-                # fig = plt.figure(figsize=(4, 1.5), dpi=180,)
-                _nmodes = len(pert)
-                # for mode in range(_nmodes):
-                #     plt.subplot(2, int(_nmodes/2)+_nmodes%2, mode+1)
-                #     ax = plt.gca()
-                #     plt.axis('off')
-                #     plot(stability.perturbations_beta[mode], vmin=-1., vmax=1.)
-                #     # ax.set_title('mode: '.format(mode))
-                # fig.savefig(os.path.join(outdir, "modes-{:.3f}.pdf".format(load)), bbox_inches="tight")
-
-                # plt.close()
-
-                fig = plt.figure(figsize=((_nmodes+1)*3, 3), dpi=80, facecolor='w', edgecolor='k')
-                fig.suptitle('Load {:3f}'.format(load), fontsize=16)
-                plt.subplot(2, _nmodes+1, 1)
-                plt.title('alpha (max = {:2.2f})'.format(max(alpha.vector()[:])))
-                plt.set_cmap('coolwarm')
-                plt.axis('off')
-                plot(alpha, vmin=0., vmax=1.)
-
-                plt.set_cmap('hot')
-
-                for i,mode in enumerate(pert):
-                    plt.subplot(2, _nmodes+1, i+2)
-                    plt.axis('off')
-                    plot(mode[1], cmap = cm.ocean, rowspan=2)
-
-                    h_opt, bounds, energy_perturbations = linesearch.search(
-                        {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
-                        mode[0], mode[1])
-                    # import pdb; pdb.set_trace()
-                    # plt.title('mode {}\n$\\lambda_{{{}}}={:.1e},$\n$h_opt$={:.3f}'.format(
-                        # i, i, stability.eigs[i], h_opt))
-                    # print('plot mode {}'.format(i))
-                    # plt.tight_layout(h_pad=0.0, pad=1.5)
-                    # plt.savefig(os.path.join(outdir, "modes-{:3.4f}.png".format(load)))
-
-                for i,mode in enumerate(pert):
-                    plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
-                    plt.axis('off')
-                    _pert_beta = mode[1]
-                    _pert_v = mode[0]
-                    h_opt, bounds, energy_perturbations = linesearch.search(
-                        {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
-                        mode[0], mode[1])
-                    # bounds = mode['interval']
-                    # import pdb; pdb.set_trace()
-                    if bounds[0] == bounds[1] == 0:
-                        plt.plot(bounds[0], 0)
-                    else:
-                        hs = np.linspace(bounds[0], bounds[1], 100)
-                        z = np.polyfit(np.linspace(bounds[0], bounds[1],
-                            len(energy_perturbations)), energy_perturbations, parameters['stability']['order'])
-                        p = np.poly1d(z)
-                        plt.plot(hs, p(hs), c='k')
-                        plt.plot(np.linspace(bounds[0], bounds[1],
-                            len(energy_perturbations)), energy_perturbations, marker='o', c='k')
-                        # plt.axvline(mode['hstar'])
-                        plt.axvline(0, lw=.5, c='k')
-                    # plt.title('{}'.format(i))
-                    plt.tight_layout(h_pad=1.5, pad=1.5)
-                # plt.legend()
-                plt.savefig(os.path.join(outdir, "modes-{:3.4f}.pdf".format(load)))
-                plt.close(fig)
-                plt.clf()
-                log(LogLevel.INFO, 'INFO: plotted modes')
             while stable == False:
+
+                pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
+                if size == 1:
+                    # fig = plt.figure(figsize=(4, 1.5), dpi=180,)
+                    _nmodes = len(pert)
+                    # for mode in range(_nmodes):
+                    #     plt.subplot(2, int(_nmodes/2)+_nmodes%2, mode+1)
+                    #     ax = plt.gca()
+                    #     plt.axis('off')
+                    #     plot(stability.perturbations_beta[mode], vmin=-1., vmax=1.)
+                    #     # ax.set_title('mode: '.format(mode))
+                    # fig.savefig(os.path.join(outdir, "modes-{:.3f}.pdf".format(load)), bbox_inches="tight")
+
+                    # plt.close()
+
+                    fig = plt.figure(figsize=((_nmodes+1)*3, 3), dpi=80, facecolor='w', edgecolor='k')
+                    fig.suptitle('Load {:3f}'.format(load), fontsize=16)
+                    plt.subplot(2, _nmodes+1, 1)
+                    plt.title('alpha (max = {:2.2f})'.format(max(alpha.vector()[:])))
+                    plt.set_cmap('coolwarm')
+                    plt.axis('off')
+                    plot(alpha, vmin=0., vmax=1.)
+
+                    plt.set_cmap('hot')
+
+                    for i,mode in enumerate(pert):
+                        plt.subplot(2, _nmodes+1, i+2)
+                        plt.axis('off')
+                        plot(mode[1], cmap = cm.ocean, rowspan=2)
+
+                        h_opt, bounds, energy_perturbations, en_var = linesearch.search(
+                            {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
+                            mode[0], mode[1])
+                        # import pdb; pdb.set_trace()
+                        # plt.title('mode {}\n$\\lambda_{{{}}}={:.1e},$\n$h_opt$={:.3f}'.format(
+                            # i, i, stability.eigs[i], h_opt))
+                        # print('plot mode {}'.format(i))
+                        # plt.tight_layout(h_pad=0.0, pad=1.5)
+                        # plt.savefig(os.path.join(outdir, "modes-{:3.4f}.png".format(load)))
+                    en_vars = []
+                    for i,mode in enumerate(pert):
+                        plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
+                        plt.axis('off')
+                        _pert_beta = mode[1]
+                        _pert_v = mode[0]
+                        h_opt, bounds, energy_perturbations, en_var = linesearch.search(
+                            {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
+                            mode[0], mode[1])
+                        en_vars.append(en_var)
+                        # bounds = mode['interval']
+                        # import pdb; pdb.set_trace()
+                        if bounds[0] == bounds[1] == 0:
+                            plt.plot(bounds[0], 0)
+                        else:
+                            hs = np.linspace(bounds[0], bounds[1], 100)
+                            z = np.polyfit(np.linspace(bounds[0], bounds[1],
+                                len(energy_perturbations)), energy_perturbations, parameters['stability']['order'])
+                            p = np.poly1d(z)
+                            plt.plot(hs, p(hs), c='k')
+                            plt.plot(np.linspace(bounds[0], bounds[1],
+                                len(energy_perturbations)), energy_perturbations, marker='o', c='k')
+                            # plt.axvline(mode['hstar'])
+                            plt.axvline(0, lw=.5, c='k')
+                        # plt.title('{}'.format(i))
+                        plt.tight_layout(h_pad=1.5, pad=1.5)
+                    # plt.legend()
+                    plt.savefig(os.path.join(outdir, "modes-{:3.4f}-{}.pdf".format(load, iteration)))
+                    plt.close(fig)
+                    plt.clf()
+                    log(LogLevel.INFO, 'INFO: plotted modes')
                 # linesearch
                 save_current_bifurcation = True
+                opt_mode = np.argmin(en_vars)
+                log(LogLevel.INFO, 'Energy vars {}'.format(en_vars))
+                log(LogLevel.INFO, 'Pick bifurcation mode {}'.format(opt_mode))
 
                 cont_data_pre = compile_continuation_data(state, energy)
-                perturbation_v    = stability.perturbation_v
-                perturbation_beta = stability.perturbation_beta
+                perturbation_v    = stability.perturbations_v[opt_mode]
+                perturbation_beta = stability.perturbations_beta[opt_mode]
+                # import pdb; pdb.set_trace()
 
-                h_opt, (hmin, hmax), energy_perturbations = linesearch.search(
+                h_opt, (hmin, hmax), energy_perturbations, en_var = linesearch.search(
                     {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
                     perturbation_v, perturbation_beta)
+                log(LogLevel.INFO, 'Est. energy var {}'.format(en_var))
 
-                stable = True
+                # stable = True
 
                 if h_opt != 0:
                     log(LogLevel.CRITICAL, '    Bifurcating')
@@ -431,6 +438,8 @@ def numerical_test(
 
                     u.vector()[:] = uval
                     alpha.vector()[:] = aval
+                    log(LogLevel.INFO, 'min a+h_opt beta_{} = {}'.format(opt_mode, min(aval)))
+                    log(LogLevel.INFO, 'max a+h_opt beta_{} = {}'.format(opt_mode, max(aval)))
 
                     u.vector().vec().ghostUpdate()
                     alpha.vector().vec().ghostUpdate()
@@ -579,24 +588,24 @@ if __name__ == "__main__":
         ell = parameters['material']['ell']
         # import pdb; pdb.set_trace()
         fig1, ax1 =pp.plot_energy(parameters, data, tc)
-        from math import tanh
+        # from math import tanh
         # L = parameters['geometry']['R']
         # F_L = L/2. - tanh(L/2.)
         # elast_en = [1./2.*parameters['material']['E']*t**2*F_L for t in data['load']]
         # visuals.setspines2()
         # print(data['elastic_energy'])
-        mu = parameters['material']['E']/2.
+        # mu = parameters['material']['E']/2.
         # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
         # Lx = 1.
         # Ly = .1
         # Omega = Lx*Ly
-        elast_en = [parameters['material']['E']*eps**2 for eps in data['load']]
-        plt.plot(data['load'], elast_en, c='k', label='analytic')
+        # elast_en = [parameters['material']['E']*eps**2 for eps in data['load']]
+        # plt.plot(data['load'], elast_en, c='k', label='analytic')
         # plt.axhline(parameters['geometry']['Ly'], c='k')
-        plt.legend()
+        # plt.legend()
 
-        plt.ylim(0, 1.)
-        plt.title('${}$'.format(lab))
+        # plt.ylim(0, 1.)
+        # plt.title('${}$'.format(lab))
 
         fig1.savefig(os.path.join(experiment, "energy.pdf"), bbox_inches='tight')
 

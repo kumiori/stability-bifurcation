@@ -80,7 +80,4 @@ damage:
         pc_type: lu
         pc_factor_mat_solver_type: mumps
         tao_monitor: ""
-# Damage Elasticity Solver
-damage_elasticity:
-    max_it: 25
-    alpha_rtol: 1.0e-5
+

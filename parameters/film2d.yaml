@@ -4,22 +4,22 @@ general:
 
 # === Loading === #
 loading: 
-    load_min: .6
-    load_max: .8
-    n_steps: 10
+    load_min: 1.
+    load_max: 1.
+    n_steps: 1
 
 #  === Model === #
 material:
     E: 1
     nu: 0.0
     ell: 0.025
-    ell_e: 0.1
+    ell_e: 0.9
     k_res: 1.e-8
     sigma_D0: 1.
 
 geometry:
-    R: 1.0
-    n: 2
+    R: 1.5
+    n: 3
 
 eigen:
     eps_type: "krylovschur"
@@ -29,8 +29,8 @@ eigen:
     eps_max_it: 300
 
 equilibrium:
-    tol: 1e-5
-    max_it: 500
+    tol: 1e-8
+    max_it: 1000
 
 elasticity:
     ksp_type: gmres

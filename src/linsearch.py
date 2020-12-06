@@ -94,7 +94,9 @@ class LineSearch(object):
 
 
         if self.hmin == 0. and self.hmax == 0.:
-            return 0., (0., 0.), [] 
+            # import pdb; pdb.set_trace()   
+
+            return 0., (0., 0.), [], 0
         else: 
             for h in htest:
                 uval = u_0[:]     + h*v_n.vector()[:]
@@ -134,7 +136,9 @@ class LineSearch(object):
             '.format(h_opt, self.hmin, self.hmax, h_opt/self.hmax))
         log(LogLevel.INFO, 'Line search polynomial approximation =\n {}'.format(p))
         log(LogLevel.INFO, 'h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
-        log(LogLevel.INFO, 'Line search estimate, relative energy variation={:.3f}%'.format((p(h_opt))/en0*100))
+        log(LogLevel.INFO, 'p(h_opt) {:.5f}, en0 {:.5f}'.format(p(h_opt),en0))
+        en_var = ((p(h_opt))/en0)
+        log(LogLevel.INFO, 'Line search estimate, relative energy variation={:.6%}'.format(en_var))
 
         # restore solution
         u.vector()[:] = u_0[:]
@@ -144,4 +148,4 @@ class LineSearch(object):
         alpha.vector().vec().ghostUpdate()
 
         # return h_opt, p(h_opt)/en0, (self.hmin, self.hmax), en
-        return h_opt, (self.hmin, self.hmax), en
+        return h_opt, (self.hmin, self.hmax), en, en_var

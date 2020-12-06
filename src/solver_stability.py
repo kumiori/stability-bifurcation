@@ -418,9 +418,13 @@ class StabilitySolver(object):
         Ealpha = assemble(self.Ealpha)
 
         mask = Ealpha[:] < tol
+        mask2 = self.alpha.vector()[:] > .97
 
-        inactive_set_alpha = set(np.where(mask == True)[0])
+        # import pdb; pdb.set_trace()   
+        inactive_set_alpha = set(np.where(mask2 == True)[0]) | set(np.where(mask == True)[0])
+        # inactive_set_alpha = set(np.where(mask == True)[0])
         log(LogLevel.INFO, 'Inactive set tolerance {}'.format(self.stability_parameters['inactiveset_atol']))
+        log(LogLevel.INFO, 'Inactive set tolerance 2 {}'.format(.3))
 
         # from local subspace to local mixed space numbering
         local_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
@@ -432,7 +436,6 @@ class StabilitySolver(object):
         # log(LogLevel.CRITICAL, '{}: len global_set_alpha {}'.format(rank, len(global_set_alpha)))
         # log(LogLevel.CRITICAL, '{}: local_inactive_set_alpha {}'.format(rank, sorted(local_inactive_set_alpha)))
         # log(LogLevel.DEBUG,    '{}: len local_inactive_set_alpha {}'.format(rank, len(local_inactive_set_alpha)))
-        # import pdb; pdb.set_trace()   
 
         return inactive_set
 
