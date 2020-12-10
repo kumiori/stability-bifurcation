@@ -113,7 +113,10 @@ class EigenSolver(object):
         E.create()
 
         E.setType(SLEPc.EPS.Type.KRYLOVSCHUR)
-        E.setProblemType(SLEPc.EPS.ProblemType.HEP)
+        if hasattr(self, 'M'):
+            E.setProblemType(SLEPc.EPS.ProblemType.GHEP)
+        else:
+            E.setProblemType(SLEPc.EPS.ProblemType.HEP)
         E.setWhichEigenpairs(E.Which.TARGET_REAL)
         E.setTarget(-.1) 
         st = E.getST()
@@ -216,6 +219,16 @@ class StabilitySolver(object):
             dolfin.MixedElement([self.u.ufl_element(),self.alpha.ufl_element()]))
         self.z = dolfin.Function(self.Z)
         self.dm = self.Z.dofmap()
+        self.ownership = self.Z.dofmap().ownership_range()
+
+        self.assigner = dolfin.FunctionAssigner(
+            self.Z,            # receiving space
+            [self.u.function_space(), self.alpha.function_space()]) # assigning spaces
+
+        dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=self.mesh)
+        self.y = dolfin.Function(self.Z)
+        # self.dz = 
+        # self.Identity = dot(self.y, dolfin.TestFunction(self.Z))*dx
 
         with open('../parameters/stability.yaml') as f:
             self.stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
@@ -244,6 +257,8 @@ class StabilitySolver(object):
         self.cellarea.assign(cdm)
 
         self.ownership = self.Z.dofmap().ownership_range()
+        # import pdb; pdb.set_trace()   
+
         self.assigner = dolfin.FunctionAssigner(
             self.Z,            # receiving space
             [self.u.function_space(), self.alpha.function_space()]) # assigning space
@@ -259,6 +274,9 @@ class StabilitySolver(object):
         self.Xu = Zu.collapse().tabulate_dof_coordinates()
         (_, self.mapa) = Za.collapse(collapsed_dofs = True)
         (_, self.mapu) = Zu.collapse(collapsed_dofs = True)
+
+        self.inactivemarker1 = dolfin.Function(self.alpha.function_space())
+        self.inactivemarker2 = dolfin.Function(self.alpha.function_space())
 
         self.computed = []
         self.provided = []
@@ -411,20 +429,29 @@ class StabilitySolver(object):
 
         return np.all(vec[:]>0)
 
-
     def get_inactive_set(self):
         tol = self.stability_parameters['inactiveset_atol']
 
         Ealpha = assemble(self.Ealpha)
-
+        tol2 = .95
         mask = Ealpha[:] < tol
-        mask2 = self.alpha.vector()[:] > .97
+        mask2 = self.alpha.vector()[:] > tol2
+        mask3 = self.alpha.vector()[:] > self.alpha_old[:]
 
-        # import pdb; pdb.set_trace()   
         inactive_set_alpha = set(np.where(mask2 == True)[0]) | set(np.where(mask == True)[0])
+
         # inactive_set_alpha = set(np.where(mask == True)[0])
         log(LogLevel.INFO, 'Inactive set tolerance {}'.format(self.stability_parameters['inactiveset_atol']))
-        log(LogLevel.INFO, 'Inactive set tolerance 2 {}'.format(.3))
+        log(LogLevel.INFO, 'Inactive set Ealpha nodes {}'.format(len(set(np.where(mask == True)[0]))))
+        log(LogLevel.INFO, 'Inactive set tolerance 2 {}'.format(tol2))
+        log(LogLevel.INFO, 'Inactive set 2 nodes {}'.format(len(set(np.where(mask2 == True)[0]))))
+        log(LogLevel.INFO, 'Inactive set a-a0 nodes {}'.format(len(set(np.where(mask3 == True)[0]))))
+        # import pdb; pdb.set_trace()   
+        # local operation
+        self.inactivemarker1.vector()[np.where(mask == True)[0]] = 1.
+        self.inactivemarker2.vector()[np.where(mask2 == True)[0]] = 1.
+        self.inactivemarker1.vector().vec().ghostUpdate()
+        self.inactivemarker2.vector().vec().ghostUpdate()
 
         # from local subspace to local mixed space numbering
         local_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
@@ -495,28 +522,28 @@ class StabilitySolver(object):
             self.stable = True
         return neg
 
-    def project(self, beta, mode = 'None'):
-        if self.bcs: bc_a = self.bcs['damage']
-        # import pdb; pdb.set_trace()
+    # def project(self, beta, mode = 'None'):
+    #     if self.bcs: bc_a = self.bcs['damage']
+    #     # import pdb; pdb.set_trace()
 
-        if mode == 'truncate':
-            mask = beta.vector()[:] < 0
-            beta.vector()[np.where(mask == True)[0]] = 0
-            if self.bcs:
-                for bc in bc_a: bc.apply(beta.vector())
-            return beta
-        elif mode == 'shift':
-            C = np.min(beta.vector()[:])
-            beta.vector()[:] = beta.vector()[:] + abs(C)
-            if self.bcs:
-                for bc in bc_a: bc.apply(beta.vector())
-            return beta
-        elif mode == 'None' or mode == 'none':
-            if self.bcs:
-                for bc in bc_a: bc.apply(beta.vector())
-            return beta
-        else:
-            raise RuntimeError("Cannot project perturbation")
+    #     if mode == 'truncate':
+    #         mask = beta.vector()[:] < 0
+    #         beta.vector()[np.where(mask == True)[0]] = 0
+    #         if self.bcs:
+    #             for bc in bc_a: bc.apply(beta.vector())
+    #         return beta
+    #     elif mode == 'shift':
+    #         C = np.min(beta.vector()[:])
+    #         beta.vector()[:] = beta.vector()[:] + abs(C)
+    #         if self.bcs:
+    #             for bc in bc_a: bc.apply(beta.vector())
+    #         return beta
+    #     elif mode == 'None' or mode == 'none':
+    #         if self.bcs:
+    #             for bc in bc_a: bc.apply(beta.vector())
+    #         return beta
+    #     else:
+    #         raise RuntimeError("Cannot project perturbation")
 
     def is_compatible(self, bcs, v, homogeneous = False, tol=dolfin.DOLFIN_EPS_LARGE):
         V = v.function_space()
@@ -538,24 +565,17 @@ class StabilitySolver(object):
     def solve(self, alpha_old):
         # debug = False
         self.alpha_old = alpha_old
-        postfix = 'seq' if size == 1 else 'mpi'
+        # postfix = 'seq' if size == 1 else 'mpi'
         self.H_norm = assemble(self.H).norm('frobenius')
 
         locnumbcs = np.array(len(self.bc_dofs))
-        # if debug:
+
         log(LogLevel.DEBUG, 'rank, {} : {}'.format(rank, locnumbcs))
         numbcs = np.array(0.,'d')
         comm.Reduce(locnumbcs, numbcs, op=mpi4py.MPI.SUM, root=0)
-        # import pdb; pdb.set_trace()
 
-        # if get_log_level==LogLevel.DEBUG and rank == 0:
-        #     log(LogLevel.DEBUG, '#bc dofs = {}'.format(int(numbcs)))
         if rank == 0:
             log(LogLevel.INFO, '#bc dofs = {}'.format(int(numbcs)))
-
-        self.assigner.assign(self.z, [self.u, self.alpha])
-
-        log(LogLevel.INFO, 'H norm {}'.format(assemble(self.H).norm('frobenius')))
 
         if self.is_elastic():
             log(LogLevel.INFO, 'Current state: elastic')
@@ -566,7 +586,6 @@ class StabilitySolver(object):
             log(LogLevel.INFO, 'Current state: inelastic')
 
         inactive_dofs = self.get_inactive_set()
-        # self.inactive_set = inactive_dofs
 
         free_dofs = list(sorted(inactive_dofs - self.bc_dofs))
 
@@ -589,6 +608,8 @@ class StabilitySolver(object):
         log(LogLevel.INFO, 'H reduced norm {}'.format(self.H_reduced.norm(2)))
         # typedef enum {NORM_1=0,NORM_2=1,NORM_FROBENIUS=2,NORM_INFINITY=3,NORM_1_AND_2=4} NormType;
 
+        # self.Id_reduced = self.reduce_Hessian(self.Identity, restricted_dofs_is = index_set)
+
         stability_data_i = {
             'Hessian norm': assemble(self.H).norm('frobenius'),
             'Hessian_reduced norm': self.H_reduced.norm(2)
@@ -601,26 +622,37 @@ class StabilitySolver(object):
         # self.save_matrix(self.H_reduced, 'H-red-{}.txt'.format(size))
         negev = self.get_inertia(self.H_reduced)
         # import pdb; pdb.set_trace()
+        # self.assigner.assign(self.z, [self.u, self.alpha])
 
-        if negev > 0:
+
+        # if negev > 0:
             # import pdb; pdb.set_trace()
-        # if True:
+        if True:
             eigs = []
         # solve full eigenvalue problem
+
+            # self.assigner.assign(self.y, [self.u, self.alpha])
+            # assemble(derivative(self.Identity, self.y, TrialFunction(self.Z)))
+            # Identity = assemble(derivative(self.Identity, self.y, dolfin.TrialFunction(self.Z)))
+
             eigen_tol = self.eigen_parameters['eig_rtol']
+
             if hasattr(self, 'H2'):
                 log(LogLevel.INFO, 'Full eigenvalue: Using user-provided Rayleigh quotient')
                 log(LogLevel.INFO, 'Norm provided {}'.format(assemble(self.H2).norm('frobenius')))
                 eigen = EigenSolver(self.H2, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
+
             elif hasattr(self, 'Hessian'):
                 log(LogLevel.INFO, 'Full eigenvalue: Using user-provided Hessian')
                 log(LogLevel.INFO, 'Norm provided {}'.format(assemble(self.Hessian).norm('frobenius')))
                 eigen = EigenSolver(self.Hessian, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
+
             else:
-                log(LogLevel.INFO, 'Full eig: Using computed Hessian')
-                # import pdb; pdb.set_trace()
+                log(LogLevel.INFO, 'Full eigenvalue: Using computed Hessian')
                 eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
-                # eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
+                # log(LogLevel.INFO, 'Full eigenvalue: Using computed Hessian and L2 identity')
+                # import pdb; pdb.set_trace()
+                # eigen = EigenSolver(self.H, self.z, a_m=dolfin.as_backend_type(Identity).mat(), restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
             log(LogLevel.INFO, 'Norm computed {}'.format(assemble(self.H).norm('frobenius')))
 
             self.computed.append(assemble(self.H).norm('frobenius'))
@@ -628,7 +660,7 @@ class StabilitySolver(object):
             if hasattr(self, 'H2'): self.provided.append(assemble(self.H2).norm('frobenius'))
 
             maxmodes = self.stability_parameters['maxmodes']
-            
+
             tol, maxit = eigen.E.getTolerances()
             log(LogLevel.INFO, "Eigensolver stopping condition: tol={:.4g}, maxit={:d}".format(tol, maxit))
 

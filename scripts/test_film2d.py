@@ -184,11 +184,11 @@ def numerical_test(
     log(LogLevel.INFO, 'Number of dofs: {}'.format(mesh.num_vertices()*(1+parameters['general']['dim'])))
     if size == 1:
         meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
-        meshf << mesh
+        # meshf << mesh
         plot(mesh)
         plt.savefig(os.path.join(outdir, "mesh.pdf"), bbox_inches='tight')
 
-    plt.savefig(os.path.join(outdir, "mesh.pdf"), bbox_inches='tight')
+    # plt.savefig(os.path.join(outdir, "mesh.pdf"), bbox_inches='tight')
 
     with open(os.path.join(outdir, 'parameters.yaml'), "w") as f:
         yaml.dump(parameters, f, default_flow_style=False)
@@ -308,6 +308,19 @@ def numerical_test(
         # Second order stability conditions
 
         (stable, negev) = stability.solve(solver.damage.problem.lb)
+        if size == 1:
+            fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
+            plt.subplot(2, 2, 1)
+            # dolfin.plot(mesh, alpha = .1)
+            plt.colorbar(dolfin.plot(stability.inactivemarker1, c='k', alpha = 1., vmin=0., vmax=1.))
+            plt.set_cmap('binary')
+            plt.subplot(2, 2, 2)
+            # dolfin.plot(mesh, alpha = 1.)
+            plt.colorbar(dolfin.plot(stability.inactivemarker2, c='r', alpha = 1., vmin=0., vmax=1.))
+            plt.set_cmap('binary')
+            plt.title('inactive sets')
+            plt.savefig(os.path.join(outdir, "inactivesets-{:3g}.pdf".format(load)))
+
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
@@ -340,6 +353,19 @@ def numerical_test(
 
                 pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
                 if size == 1:
+                    fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
+                    plt.subplot(2, 2, 1)
+                    # dolfin.plot(mesh, alpha = 1.)
+                    plt.colorbar(dolfin.plot(stability.inactivemarker1, alpha = 1., vmin=0., vmax=1.))
+                    plt.set_cmap('binary')
+                    plt.subplot(2, 2, 2)
+                    # dolfin.plot(mesh, alpha = .5)
+                    plt.colorbar(dolfin.plot(stability.inactivemarker2, alpha = 1., vmin=0., vmax=1.))
+                    plt.set_cmap('binary')
+                    plt.title('inactive sets')
+                    plt.savefig(os.path.join(outdir, "inactivesets-{:3g}-{:d}.pdf".format(load, iteration)))
+
+
                     # fig = plt.figure(figsize=(4, 1.5), dpi=180,)
                     _nmodes = len(pert)
                     # for mode in range(_nmodes):
@@ -375,7 +401,7 @@ def numerical_test(
                             # i, i, stability.eigs[i], h_opt))
                         # print('plot mode {}'.format(i))
                         # plt.tight_layout(h_pad=0.0, pad=1.5)
-                        # plt.savefig(os.path.join(outdir, "modes-{:3.4f}.png".format(load)))
+                        # plt.savefig(os.path.join(outdir, "modes-{:3.4f}.pdf".format(load)))
                     en_vars = []
                     for i,mode in enumerate(pert):
                         plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
@@ -483,7 +509,7 @@ def numerical_test(
                         modename = 'beta-%d'%n
                         mode.rename(modename, modename)
                         log(LogLevel.INFO, 'Saved mode {}'.format(modename))
-                        file.write(mode, step)
+                        file.write(mode, load)
 
                 with file_bif_postproc as file:
                     # leneigs = len(modes)
@@ -551,7 +577,7 @@ def numerical_test(
     plot(alpha)
     plt.savefig(os.path.join(outdir, 'alpha.pdf'))
     log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
-
+    plt.close()
     # import pdb; pdb.set_trace()
 
     return time_data_pd, outdir
@@ -585,6 +611,7 @@ if __name__ == "__main__":
             parameters['material']['E'],
             parameters['material']['sigma_D0'])
         tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
+        tc = sqrt(2.)/2.
         ell = parameters['material']['ell']
         # import pdb; pdb.set_trace()
         fig1, ax1 =pp.plot_energy(parameters, data, tc)

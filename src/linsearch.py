@@ -18,26 +18,26 @@ class LineSearch(object):
 
         self.energy = energy
 
-    def admissible_interval(self, alpha, alpha_old, beta_n):
+    def admissible_interval(self, alpha, alpha_old, beta):
         one = max(1., max(alpha.vector()[:]))
         self.upperbound = one
         self.lowerbound = alpha_old
         # if hasattr(self, 'bcs') and len(self.bcs[0])>0:
-        #     assert np.all([self.is_compatible(bc, v_n, homogeneous = True) for bc in self.bcs[0]]), \
+        #     assert np.all([self.is_compatible(bc, v, homogeneous = True) for bc in self.bcs[0]]), \
         #         'displacement test field is not kinematically admissible'
 
         # positive part
-        mask = beta_n.vector()[:]>0.
-
-        hp2 = (one-alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
-        hp1 = (alpha_old.vector()[mask]-alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [-np.inf]
+        mask = beta.vector()[:]>0.
+        
+        hp2 = (one-alpha.vector()[mask])/beta.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
+        hp1 = (alpha_old.vector()[mask]-alpha.vector()[mask])/beta.vector()[mask]  if len(np.where(mask==True)[0])>0 else [-np.inf]
         hp = (max(hp1), min(hp2))
 
         # negative part
-        mask = beta_n.vector()[:]<0.
+        mask = beta.vector()[:]<0.
 
-        hn2 = (one-alpha.vector()[mask])/beta_n.vector()[mask] if len(np.where(mask==True)[0])>0 else [-np.inf]
-        hn1 = (alpha_old.vector()[mask]-alpha.vector()[mask])/beta_n.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
+        hn2 = (one-alpha.vector()[mask])/beta.vector()[mask] if len(np.where(mask==True)[0])>0 else [-np.inf]
+        hn1 = (alpha_old.vector()[mask]-alpha.vector()[mask])/beta.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
         hn = (max(hn2), min(hn1))
 
         hmax = np.array(np.min([hp[1], hn[1]]))
@@ -57,6 +57,8 @@ class LineSearch(object):
             return (0., 0.)
         if hmax==0 and hmin==0:
             log(LogLevel.INFO, 'Line search failed: found zero step size')
+            # import pdb; pdb.set_trace()
+
             return (0., 0.)
         if hmax < hmin:
             log(LogLevel.INFO, 'Line search failed: optimal h* not admissible')
@@ -65,14 +67,14 @@ class LineSearch(object):
 
         return hmin, hmax
 
-    def search(self, state, v_n, beta_n, m=3, mode=0):
+    def search(self, state, v, beta, m=3, mode=0):
         # m: order of polynomial approximation
         # mode: index of mode, for display purposes
         log(LogLevel.INFO,'')
         debug = False
         # FIXME: straighten interface: get rid of n dependence and put into a dictionary
-        # v_n = perturbation['v']
-        # beta_n = perturbation['beta']
+        # v = perturbation['v']
+        # beta = perturbation['beta']
         en = []
         en0 = dolfin.assemble(self.energy)
 
@@ -88,7 +90,7 @@ class LineSearch(object):
         u_0[:] = u.vector()[:]
         alpha_0[:] = alpha.vector()[:]
 
-        (self.hmin, self.hmax) = self.admissible_interval(alpha, alpha_old, beta_n)
+        (self.hmin, self.hmax) = self.admissible_interval(alpha, alpha_old, beta)
 
         htest = np.linspace(self.hmin, self.hmax, m+1)
 
@@ -99,8 +101,8 @@ class LineSearch(object):
             return 0., (0., 0.), [], 0
         else: 
             for h in htest:
-                uval = u_0[:]     + h*v_n.vector()[:]
-                aval = alpha_0[:] + h*beta_n.vector()[:]
+                uval = u_0[:]     + h*v.vector()[:]
+                aval = alpha_0[:] + h*beta.vector()[:]
 
                 if not np.all(aval - alpha_old.vector()[:] + dolfin.DOLFIN_EPS_LARGE >= 0.):
                     raise Exception('Damage test field doesn\'t verify sharp irrev from below')
