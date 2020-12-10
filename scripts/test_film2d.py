@@ -204,6 +204,7 @@ def numerical_test(
     # Function Spaces
     V_u = dolfin.VectorFunctionSpace(mesh, "CG", 1)
     V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
+    L2 = dolfin.FunctionSpace(mesh, "DG", 0)
     u = dolfin.Function(V_u, name="Total displacement")
     u.rename('u', 'u')
     alpha = Function(V_alpha)
@@ -299,6 +300,9 @@ def numerical_test(
 
     log(LogLevel.INFO, '{}'.format(parameters))
     for step, load in enumerate(load_steps):
+        plt.close('all')
+        plt.clf()
+        
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
         alpha_old.assign(alpha)
@@ -310,16 +314,20 @@ def numerical_test(
         (stable, negev) = stability.solve(solver.damage.problem.lb)
         if size == 1:
             fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-            plt.subplot(2, 2, 1)
+            plt.subplot(2, 3, 1)
+            plt.set_cmap('binary')
             # dolfin.plot(mesh, alpha = .1)
-            plt.colorbar(dolfin.plot(stability.inactivemarker1, c='k', alpha = 1., vmin=0., vmax=1.))
-            plt.set_cmap('binary')
-            plt.subplot(2, 2, 2)
+            plt.colorbar(dolfin.plot(
+                project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
+            plt.subplot(2, 3, 2)
             # dolfin.plot(mesh, alpha = 1.)
-            plt.colorbar(dolfin.plot(stability.inactivemarker2, c='r', alpha = 1., vmin=0., vmax=1.))
-            plt.set_cmap('binary')
+            plt.colorbar(dolfin.plot(
+                project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
+            plt.subplot(2, 3, 3)
+            plt.colorbar(dolfin.plot(
+                project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
             plt.title('inactive sets')
-            plt.savefig(os.path.join(outdir, "inactivesets-{:3g}.pdf".format(load)))
+            plt.savefig(os.path.join(outdir, "{:3f}-inactivesets-0.pdf".format(load)))
 
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
@@ -354,16 +362,21 @@ def numerical_test(
                 pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
                 if size == 1:
                     fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-                    plt.subplot(2, 2, 1)
+                    plt.subplot(2, 3, 1)
+                    plt.set_cmap('binary')
                     # dolfin.plot(mesh, alpha = 1.)
-                    plt.colorbar(dolfin.plot(stability.inactivemarker1, alpha = 1., vmin=0., vmax=1.))
-                    plt.set_cmap('binary')
-                    plt.subplot(2, 2, 2)
+                    plt.colorbar(dolfin.plot(
+                        project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
+                    plt.subplot(2, 3, 2)
                     # dolfin.plot(mesh, alpha = .5)
-                    plt.colorbar(dolfin.plot(stability.inactivemarker2, alpha = 1., vmin=0., vmax=1.))
-                    plt.set_cmap('binary')
+                    plt.colorbar(dolfin.plot(
+                        project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
+                    plt.subplot(2, 3, 3)
+                    # dolfin.plot(mesh, alpha = .5)
+                    plt.colorbar(dolfin.plot(
+                        project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
                     plt.title('inactive sets')
-                    plt.savefig(os.path.join(outdir, "inactivesets-{:3g}-{:d}.pdf".format(load, iteration)))
+                    plt.savefig(os.path.join(outdir, "{:3g}-inactivesets-{:d}.pdf".format(load, iteration)))
 
 
                     # fig = plt.figure(figsize=(4, 1.5), dpi=180,)
@@ -429,7 +442,7 @@ def numerical_test(
                         # plt.title('{}'.format(i))
                         plt.tight_layout(h_pad=1.5, pad=1.5)
                     # plt.legend()
-                    plt.savefig(os.path.join(outdir, "modes-{:3.4f}-{}.pdf".format(load, iteration)))
+                    plt.savefig(os.path.join(outdir, "{:3f}-modes-{}.pdf".format(load, iteration)))
                     plt.close(fig)
                     plt.clf()
                     log(LogLevel.INFO, 'INFO: plotted modes')

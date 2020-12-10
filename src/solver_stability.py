@@ -277,6 +277,7 @@ class StabilitySolver(object):
 
         self.inactivemarker1 = dolfin.Function(self.alpha.function_space())
         self.inactivemarker2 = dolfin.Function(self.alpha.function_space())
+        self.inactivemarker3 = dolfin.Function(self.alpha.function_space())
 
         self.computed = []
         self.provided = []
@@ -450,8 +451,10 @@ class StabilitySolver(object):
         # local operation
         self.inactivemarker1.vector()[np.where(mask == True)[0]] = 1.
         self.inactivemarker2.vector()[np.where(mask2 == True)[0]] = 1.
+        self.inactivemarker3.vector()[np.where(mask3 == True)[0]] = 1.
         self.inactivemarker1.vector().vec().ghostUpdate()
         self.inactivemarker2.vector().vec().ghostUpdate()
+        self.inactivemarker3.vector().vec().ghostUpdate()
 
         # from local subspace to local mixed space numbering
         local_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
