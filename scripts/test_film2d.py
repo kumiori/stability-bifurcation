@@ -314,21 +314,26 @@ def numerical_test(
         (stable, negev) = stability.solve(solver.damage.problem.lb)
         if size == 1:
             fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-            plt.subplot(2, 3, 1)
+            plt.subplot(2, 4, 1)
             plt.set_cmap('binary')
             # dolfin.plot(mesh, alpha = .1)
             plt.colorbar(dolfin.plot(
                 project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
             plt.title('inactive sets Eprime alpha')
-            plt.subplot(2, 3, 2)
+            plt.subplot(2, 4, 2)
             # dolfin.plot(mesh, alpha = 1.)
             plt.colorbar(dolfin.plot(
                 project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
             plt.title('inactive sets tol ub')
-            plt.subplot(2, 3, 3)
+            plt.subplot(2, 4, 3)
             plt.colorbar(dolfin.plot(
                 project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
             plt.title('inactive sets a - a0')
+            plt.subplot(2, 4, 4)
+            # dolfin.plot(mesh, alpha = .5)
+            plt.colorbar(dolfin.plot(
+                project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.))
+            plt.title('intersec deriv, ub')
             plt.savefig(os.path.join(outdir, "{:3f}-inactivesets-0.png".format(load)))
 
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
@@ -360,27 +365,32 @@ def numerical_test(
             iteration = 1
 
             while stable == False:
-                plt.close('all')
+                l'plt.close('all')
 
                 pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
                 if size == 1:
                     fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-                    plt.subplot(2, 3, 1)
+                    plt.subplot(2, 4, 1)
                     plt.set_cmap('binary')
                     # dolfin.plot(mesh, alpha = 1.)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
                     plt.title('derivative zero')
-                    plt.subplot(2, 3, 2)
+                    plt.subplot(2, 4, 2)
                     # dolfin.plot(mesh, alpha = .5)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
                     plt.title('ub tolerance')
-                    plt.subplot(2, 3, 3)
+                    plt.subplot(2, 4, 3)
                     # dolfin.plot(mesh, alpha = .5)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
                     plt.title('alpha-alpha_old')
+                    plt.subplot(2, 4, 4)
+                    # dolfin.plot(mesh, alpha = .5)
+                    plt.colorbar(dolfin.plot(
+                        project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.))
+                    plt.title('intersec deriv, ub')
                     plt.savefig(os.path.join(outdir, "{:3g}-inactivesets-{:d}.png".format(load, iteration)))
 
 

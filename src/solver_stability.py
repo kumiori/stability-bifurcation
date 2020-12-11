@@ -433,6 +433,7 @@ class StabilitySolver(object):
         self.inactivemarker1 = dolfin.Function(self.alpha.function_space())
         self.inactivemarker2 = dolfin.Function(self.alpha.function_space())
         self.inactivemarker3 = dolfin.Function(self.alpha.function_space())
+        self.inactivemarker4 = dolfin.Function(self.alpha.function_space())
 
         Ealpha = assemble(self.Ealpha)
         # tol2 = .95
@@ -454,9 +455,11 @@ class StabilitySolver(object):
         self.inactivemarker1.vector()[np.where(mask == True)[0]] = 1.
         self.inactivemarker2.vector()[np.where(mask2 == True)[0]] = 1.
         self.inactivemarker3.vector()[np.where(mask3 == True)[0]] = 1.
+        self.inactivemarker4.vector()[list(inactive_set_alpha)] = 1.
         self.inactivemarker1.vector().vec().ghostUpdate()
         self.inactivemarker2.vector().vec().ghostUpdate()
         self.inactivemarker3.vector().vec().ghostUpdate()
+        self.inactivemarker4.vector().vec().ghostUpdate()
         # import pdb; pdb.set_trace()   
 
         # from local subspace to local mixed space numbering
@@ -527,29 +530,6 @@ class StabilitySolver(object):
         else:
             self.stable = True
         return neg
-
-    # def project(self, beta, mode = 'None'):
-    #     if self.bcs: bc_a = self.bcs['damage']
-    #     # import pdb; pdb.set_trace()
-
-    #     if mode == 'truncate':
-    #         mask = beta.vector()[:] < 0
-    #         beta.vector()[np.where(mask == True)[0]] = 0
-    #         if self.bcs:
-    #             for bc in bc_a: bc.apply(beta.vector())
-    #         return beta
-    #     elif mode == 'shift':
-    #         C = np.min(beta.vector()[:])
-    #         beta.vector()[:] = beta.vector()[:] + abs(C)
-    #         if self.bcs:
-    #             for bc in bc_a: bc.apply(beta.vector())
-    #         return beta
-    #     elif mode == 'None' or mode == 'none':
-    #         if self.bcs:
-    #             for bc in bc_a: bc.apply(beta.vector())
-    #         return beta
-    #     else:
-    #         raise RuntimeError("Cannot project perturbation")
 
     def is_compatible(self, bcs, v, homogeneous = False, tol=dolfin.DOLFIN_EPS_LARGE):
         V = v.function_space()

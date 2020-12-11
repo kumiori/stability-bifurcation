@@ -5,7 +5,7 @@ stability:
     checkstability: 'True'
     continuation: 'False'
     cont_rtol: 1.0e-05
-    inactiveset_gatol: 1.e-15
+    inactiveset_gatol: 1.e-10
     inactiveset_ubtol: .05
 
 inertia:
