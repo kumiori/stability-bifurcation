@@ -392,11 +392,11 @@ class EquilibriumSolver:
         # import pdb; pdb.set_trace()
         if debugpath:
             file_am = XDMFFile(os.path.join(debugpath, "am_new.xdmf"))
-        else:
-            file_am = XDMFFile("am_new.xdmf")
-        file_am.parameters["functions_share_mesh"] = True
-        file_am.parameters["flush_output"] = True
-
+            file_am.parameters["functions_share_mesh"] = True
+            file_am.parameters["flush_output"] = True
+        # else:
+            # file_am = XDMFFile("am_new.xdmf")
+            
         while criterion > float(self.parameters['equilibrium']["tol"]) and it < self.parameters['equilibrium']["max_it"]:
             it = it + 1
             (u_it, u_reason) = self.elasticity.solve()
@@ -428,10 +428,10 @@ class EquilibriumSolver:
 
             # update
             alpha_old.assign(alpha)
-
-            with file_am as file:
-                file.write(alpha, it)
-                file.write(u, it)
+            if debugpath:
+                with file_am as file:
+                    file.write(alpha, it)
+                    file.write(u, it)
 
             print('Written AM step {}'.format(it))
 

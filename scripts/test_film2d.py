@@ -163,7 +163,7 @@ def numerical_test(
 
             cmd1 = 'gmsh {}.geo -2 -o {}.msh'.format(fname, fname)
             cmd2 = 'dolfin-convert -i gmsh {}.msh {}.xml'.format(fname, fname)
-            
+            # meshio-convert -> xdmf
             log(LogLevel.INFO, 'Unable to handle mesh generation at the moment, please generate the mesh and test again.')
             log(LogLevel.INFO, cmd1)
             log(LogLevel.INFO, cmd2)
@@ -300,14 +300,14 @@ def numerical_test(
 
     log(LogLevel.INFO, '{}'.format(parameters))
     for step, load in enumerate(load_steps):
-        plt.close('all')
         plt.clf()
-        
+
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
         alpha_old.assign(alpha)
         eps0t.t = load
-        (time_data_i, am_iter) = solver.solve(outdir)
+        # (time_data_i, am_iter) = solver.solve(outdir)
+        (time_data_i, am_iter) = solver.solve()
 
         # Second order stability conditions
 
@@ -319,15 +319,17 @@ def numerical_test(
             # dolfin.plot(mesh, alpha = .1)
             plt.colorbar(dolfin.plot(
                 project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
+            plt.title('inactive sets Eprime alpha')
             plt.subplot(2, 3, 2)
             # dolfin.plot(mesh, alpha = 1.)
             plt.colorbar(dolfin.plot(
                 project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
+            plt.title('inactive sets tol ub')
             plt.subplot(2, 3, 3)
             plt.colorbar(dolfin.plot(
                 project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
-            plt.title('inactive sets')
-            plt.savefig(os.path.join(outdir, "{:3f}-inactivesets-0.pdf".format(load)))
+            plt.title('inactive sets a - a0')
+            plt.savefig(os.path.join(outdir, "{:3f}-inactivesets-0.png".format(load)))
 
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
@@ -358,6 +360,7 @@ def numerical_test(
             iteration = 1
 
             while stable == False:
+                plt.close('all')
 
                 pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
                 if size == 1:
@@ -367,16 +370,18 @@ def numerical_test(
                     # dolfin.plot(mesh, alpha = 1.)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
+                    plt.title('derivative zero')
                     plt.subplot(2, 3, 2)
                     # dolfin.plot(mesh, alpha = .5)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
+                    plt.title('ub tolerance')
                     plt.subplot(2, 3, 3)
                     # dolfin.plot(mesh, alpha = .5)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
-                    plt.title('inactive sets')
-                    plt.savefig(os.path.join(outdir, "{:3g}-inactivesets-{:d}.pdf".format(load, iteration)))
+                    plt.title('alpha-alpha_old')
+                    plt.savefig(os.path.join(outdir, "{:3g}-inactivesets-{:d}.png".format(load, iteration)))
 
 
                     # fig = plt.figure(figsize=(4, 1.5), dpi=180,)
@@ -484,7 +489,8 @@ def numerical_test(
                     alpha.vector().vec().ghostUpdate()
 
                     log(LogLevel.INFO, 'INFO: Solving equilibrium from perturbed state')
-                    (time_data_i, am_iter) = solver.solve(outdir)
+                    # (time_data_i, am_iter) = solver.solve(outdir)
+                    (time_data_i, am_iter) = solver.solve()
                     log(LogLevel.INFO, 'INFO: Checking stability of new state')
                     (stable, negev) = stability.solve(solver.damage.problem.lb)
                     log(LogLevel.INFO, 'INFO: Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
@@ -572,7 +578,7 @@ def numerical_test(
             file.write_checkpoint(u, "u-{}".format(step), step, append = True)
             log(LogLevel.INFO, 'INFO: written postprocessing step {}'.format(step))
 
-    time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
+        time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
     def format_space(x, pos, xresol = 100):
         return '$%1.1f$'%((-x+xresol/2)/xresol)

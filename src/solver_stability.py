@@ -275,10 +275,6 @@ class StabilitySolver(object):
         (_, self.mapa) = Za.collapse(collapsed_dofs = True)
         (_, self.mapu) = Zu.collapse(collapsed_dofs = True)
 
-        self.inactivemarker1 = dolfin.Function(self.alpha.function_space())
-        self.inactivemarker2 = dolfin.Function(self.alpha.function_space())
-        self.inactivemarker3 = dolfin.Function(self.alpha.function_space())
-
         self.computed = []
         self.provided = []
 
@@ -431,23 +427,29 @@ class StabilitySolver(object):
         return np.all(vec[:]>0)
 
     def get_inactive_set(self):
-        tol = self.stability_parameters['inactiveset_atol']
+        gtol = self.stability_parameters['inactiveset_gatol']
+        ubtol = self.stability_parameters['inactiveset_ubtol']
+
+        self.inactivemarker1 = dolfin.Function(self.alpha.function_space())
+        self.inactivemarker2 = dolfin.Function(self.alpha.function_space())
+        self.inactivemarker3 = dolfin.Function(self.alpha.function_space())
 
         Ealpha = assemble(self.Ealpha)
-        tol2 = .95
-        mask = Ealpha[:] < tol
-        mask2 = self.alpha.vector()[:] > tol2
+        # tol2 = .95
+        mask = Ealpha[:] < gtol
+        mask2 = self.alpha.vector()[:] < 1.-ubtol
         mask3 = self.alpha.vector()[:] > self.alpha_old[:]
-
-        inactive_set_alpha = set(np.where(mask2 == True)[0]) | set(np.where(mask == True)[0])
+        # set operations: A & B \equiv A \cap B
+        inactive_set_alpha = set(np.where(mask2 == True)[0]) & set(np.where(mask == True)[0])
 
         # inactive_set_alpha = set(np.where(mask == True)[0])
-        log(LogLevel.INFO, 'Inactive set tolerance {}'.format(self.stability_parameters['inactiveset_atol']))
+        log(LogLevel.INFO, 'Ealpha norm {}'.format(Ealpha.norm('l2')))
+        log(LogLevel.INFO, 'Inactive set dofs {}'.format(len(Ealpha[:])))
+        log(LogLevel.INFO, 'Inactive set gradient tolerance {}'.format(self.stability_parameters['inactiveset_gatol']))
+        log(LogLevel.INFO, 'Inactive set upper bound tolerance {}'.format(self.stability_parameters['inactiveset_ubtol']))
         log(LogLevel.INFO, 'Inactive set Ealpha nodes {}'.format(len(set(np.where(mask == True)[0]))))
-        log(LogLevel.INFO, 'Inactive set tolerance 2 {}'.format(tol2))
         log(LogLevel.INFO, 'Inactive set 2 nodes {}'.format(len(set(np.where(mask2 == True)[0]))))
         log(LogLevel.INFO, 'Inactive set a-a0 nodes {}'.format(len(set(np.where(mask3 == True)[0]))))
-        # import pdb; pdb.set_trace()   
         # local operation
         self.inactivemarker1.vector()[np.where(mask == True)[0]] = 1.
         self.inactivemarker2.vector()[np.where(mask2 == True)[0]] = 1.
@@ -455,6 +457,7 @@ class StabilitySolver(object):
         self.inactivemarker1.vector().vec().ghostUpdate()
         self.inactivemarker2.vector().vec().ghostUpdate()
         self.inactivemarker3.vector().vec().ghostUpdate()
+        # import pdb; pdb.set_trace()   
 
         # from local subspace to local mixed space numbering
         local_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
