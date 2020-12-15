@@ -18,8 +18,8 @@ material:
     sigma_D0: 1.
 
 geometry:
-    R: 1.
-    n: 2
+    R: 1.5
+    n: 3
 
 eigen:
     eps_type: "krylovschur"

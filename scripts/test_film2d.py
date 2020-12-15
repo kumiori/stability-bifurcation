@@ -329,11 +329,11 @@ def numerical_test(
             plt.colorbar(dolfin.plot(
                 project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
             plt.title('inactive sets a - a0')
-                    plt.subplot(2, 4, 4)
-                    # dolfin.plot(mesh, alpha = .5)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.))
-                    plt.title('intersec deriv, ub')
+            plt.subplot(2, 4, 4)
+            # dolfin.plot(mesh, alpha = .5)
+            plt.colorbar(dolfin.plot(
+                project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.))
+            plt.title('intersec deriv, ub')
             plt.savefig(os.path.join(outdir, "{:3f}-inactivesets-0.png".format(load)))
 
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
