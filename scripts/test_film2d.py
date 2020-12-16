@@ -232,6 +232,7 @@ def numerical_test(
     # bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
     # bcs_alpha =[bcs_alpha_l, bcs_alpha_r]
     bcs_alpha = []
+    # bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0.), 'on_boundary')]
     # bcs_alpha = [DirichletBC(V_alpha, Constant(1.), boundary_meshfunction, 101)]
 
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
@@ -251,7 +252,7 @@ def numerical_test(
     mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
     nu = parameters['material']['nu']
     Wt = a*parameters['material']['E']*nu/(2*(1-nu**2.)) * tr(eps-eps0t)**2.                                \
-        + a*parameters['material']['E']*(inner(eps-eps0t, eps-eps0t)/(2.*(1+nu)))                           \
+        + a*parameters['material']['E']/(2.*(1+nu))*(inner(eps-eps0t, eps-eps0t))                           \
     + 1./2.*1./parameters['material']['ell_e']**2.*dot(u, u)
 
     energy = Wt * dx + w_1 *( alpha + parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
@@ -312,29 +313,6 @@ def numerical_test(
         # Second order stability conditions
 
         (stable, negev) = stability.solve(solver.damage.problem.lb)
-        if size == 1:
-            fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-            plt.subplot(2, 4, 1)
-            plt.set_cmap('binary')
-            # dolfin.plot(mesh, alpha = .1)
-            plt.colorbar(dolfin.plot(
-                project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
-            plt.title('inactive sets Eprime alpha')
-            plt.subplot(2, 4, 2)
-            # dolfin.plot(mesh, alpha = 1.)
-            plt.colorbar(dolfin.plot(
-                project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
-            plt.title('inactive sets tol ub')
-            plt.subplot(2, 4, 3)
-            plt.colorbar(dolfin.plot(
-                project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
-            plt.title('inactive sets a - a0')
-                    plt.subplot(2, 4, 4)
-                    # dolfin.plot(mesh, alpha = .5)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.))
-                    plt.title('intersec deriv, ub')
-            plt.savefig(os.path.join(outdir, "{:3f}-inactivesets-0.png".format(load)))
 
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
@@ -425,12 +403,13 @@ def numerical_test(
                             {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
                             mode[0], mode[1])
                         # import pdb; pdb.set_trace()
-                        # plt.title('mode {}\n$\\lambda_{{{}}}={:.1e},$\n$h_opt$={:.3f}'.format(
-                            # i, i, stability.eigs[i], h_opt))
+                        plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
+                            .format(i, h_opt, i, stability.eigs[i], en_var), fontsize= 15)
                         # print('plot mode {}'.format(i))
                         # plt.tight_layout(h_pad=0.0, pad=1.5)
                         # plt.savefig(os.path.join(outdir, "modes-{:3.4f}.pdf".format(load)))
                     en_vars = []
+
                     for i,mode in enumerate(pert):
                         plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
                         plt.axis('off')
@@ -441,7 +420,6 @@ def numerical_test(
                             mode[0], mode[1])
                         en_vars.append(en_var)
                         # bounds = mode['interval']
-                        # import pdb; pdb.set_trace()
                         if bounds[0] == bounds[1] == 0:
                             plt.plot(bounds[0], 0)
                         else:
@@ -452,7 +430,9 @@ def numerical_test(
                             plt.plot(hs, p(hs), c='k')
                             plt.plot(np.linspace(bounds[0], bounds[1],
                                 len(energy_perturbations)), energy_perturbations, marker='o', c='k')
-                            # plt.axvline(mode['hstar'])
+                            # import pdb; pdb.set_trace()
+                            plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
+                            plt.axvline(h_opt, lw = .3, c='k')
                             plt.axvline(0, lw=.5, c='k')
                         # plt.title('{}'.format(i))
                         plt.tight_layout(h_pad=1.5, pad=1.5)
@@ -499,8 +479,8 @@ def numerical_test(
                     alpha.vector().vec().ghostUpdate()
 
                     log(LogLevel.INFO, 'INFO: Solving equilibrium from perturbed state')
-                    # (time_data_i, am_iter) = solver.solve(outdir)
-                    (time_data_i, am_iter) = solver.solve()
+                    (time_data_i, am_iter) = solver.solve(outdir)
+                    # (time_data_i, am_iter) = solver.solve()
                     log(LogLevel.INFO, 'INFO: Checking stability of new state')
                     (stable, negev) = stability.solve(solver.damage.problem.lb)
                     log(LogLevel.INFO, 'INFO: Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
@@ -510,8 +490,8 @@ def numerical_test(
                     # # import pdb; pdb.set_trace()
 
                     criterion = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy'] < parameters['stability']['cont_rtol']
-                    log(LogLevel.INFO, 'INFO: Continuation criterion post energy {} - pre energy'.format(cont_data_post['energy'], cont_data_pre['energy']))
-                    log(LogLevel.INFO, 'INFO: Continuation criterion {}'.format(criterion))
+                    log(LogLevel.INFO, 'INFO: Continuation criterion post energy {} - pre energy {}'.format(cont_data_post['energy'], cont_data_pre['energy']))
+                    log(LogLevel.INFO, 'INFO: Continuation criterion Delta E = {}'.format((cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy']))
                 else:
                     # warn
                     log(LogLevel.WARNING, 'Found zero increment, we are stuck in the matrix')

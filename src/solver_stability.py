@@ -125,12 +125,9 @@ class EigenSolver(object):
         if prefix:
             E.setOptionsPrefix(prefix)
 
-        E.setFromOptions()
-
         self.set_options(self.slepc_options)
         E.setFromOptions()
         # E.view()
-        # import pdb; pdb.set_trace()
 
         return E
 
@@ -440,8 +437,11 @@ class StabilitySolver(object):
         mask = Ealpha[:] < gtol
         mask2 = self.alpha.vector()[:] < 1.-ubtol
         mask3 = self.alpha.vector()[:] > self.alpha_old[:]
+
         # set operations: A & B \equiv A \cap B
-        inactive_set_alpha = set(np.where(mask2 == True)[0]) & set(np.where(mask == True)[0])
+        # inactive_set_alpha = set(np.where(mask2 == True)[0]) & set(np.where(mask == True)[0])
+        
+        inactive_set_alpha = set(np.where(mask3 == True)[0])
 
         # inactive_set_alpha = set(np.where(mask == True)[0])
         log(LogLevel.INFO, 'Ealpha norm {}'.format(Ealpha.norm('l2')))
@@ -623,6 +623,7 @@ class StabilitySolver(object):
 
             eigen_tol = self.eigen_parameters['eig_rtol']
 
+
             if hasattr(self, 'H2'):
                 log(LogLevel.INFO, 'Full eigenvalue: Using user-provided Rayleigh quotient')
                 log(LogLevel.INFO, 'Norm provided {}'.format(assemble(self.H2).norm('frobenius')))
@@ -635,6 +636,7 @@ class StabilitySolver(object):
 
             else:
                 log(LogLevel.INFO, 'Full eigenvalue: Using computed Hessian')
+                log(LogLevel.INFO, '{}'.format(self.eigen_parameters))
                 eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
                 # log(LogLevel.INFO, 'Full eigenvalue: Using computed Hessian and L2 identity')
                 # import pdb; pdb.set_trace()

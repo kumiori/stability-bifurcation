@@ -58,7 +58,6 @@ class LineSearch(object):
         if hmax==0 and hmin==0:
             log(LogLevel.INFO, 'Line search failed: found zero step size')
             # import pdb; pdb.set_trace()
-
             return (0., 0.)
         if hmax < hmin:
             log(LogLevel.INFO, 'Line search failed: optimal h* not admissible')
@@ -132,7 +131,7 @@ class LineSearch(object):
 
             if h_opt < self.hmin or h_opt > self.hmax:
                 log(LogLevel.INFO, 'Line search failed, h_opt={:3e} not in feasible interval'.format(h_opt))
-                return h_opt, self.hmin, self.hmax
+                return h_opt, (self.hmin, self.hmax), 0
 
         log(LogLevel.INFO, 'Line search h_opt = {:3f} in ({:.3f}, {:.3f}), h_opt/hmax {:3f}\
             '.format(h_opt, self.hmin, self.hmax, h_opt/self.hmax))

@@ -448,7 +448,7 @@ class EquilibriumSolver:
         alt_min_data["energy"].append(assemble(self.energy))
 
         log(LogLevel.INFO,
-                "AM converged in {} iterations, err = {}, energy = {:.6g}".format(it, err_alpha, assemble(self.energy)))
+                "AM converged in {} iterations, err_alpha = {:.8e}, energy = {:.6e}".format(it, err_alpha, assemble(self.energy)))
 
         return (alt_min_data, it)
 
