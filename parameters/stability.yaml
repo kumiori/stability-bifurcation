@@ -5,8 +5,8 @@ stability:
     checkstability: 'True'
     continuation: 'False'
     cont_rtol: 1.0e-05
-    inactiveset_gatol: 1.e-8
-    inactiveset_ubtol: 1.e-1
+    inactiveset_gatol: 1.e-10
+    inactiveset_ubtol: 1.5e-1
 
 inertia:
     # MUMPS

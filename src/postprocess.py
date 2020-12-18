@@ -95,12 +95,13 @@ def plot_fills(ax, ell, tc):
     return ax
 
 def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
-    E0 = parameters['material']['E']
-    w1 = parameters['material']['sigma_D0']**2/E0
-    ell = parameters['material']['ell']
+    # E0 = parameters['material']['E']
+    # w1 = parameters['material']['sigma_D0']**2/E0
+    # ell = parameters['material']['ell']
     fig = plt.figure()
     for i,d in enumerate(data['eigs']):
-        if d is not (np.inf or np.nan or float('inf')):
+        # if d is not (np.inf or np.nan or float('inf')):
+        if np.isfinite(d):
             lend = len(d) if isinstance(d, np.ndarray) else 1
             plt.scatter([(data['load'].values)[i]]*lend, d,
                        c=np.where(np.array(d)<tol, 'red', 'C2'))
@@ -114,7 +115,7 @@ def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
     ax1 = plt.gca()
     ax1.yaxis.set_major_formatter(FormatStrFormatter('%.0e'))
 
-    plot_loadticks(ax1, tc, ell)
+    # plot_loadticks(ax1, tc, ell)
 
     ax2 = plt.twinx()
     ax2.plot(data['load'].values, data['alpha_max'].values, label='max(alpha)')
@@ -127,8 +128,8 @@ def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
     ax2.set_ylim(0, 1.1)
     # import pdb; pdb.set_trace()
 
-    ax = plt.gca()
-    ax.set_xlim(parameters['loading']['load_min'], parameters['loading']['load_max'])
+    # ax = plt.gca()
+    # ax.set_xlim(parameters['loading']['load_min'], parameters['loading']['load_max'])
 
 
     # stable = data['stable'].values
