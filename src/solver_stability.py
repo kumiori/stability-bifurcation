@@ -354,7 +354,7 @@ class StabilitySolver(object):
         # beta.gather(vec, 1, "float")
         # v.gather(vec, np.array(range(self.Z.sub(0).dim()), "intc"))
 
-        return
+        return coeff_glob
 
     def save_matrix(self, Mat, name):
         if name[-3:]=='txt': viewer = PETSc.Viewer().createASCII(name, 'w')
@@ -439,9 +439,9 @@ class StabilitySolver(object):
         mask3 = self.alpha.vector()[:] > self.alpha_old[:]
 
         # set operations: A & B \equiv A \cap B
-        # inactive_set_alpha = set(np.where(mask2 == True)[0]) & set(np.where(mask == True)[0])
+        inactive_set_alpha = set(np.where(mask2 == True)[0]) & set(np.where(mask == True)[0])
         
-        inactive_set_alpha = set(np.where(mask3 == True)[0])
+        # inactive_set_alpha = set(np.where(mask3 == True)[0])
 
         # inactive_set_alpha = set(np.where(mask == True)[0])
         log(LogLevel.INFO, 'Ealpha norm {}'.format(Ealpha.norm('l2')))
@@ -460,6 +460,7 @@ class StabilitySolver(object):
         self.inactivemarker2.vector().vec().ghostUpdate()
         self.inactivemarker3.vector().vec().ghostUpdate()
         self.inactivemarker4.vector().vec().ghostUpdate()
+        self.inactiveEalpha = self.Ealpha
         # import pdb; pdb.set_trace()   
 
         # from local subspace to local mixed space numbering
@@ -680,30 +681,7 @@ class StabilitySolver(object):
                 log(LogLevel.INFO, "---------------------------")
                 for (i, k) in enumerate(eigs):
                     log(LogLevel.INFO,  "%d %12e %12e" %(i, k[0], k[1]) )
-
-                # for (i, k) in enumerate(eigs):
-                #     log(LogLevel.INFO, 'Processing perturbation mode {}'.format(i))
-                #     eig, u_r, u_im, err = eigen.get_eigenpair(i)
-                #     err2 = eigen.E.computeError(0, SLEPc.EPS.ErrorType.ABSOLUTE)
-                #     v_n, beta_n = u_r.split(deepcopy=True)
-                    # self.normalise_eigen(v_n, beta_n, mode='max')
-                    # plt.clf()
-                    # import pdb; pdb.set_trace()
-                    # if size == 1:
-                    # # if  log_level == LogLevel.DEBUG and size == 1:
-                    #     # plt.colorbar(
-                    #     plt.colorbar(dolfin.plot(dot(v_n, v_n)**(.5)))
-                    #         # )
-                    #     plt.savefig('data/vn-{}.pdf'.format(i))
-                    #     plt.clf()
-                    #     # plt.colorbar(
-                    #     plt.colorbar(dolfin.plot(beta_n))
-                    #     # )
-                    #     plt.savefig('data/betan-{}.pdf'.format(i))
-                    #     # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
-
                 log(LogLevel.INFO, '')
-
 
             linsearch = []
 
@@ -712,38 +690,22 @@ class StabilitySolver(object):
                     log(LogLevel.INFO, 'Processing perturbation mode (neg eigenv) {}/{}'.format(n,maxmodes))
                     eig, u_r, u_im, err = eigen.get_eigenpair(n)
                     err2 = eigen.E.computeError(0, SLEPc.EPS.ErrorType.ABSOLUTE)
+                    # import pdb; pdb.set_trace()
+                    _z = dolfin.Vector(u_r.vector())
+                    _H = assemble(self.H)
+                    _J = assemble(self.J)
+                    _lmbda = (_H*_z).inner(_z)/_z.norm('l2')
+                    _j0 = _J.inner(_z)
                     v_n, beta_n = u_r.split(deepcopy=True)
+                    log(LogLevel.INFO, 'Verify H*z z/||z|| = {:.5e}'.format(_lmbda))
+                    log(LogLevel.INFO, 'Verify J*z = {:.5e}'.format(_j0))
                     # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
-                    self.normalise_eigen(v_n, beta_n, mode='max')
-
-                    # if  log_level == LogLevel.DEBUG and size == 1:
-                    # if size == 1:
-                    #     plt.clf()
-                    #     plt.colorbar(
-                    #         dolfin.plot(dot(v_n, v_n)**(.5))
-                    #     )
-                    #     plt.savefig('data/neg-vn-{}-new.pdf'.format(n))
-
-                    #     plt.clf()
-                    #     plt.colorbar(dolfin.plot(beta_n))
-                    #     plt.savefig('/Users/kumiori/neg-betan-{}-new.pdf'.format(n))
-                        # plt.clf()
-                        # plt.colorbar(
-                            # dolfin.plot(dot(v_n, v_n)**(.5))
-                        # )
-                        # plt.savefig('data/neg-vn-{}-new.pdf'.format(n))
-
-                        # plt.clf()
-                        # plt.colorbar(dolfin.plot(beta_n))
-                        # plt.savefig('/Users/kumiori/neg-betan-{}-new.pdf'.format(n))
-                        # plt.savefig('data/neg-betan-{}.pdf'.format(n))
-
+                    norm_coeff = self.normalise_eigen(v_n, beta_n, mode='max')
 
                     log(LogLevel.INFO, '||vn||_l2 = {}'.format(dolfin.norm(v_n, 'l2')))
                     log(LogLevel.INFO, '||βn||_l2 = {}'.format(dolfin.norm(beta_n, 'l2')))
                     log(LogLevel.INFO, '||vn||_h1 = {}'.format(dolfin.norm(v_n, 'h1')))
                     log(LogLevel.INFO, '||βn||_h1 = {}'.format(dolfin.norm(beta_n, 'h1')))
-                    # beta_n = self.project(beta_n, mode=self.stability_parameters['projection'])
                     # eig, u_r, u_im, err = eigen.get_eigenpair(n)
 
                     # order = self.stability_parameters['order']
@@ -751,7 +713,6 @@ class StabilitySolver(object):
                     linsearch.append({'n': n, 'lambda_n': eig.real,
                         'v_n': v_n, 'beta_n': beta_n})
 
-            # import pdb; pdb.set_trace()
             eig, u_r, u_im, err = eigen.get_eigenpair(0)
             self.eigs = eigs[:,0]
             self.mineig = eig.real
