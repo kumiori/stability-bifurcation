@@ -140,8 +140,10 @@ def numerical_test(
 
     geom_signature = hashlib.md5(str(d).encode('utf-8')).hexdigest()
 
-    fname = os.path.join('../meshes', 'circle-{}'.format(geom_signature))
-    mesh_template = open('../scripts/templates/circle_template.geo')
+    # fname = os.path.join('../meshes', 'circle-{}'.format(geom_signature))
+    # mesh_template = open('../scripts/templates/circle_template.geo')
+    fname = os.path.join('../meshes', 'bcircle-{}'.format(geom_signature))
+    mesh_template = open('../scripts/templates/circlebound_template.geo')
 
     # fname = os.path.join('../meshes', 'circle-init-{}'.format(geom_signature))
     # mesh_template = open('../scripts/templates/circle_template_init.geo')
