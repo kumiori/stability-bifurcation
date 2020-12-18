@@ -140,11 +140,10 @@ def numerical_test(
 
     geom_signature = hashlib.md5(str(d).encode('utf-8')).hexdigest()
 
-    # fname = os.path.join('../meshes', 'circle-{}'.format(geom_signature))
-    # mesh_template = open('../scripts/templates/circle_template.geo')
-    fname = os.path.join('../meshes', 'bcircle-{}'.format(geom_signature))
-    mesh_template = open('../scripts/templates/circlebound_template.geo')
-
+    fname = os.path.join('../meshes', 'circle-{}'.format(geom_signature))
+    mesh_template = open('../scripts/templates/circle_template.geo')
+    # fname = os.path.join('../meshes', 'bcircle-{}'.format(geom_signature))
+    # mesh_template = open('../scripts/templates/circlebound_template.geo')
     # fname = os.path.join('../meshes', 'circle-init-{}'.format(geom_signature))
     # mesh_template = open('../scripts/templates/circle_template_init.geo')
 
@@ -351,9 +350,17 @@ def numerical_test(
 
             while stable == False:
                 plt.close('all')
-
                 pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
-                if size == 1:
+                _nmodes = len(pert)
+                en_vars = []
+                for i,mode in enumerate(pert):
+                    h_opt, bounds, energy_perturbations, en_var = linesearch.search(
+                        {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
+                        mode[0], mode[1])
+                    en_vars.append(en_var)
+
+                # if False:
+                if rank == 0:
                     fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
                     plt.subplot(2, 4, 1)
                     plt.set_cmap('binary')
@@ -380,7 +387,6 @@ def numerical_test(
 
 
                     # fig = plt.figure(figsize=(4, 1.5), dpi=180,)
-                    _nmodes = len(pert)
                     # for mode in range(_nmodes):
                     #     plt.subplot(2, int(_nmodes/2)+_nmodes%2, mode+1)
                     #     ax = plt.gca()
@@ -405,7 +411,6 @@ def numerical_test(
                         # print('plot mode {}'.format(i))
                         # plt.tight_layout(h_pad=0.0, pad=1.5)
                         # plt.savefig(os.path.join(outdir, "modes-{:3.4f}.pdf".format(load)))
-                    en_vars = []
 
                     for i,mode in enumerate(pert):
                         plt.subplot(2, _nmodes+1, i+2)
@@ -416,7 +421,6 @@ def numerical_test(
                             {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
                             mode[0], mode[1])
 
-                        # import pdb; pdb.set_trace()
                         plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
                             .format(i, h_opt, i, stability.eigs[i], en_var), fontsize= 15)
 
@@ -501,27 +505,24 @@ def numerical_test(
                     iteration += 1
                     cont_data_post = compile_continuation_data(state, energy)
 
-                    # import pdb; pdb.set_trace()
                     DeltaE = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy']
                     release = DeltaE < 0 and np.abs(DeltaE) > parameters['stability']['cont_rtol']
                     log(LogLevel.INFO, 'INFO: Continuation criterion post energy {} - pre energy {}'.format(cont_data_post['energy'], cont_data_pre['energy']))
-                    log(LogLevel.INFO, 'INFO: Continuation criterion Delta E = {}'.format((cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy']))
+                    log(LogLevel.INFO, 'INFO: Continuation criterion Delta E = {:.7e}'.format(DeltaE))
                     if not release:
-                        log(LogLevel.WARNING, 'No decrease in energy, we are stuck in the matrix')
+                        log(LogLevel.CRITICAL, 'No decrease in energy, we are stuck in the matrix')
                         log(LogLevel.WARNING, 'Continuing load program')
+                        # import pdb; pdb.set_trace()
                         break
                 else:
                     # warn
-                    log(LogLevel.WARNING, 'Found zero increment, we are stuck in the matrix')
+                    log(LogLevel.CRITICAL, 'Found zero increment, we are stuck in the matrix')
                     log(LogLevel.WARNING, 'Continuing load program')
                     break
 
             solver.update()
 
-            # import pdb; pdb.set_trace()
             if save_current_bifurcation:
-                # modes = np.where(stability.eigs < 0)[0]
-
                 time_data_i['h_opt'] = h_opt
                 time_data_i['max_h'] = hmax
                 time_data_i['min_h'] = hmin
@@ -588,11 +589,11 @@ def numerical_test(
 
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
-
-        plot(alpha)
-        plt.savefig(os.path.join(outdir, 'alpha.pdf'))
-        log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
-        plt.close('all')
+        if rank == 0:
+            plot(alpha)
+            plt.savefig(os.path.join(outdir, 'alpha.pdf'))
+            log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
+            plt.close('all')
     
         # import postprocess as pp
         # tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
@@ -600,18 +601,18 @@ def numerical_test(
         # plt.legend(loc='lower left')
         # ax2.set_ylim(-1e-7, 2e-4)
         # fig2.savefig(os.path.join(outdir, "spectrum.pdf"), bbox_inches='tight')
-        fig = plt.figure()
-        for i,d in enumerate(time_data_pd['eigs']):
-            # if d is not (np.inf or np.nan or float('inf')):
-            if np.isfinite(d).all():
-                lend = len(d) if isinstance(d, np.ndarray) else 1
-                plt.scatter([(time_data_pd['load'].values)[i]]*lend, d,
-                           c=np.where(np.array(d)<0., 'red', 'black'))
-                           # c=np.where(np.array(d)<tol, 'C1', 'C2'))
+            fig = plt.figure()
+            for i,d in enumerate(time_data_pd['eigs']):
+                # if d is not (np.inf or np.nan or float('inf')):
+                if np.isfinite(d).all():
+                    lend = len(d) if isinstance(d, np.ndarray) else 1
+                    plt.scatter([(time_data_pd['load'].values)[i]]*lend, d,
+                               c=np.where(np.array(d)<0., 'red', 'black'))
+                               # c=np.where(np.array(d)<tol, 'C1', 'C2'))
 
-        plt.axhline(0, c='k', lw=2.)
-        plt.xlabel('t')
-        fig.savefig(os.path.join(outdir, "spectrum.pdf"), bbox_inches='tight')
+            plt.axhline(0, c='k', lw=2.)
+            plt.xlabel('t')
+            fig.savefig(os.path.join(outdir, "spectrum.pdf"), bbox_inches='tight')
         # plt.plot()
 
     def format_space(x, pos, xresol = 100):

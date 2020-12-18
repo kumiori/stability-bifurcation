@@ -438,19 +438,20 @@ class StabilitySolver(object):
         mask2 = self.alpha.vector()[:] < 1.-ubtol
         mask3 = self.alpha.vector()[:] > self.alpha_old[:]
 
-        # set operations: A & B \equiv A \cap B
+        # set operations: intersection : A & B \equiv A \cap B
         inactive_set_alpha = set(np.where(mask2 == True)[0]) & set(np.where(mask == True)[0])
         
         # inactive_set_alpha = set(np.where(mask3 == True)[0])
 
         # inactive_set_alpha = set(np.where(mask == True)[0])
         log(LogLevel.INFO, 'Ealpha norm {}'.format(Ealpha.norm('l2')))
-        log(LogLevel.INFO, 'Inactive set dofs {}'.format(len(Ealpha[:])))
+        log(LogLevel.INFO, 'Len Ealpha {}'.format(len(Ealpha[:])))
         log(LogLevel.INFO, 'Inactive set gradient tolerance {}'.format(self.stability_parameters['inactiveset_gatol']))
         log(LogLevel.INFO, 'Inactive set upper bound tolerance {}'.format(self.stability_parameters['inactiveset_ubtol']))
-        log(LogLevel.INFO, 'Inactive set Ealpha nodes {}'.format(len(set(np.where(mask == True)[0]))))
-        log(LogLevel.INFO, 'Inactive set 2 nodes {}'.format(len(set(np.where(mask2 == True)[0]))))
-        log(LogLevel.INFO, 'Inactive set a-a0 nodes {}'.format(len(set(np.where(mask3 == True)[0]))))
+        log(LogLevel.INFO, 'Inactive set Ealpha #nodes {}'.format(len(set(np.where(mask == True)[0]))))
+        log(LogLevel.INFO, 'Inactive set ub tol #nodes {}'.format(len(set(np.where(mask2 == True)[0]))))
+        log(LogLevel.INFO, 'Inactive set a-a0 #nodes {}'.format(len(set(np.where(mask3 == True)[0]))))
+        log(LogLevel.INFO, 'Inactive set Ea cap a<ub #nodes {}'.format(len(set(np.where(mask2 == True)[0]) & set(np.where(mask == True)[0]))))
         # local operation
         self.inactivemarker1.vector()[np.where(mask == True)[0]] = 1.
         self.inactivemarker2.vector()[np.where(mask2 == True)[0]] = 1.
@@ -637,7 +638,7 @@ class StabilitySolver(object):
 
             else:
                 log(LogLevel.INFO, 'Full eigenvalue: Using computed Hessian')
-                log(LogLevel.INFO, '{}'.format(self.eigen_parameters))
+                # log(LogLevel.INFO, '{}'.format(self.eigen_parameters))
                 eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
                 # log(LogLevel.INFO, 'Full eigenvalue: Using computed Hessian and L2 identity')
                 # import pdb; pdb.set_trace()
