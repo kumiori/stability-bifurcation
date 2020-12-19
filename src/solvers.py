@@ -532,9 +532,8 @@ class ElasticitySolver:
                 PETScOptions.set(prefix + parameter)
 
         snes.setFromOptions()
+        snes.view()
 
-        snes.setFromOptions()
-        # snes.view()
     def solve(self):
         # Get the problem
         log(LogLevel.INFO, '________________________ EQUILIBRIUM _________________________')

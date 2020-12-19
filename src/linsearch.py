@@ -139,7 +139,7 @@ class LineSearch(object):
         log(LogLevel.INFO, 'h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
         log(LogLevel.INFO, 'p(h_opt) {:.5f}, en0 {:.5f}'.format(p(h_opt),en0))
         en_var = ((p(h_opt))/en0)
-        log(LogLevel.INFO, 'Line search estimate, relative energy variation={:.6%}'.format(en_var))
+        log(LogLevel.INFO, 'Line search estimate, relative energy variation={:.3e}'.format(en_var))
 
         # restore solution
         u.vector()[:] = u_0[:]

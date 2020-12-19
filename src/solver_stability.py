@@ -503,7 +503,7 @@ class StabilitySolver(object):
         dolfin.PETScOptions.set("inertia_pc_factor_mat_solver_type", "mumps")
         dolfin.PETScOptions.set("inertia_mat_mumps_icntl_24", 1)
         dolfin.PETScOptions.set("inertia_mat_mumps_icntl_13", 1)
-        dolfin.PETScOptions.set("inertia_eps_monitor", 1)
+        # dolfin.PETScOptions.set("inertia_eps_monitor", 1)
 
         self.pc.setFromOptions()
         # self.pc.view()
@@ -641,7 +641,6 @@ class StabilitySolver(object):
                 # log(LogLevel.INFO, '{}'.format(self.eigen_parameters))
                 eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
                 # log(LogLevel.INFO, 'Full eigenvalue: Using computed Hessian and L2 identity')
-                # import pdb; pdb.set_trace()
                 # eigen = EigenSolver(self.H, self.z, a_m=dolfin.as_backend_type(Identity).mat(), restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
             log(LogLevel.INFO, 'Norm computed {}'.format(assemble(self.H).norm('frobenius')))
 
@@ -720,7 +719,6 @@ class StabilitySolver(object):
             # self.stable = negev <= 0  # based on inertia
 
             self.negev = negev  # based on inertia
-            self.linsearch = linsearch
 
             modes = negconv if negconv < maxmodes else maxmodes
             if eigs[0,0]<0:
@@ -737,7 +735,7 @@ class StabilitySolver(object):
             log(LogLevel.INFO, 'Negative eigenvalues (based on inertia) {}'.format(negev))
             log(LogLevel.INFO, 'Stable (counting neg. eigs) {}'.format(not (negev > 0)))
             log(LogLevel.INFO, 'Stable (Computing min. ev) {}'.format(eig.real > float(self.eigen_parameters['eig_rtol'])))
-            log(LogLevel.INFO, 'Min eig {}'.format(self.mineig))
+            log(LogLevel.INFO, 'Min eig {:.5e}'.format(self.mineig))
         
             self.stable = eig.real > float(self.eigen_parameters['eig_rtol'])  # based on eigenvalue
 

@@ -123,8 +123,8 @@ def numerical_test(
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     log(LogLevel.INFO, 'INFO: Outdir is: '+outdir)
-    log(LogLevel.INFO, '{}'.format(user_parameters))
-    log(LogLevel.INFO, '{}'.format(parameters))
+    # log(LogLevel.INFO, '{}'.format(user_parameters))
+    # log(LogLevel.INFO, '{}'.format(parameters))
     R = parameters['geometry']['R']
     # geom = mshr.Circle(dolfin.Point(0., 0.), R)
     # resolution = max(parameters['geometry']['n'] * R / ell, (10/R))
@@ -308,6 +308,7 @@ def numerical_test(
     log(LogLevel.INFO, '{}'.format(parameters))
     for step, load in enumerate(load_steps):
         plt.clf()
+        mineigs = []
 
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
@@ -317,22 +318,20 @@ def numerical_test(
         (time_data_i, am_iter) = solver.solve()
 
         # Second order stability conditions
-
         (stable, negev) = stability.solve(solver.damage.problem.lb)
 
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
         # log(LogLevel.INFO, 'INFO: lmbda min {}'.format(lmbda_min_prev))
-        log(LogLevel.INFO, 'INFO: mineig {}'.format(mineig))
+        log(LogLevel.INFO, 'INFO: mineig {:.5e}'.format(mineig))
         Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
-
 
         if (mineig + Deltav)*(lmbda_min_prev+dolfin.DOLFIN_EPS) < 0 and not bifurcated:
             bifurcated = True
 
             # save 3 bif modes
-            log(LogLevel.INFO, 'INFO: About to bifurcate load {} step {}'.format(load, step))
+            log(LogLevel.INFO, 'INFO: About to bifurcate load {:.3f} step {}'.format(load, step))
             bifurcation_loads.append(load)
             modes = np.where(stability.eigs < 0)[0]
 
@@ -345,19 +344,27 @@ def numerical_test(
             solver.update()
             log(LogLevel.INFO,'    Current state is{}stable'.format(' ' if stable else ' un'))
         else:
+            mineigs.append(mineig)
             # Continuation
             iteration = 1
-
             while stable == False:
+                log(LogLevel.INFO, 'Continuation iteration {}'.format(iteration))
                 plt.close('all')
                 pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
                 _nmodes = len(pert)
                 en_vars = []
+                h_opts = []
+                hbounds = []
+                en_perts = []
                 for i,mode in enumerate(pert):
-                    h_opt, bounds, energy_perturbations, en_var = linesearch.search(
+                    h_opt, bounds, enpert, en_var = linesearch.search(
                         {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
                         mode[0], mode[1])
+                    h_opts.append(h_opt)
                     en_vars.append(en_var)
+                    hbounds.append(bounds)
+                    en_perts.append(enpert)
+                # import pdb; pdb.set_trace()
 
                 # if False:
                 if rank == 0:
@@ -417,12 +424,12 @@ def numerical_test(
                         plt.axis('off')
                         plot(mode[1], cmap = cm.ocean)
 
-                        h_opt, bounds, energy_perturbations, en_var = linesearch.search(
-                            {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
-                            mode[0], mode[1])
+                        # h_opt, bounds, energy_perturbations, en_var = linesearch.search(
+                        #     {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
+                        #     mode[0], mode[1])
 
                         plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
-                            .format(i, h_opt, i, stability.eigs[i], en_var), fontsize= 15)
+                            .format(i, h_opts[i], i, stability.eigs[i], en_vars[i]), fontsize= 15)
 
                         plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
                         plt.axis('off')
@@ -431,21 +438,20 @@ def numerical_test(
                         # h_opt, bounds, energy_perturbations, en_var = linesearch.search(
                         #     {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
                         #     mode[0], mode[1])
-                        en_vars.append(en_var)
                         # bounds = mode['interval']
-                        if bounds[0] == bounds[1] == 0:
-                            plt.plot(bounds[0], 0)
+                        if hbounds[i][0] == hbounds[i][1] == 0:
+                            plt.plot(hbounds[i][0], 0)
                         else:
-                            hs = np.linspace(bounds[0], bounds[1], 100)
-                            z = np.polyfit(np.linspace(bounds[0], bounds[1],
-                                len(energy_perturbations)), energy_perturbations, parameters['stability']['order'])
+                            hs = np.linspace(hbounds[i][0], hbounds[i][1], 100)
+                            z = np.polyfit(np.linspace(hbounds[i][0], hbounds[i][1],
+                                len(en_perts[i])), en_perts[i], parameters['stability']['order'])
                             p = np.poly1d(z)
                             plt.plot(hs, p(hs), c='k')
-                            plt.plot(np.linspace(bounds[0], bounds[1],
-                                len(energy_perturbations)), energy_perturbations, marker='o', c='k')
+                            plt.plot(np.linspace(hbounds[i][0], hbounds[i][1],
+                                len(en_perts[i])), en_perts[i], marker='o', c='k')
                             # import pdb; pdb.set_trace()
                             plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
-                            plt.axvline(h_opt, lw = .3, c='k')
+                            plt.axvline(h_opts[i], lw = .3, c='k')
                             plt.axvline(0, lw=.5, c='k')
                         # plt.title('{}'.format(i))
                         plt.tight_layout(h_pad=1.5, pad=1.5)
@@ -463,11 +469,13 @@ def numerical_test(
                 cont_data_pre = compile_continuation_data(state, energy)
                 perturbation_v    = stability.perturbations_v[opt_mode]
                 perturbation_beta = stability.perturbations_beta[opt_mode]
+                h_opt = h_opts[opt_mode]
 
-                h_opt, (hmin, hmax), energy_perturbations, en_var = linesearch.search(
-                    {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
-                    perturbation_v, perturbation_beta)
-                log(LogLevel.INFO, 'Est. energy var {}'.format(en_var))
+                # h_opt, (hmin, hmax), energy_perturbations, en_var = linesearch.search(
+                #     {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
+                #     perturbation_v, perturbation_beta)
+
+                log(LogLevel.INFO, 'Estimated energy variation {:.3e}'.format(en_var))
 
                 # import pdb; pdb.set_trace()
                 Ealpha = Function(V_alpha)
@@ -503,17 +511,33 @@ def numerical_test(
                     (stable, negev) = stability.solve(solver.damage.problem.lb)
                     log(LogLevel.INFO, 'INFO: Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
                     iteration += 1
+
+                    mineigs.append(stability.mineig)
+
                     cont_data_post = compile_continuation_data(state, energy)
 
-                    DeltaE = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy']
+                    DeltaE = (cont_data_post['energy']-cont_data_pre['energy'])
+                    relDeltaE = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy']
                     release = DeltaE < 0 and np.abs(DeltaE) > parameters['stability']['cont_rtol']
                     log(LogLevel.INFO, 'INFO: Continuation criterion post energy {} - pre energy {}'.format(cont_data_post['energy'], cont_data_pre['energy']))
-                    log(LogLevel.INFO, 'INFO: Continuation criterion Delta E = {:.7e}'.format(DeltaE))
-                    if not release:
-                        log(LogLevel.CRITICAL, 'No decrease in energy, we are stuck in the matrix')
+                    log(LogLevel.INFO, 'INFO: Actual absolute energy variation Delta E = {:.7e}'.format(DeltaE))
+                    log(LogLevel.INFO, 'INFO: Actual relative energy variation Delta E = {:.7e}'.format(relDeltaE))
+
+                    # continuation criterion
+                    if abs(np.diff(mineigs)[-1]) > 1e-5:
+                        log(LogLevel.INFO, 'INFO: Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
+                        log(LogLevel.INFO, 'INFO: Continuing perturbations')
+                    else:
+                        log(LogLevel.INFO, 'INFO: Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
+                        log(LogLevel.CRITICAL, 'We are stuck in the matrix')
                         log(LogLevel.WARNING, 'Continuing load program')
+                        #
+                    # if not release:
+                        # log(LogLevel.CRITICAL, 'Small nergy release , we are stuck in the matrix')
+                        # log(LogLevel.CRITICAL, 'No decrease in energy, we are stuck in the matrix')
+                        # log(LogLevel.WARNING, 'Continuing load program')
                         # import pdb; pdb.set_trace()
-                        break
+                        # break
                 else:
                     # warn
                     log(LogLevel.CRITICAL, 'Found zero increment, we are stuck in the matrix')
