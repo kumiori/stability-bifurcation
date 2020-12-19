@@ -15,14 +15,14 @@ loading:
 material:
     E: 1
     nu: 0.3
-    ell: 0.03
+    ell: 0.05
     ell_e: 0.2
     k_res: 1.e-6
     sigma_D0: 1.
 
 geometry:
     R: 1.
-    n: 3
+    n: 2
 
 equilibrium:
     tol: 1e-5
@@ -76,5 +76,5 @@ inertia:
 eigen:
     eps_type: "krylovschur"
     eps_tol: 1e-5
-    eps_monitor:
+    # eps_monitor:
     eps_max_it: 100
