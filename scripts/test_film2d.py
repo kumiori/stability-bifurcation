@@ -309,6 +309,7 @@ def numerical_test(
     for step, load in enumerate(load_steps):
         plt.clf()
         mineigs = []
+        exhaust_modes = []
 
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
@@ -344,9 +345,10 @@ def numerical_test(
             solver.update()
             log(LogLevel.INFO,'    Current state is{}stable'.format(' ' if stable else ' un'))
         else:
-            mineigs.append(mineig)
             # Continuation
             iteration = 1
+            mineigs.append(stability.mineig)
+
             while stable == False:
                 log(LogLevel.INFO, 'Continuation iteration {}'.format(iteration))
                 plt.close('all')
@@ -356,6 +358,7 @@ def numerical_test(
                 h_opts = []
                 hbounds = []
                 en_perts = []
+
                 for i,mode in enumerate(pert):
                     h_opt, bounds, enpert, en_var = linesearch.search(
                         {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
@@ -369,28 +372,28 @@ def numerical_test(
                 # if False:
                 if rank == 0:
                     fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-                    plt.subplot(2, 4, 1)
+                    plt.subplot(1, 4, 1)
                     plt.set_cmap('binary')
                     # dolfin.plot(mesh, alpha = 1.)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
                     plt.title('derivative zero')
-                    plt.subplot(2, 4, 2)
+                    plt.subplot(1, 4, 2)
                     # dolfin.plot(mesh, alpha = .5)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
                     plt.title('ub tolerance')
-                    plt.subplot(2, 4, 3)
+                    plt.subplot(1, 4, 3)
                     # dolfin.plot(mesh, alpha = .5)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
                     plt.title('alpha-alpha_old')
-                    plt.subplot(2, 4, 4)
+                    plt.subplot(1, 4, 4)
                     # dolfin.plot(mesh, alpha = .5)
                     plt.colorbar(dolfin.plot(
                         project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.))
                     plt.title('intersec deriv, ub')
-                    plt.savefig(os.path.join(outdir, "{:3g}-inactivesets-{:d}.pdf".format(load, iteration)))
+                    plt.savefig(os.path.join(outdir, "{:.3f}-inactivesets-{:d}.pdf".format(load, iteration)))
 
 
                     # fig = plt.figure(figsize=(4, 1.5), dpi=180,)
@@ -414,19 +417,10 @@ def numerical_test(
 
                     plt.set_cmap('hot')
 
-                    # for i,mode in enumerate(pert):
-                        # print('plot mode {}'.format(i))
-                        # plt.tight_layout(h_pad=0.0, pad=1.5)
-                        # plt.savefig(os.path.join(outdir, "modes-{:3.4f}.pdf".format(load)))
-
                     for i,mode in enumerate(pert):
                         plt.subplot(2, _nmodes+1, i+2)
                         plt.axis('off')
                         plot(mode[1], cmap = cm.ocean)
-
-                        # h_opt, bounds, energy_perturbations, en_var = linesearch.search(
-                        #     {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
-                        #     mode[0], mode[1])
 
                         plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
                             .format(i, h_opts[i], i, stability.eigs[i], en_vars[i]), fontsize= 15)
@@ -435,10 +429,7 @@ def numerical_test(
                         plt.axis('off')
                         _pert_beta = mode[1]
                         _pert_v = mode[0]
-                        # h_opt, bounds, energy_perturbations, en_var = linesearch.search(
-                        #     {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
-                        #     mode[0], mode[1])
-                        # bounds = mode['interval']
+
                         if hbounds[i][0] == hbounds[i][1] == 0:
                             plt.plot(hbounds[i][0], 0)
                         else:
@@ -448,89 +439,109 @@ def numerical_test(
                             p = np.poly1d(z)
                             plt.plot(hs, p(hs), c='k')
                             plt.plot(np.linspace(hbounds[i][0], hbounds[i][1],
-                                len(en_perts[i])), en_perts[i], marker='o', c='k')
+                                len(en_perts[i])), en_perts[i], marker='o', markersize=10, c='k')
                             # import pdb; pdb.set_trace()
                             plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
                             plt.axvline(h_opts[i], lw = .3, c='k')
-                            plt.axvline(0, lw=.5, c='k')
+                            plt.axvline(0, lw=2, c='k')
                         # plt.title('{}'.format(i))
                         plt.tight_layout(h_pad=1.5, pad=1.5)
                     # plt.legend()
-                    plt.savefig(os.path.join(outdir, "{:3f}-modes-{}.pdf".format(load, iteration)))
+                    plt.savefig(os.path.join(outdir, "{:.3f}-modes-{}.pdf".format(load, iteration)))
                     plt.close(fig)
                     plt.clf()
-                    log(LogLevel.INFO, 'INFO: plotted modes')
-
-                save_current_bifurcation = True
-                opt_mode = np.argmin(en_vars)
-                log(LogLevel.INFO, 'Energy vars {}'.format(en_vars))
-                log(LogLevel.INFO, 'Pick bifurcation mode {} out of {}'.format(opt_mode, len(en_vars)))
+                    log(LogLevel.INFO, 'plotted modes')
 
                 cont_data_pre = compile_continuation_data(state, energy)
-                perturbation_v    = stability.perturbations_v[opt_mode]
-                perturbation_beta = stability.perturbations_beta[opt_mode]
-                h_opt = h_opts[opt_mode]
-
-                # h_opt, (hmin, hmax), energy_perturbations, en_var = linesearch.search(
-                #     {'u':u, 'alpha':alpha, 'alpha_old': alpha_old},
-                #     perturbation_v, perturbation_beta)
 
                 log(LogLevel.INFO, 'Estimated energy variation {:.3e}'.format(en_var))
 
-                # import pdb; pdb.set_trace()
                 Ealpha = Function(V_alpha)
                 Ealpha.vector()[:]=assemble(stability.inactiveEalpha)[:]
                 Ealpha.rename('Ealpha-{}'.format(iteration), 'Ealpha-{}'.format(iteration))
+
                 with file_ealpha as file:
                     file.write(Ealpha, load)
-                # stable = True
 
+                save_current_bifurcation = True
+                # pick the first of the non exhausted modes-
+                non_zero_h = np.where(np.array(h_opts)!=0.)[0]
+                log(LogLevel.INFO, 'Nonzero h {}'.format(non_zero_h))
+                # opt_mode = list(set(range(_nmodes))-set(exhaust_modes))[0]
+                avail_modes = set(non_zero_h)-set(exhaust_modes)
+                if len(avail_modes)>0:
+                    opt_mode = list(avail_modes)[0]
+                    # opt_mode = np.argmin(en_vars)
+                    opt_sort = np.argsort(en_vars)
+                    log(LogLevel.INFO, 'Energy vars {}'.format(en_vars))
+                    log(LogLevel.INFO, 'Sorting idxs {}'.format(opt_sort))
+                    log(LogLevel.INFO, 'Pick bifurcation mode {} out of {}'.format(opt_mode, len(en_vars)))
+                    h_opt = h_opts[opt_mode]
+                    perturbation_v    = stability.perturbations_v[opt_mode]
+                    perturbation_beta = stability.perturbations_beta[opt_mode]
+
+                else:
+                    log(LogLevel.CRITICAL, 'We are stuck in the matrix')
+                    log(LogLevel.WARNING, 'Continuing load program')
+                    break
+
+
+                # the following should always be true by now.
                 if h_opt != 0:
-                    log(LogLevel.CRITICAL, '    Bifurcating')
+                    iteration += 1
+                    log(LogLevel.CRITICAL, 'Bifurcating')
+
                     save_current_bifurcation = True
                     alpha_bif.assign(alpha)
                     alpha_bif_old.assign(alpha_old)
 
-                    # # admissible
-                    log(LogLevel.INFO, '{} INFO: Perturbing'.format(rank))
+                    # admissible perturbation
                     uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
                     aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
 
                     u.vector()[:] = uval
                     alpha.vector()[:] = aval
-                    log(LogLevel.INFO, 'min a+h_opt beta_{} = {}'.format(opt_mode, min(aval)))
-                    log(LogLevel.INFO, 'max a+h_opt beta_{} = {}'.format(opt_mode, max(aval)))
-
                     u.vector().vec().ghostUpdate()
                     alpha.vector().vec().ghostUpdate()
 
-                    log(LogLevel.INFO, 'INFO: Solving equilibrium from perturbed state')
+                    log(LogLevel.INFO, 'min a+h_opt beta_{} = {}'.format(opt_mode, min(aval)))
+                    log(LogLevel.INFO, 'max a+h_opt beta_{} = {}'.format(opt_mode, max(aval)))
+                    log(LogLevel.INFO, 'Solving equilibrium from perturbed state')
                     (time_data_i, am_iter) = solver.solve(outdir)
                     # (time_data_i, am_iter) = solver.solve()
-                    log(LogLevel.INFO, 'INFO: Checking stability of new state')
+                    log(LogLevel.INFO, 'Checking stability of new state')
                     (stable, negev) = stability.solve(solver.damage.problem.lb)
-                    log(LogLevel.INFO, 'INFO: Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
-                    iteration += 1
-
                     mineigs.append(stability.mineig)
 
-                    cont_data_post = compile_continuation_data(state, energy)
+                    log(LogLevel.INFO, 'Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
 
+                    cont_data_post = compile_continuation_data(state, energy)
                     DeltaE = (cont_data_post['energy']-cont_data_pre['energy'])
                     relDeltaE = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy']
                     release = DeltaE < 0 and np.abs(DeltaE) > parameters['stability']['cont_rtol']
-                    log(LogLevel.INFO, 'INFO: Continuation criterion post energy {} - pre energy {}'.format(cont_data_post['energy'], cont_data_pre['energy']))
-                    log(LogLevel.INFO, 'INFO: Actual absolute energy variation Delta E = {:.7e}'.format(DeltaE))
-                    log(LogLevel.INFO, 'INFO: Actual relative energy variation Delta E = {:.7e}'.format(relDeltaE))
+
+                    log(LogLevel.INFO, 'Continuation: post energy {} - pre energy {}'.format(cont_data_post['energy'], cont_data_pre['energy']))
+                    log(LogLevel.INFO, 'Actual absolute energy variation Delta E = {:.7e}'.format(DeltaE))
+                    log(LogLevel.INFO, 'Actual relative energy variation relDelta E = {:.7e}'.format(relDeltaE))
+                    log(LogLevel.INFO, 'Iter {} mineigs = {}'.format(iteration, mineigs))
+
+                    if rank == 0:
+                        plt.plot(mineigs, marker = 'o')
+                        plt.axhline(0.)
+                        plt.savefig(os.path.join(outdir, "mineigs-{:.3f}.pdf".format(load)))
 
                     # continuation criterion
-                    if abs(np.diff(mineigs)[-1]) > 1e-5:
-                        log(LogLevel.INFO, 'INFO: Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
-                        log(LogLevel.INFO, 'INFO: Continuing perturbations')
+                    if abs(np.diff(mineigs)[-1]) > 1e-8:
+                        log(LogLevel.INFO, 'Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
+                        log(LogLevel.INFO, 'Continuing perturbations')
                     else:
-                        log(LogLevel.INFO, 'INFO: Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
+                        log(LogLevel.INFO, 'Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
                         log(LogLevel.CRITICAL, 'We are stuck in the matrix')
-                        log(LogLevel.WARNING, 'Continuing load program')
+                        log(LogLevel.WARNING, 'Exploring next mode')
+                        exhaust_modes.append(opt_mode)
+                        import pdb; pdb.set_trace()
+                        # log(LogLevel.WARNING, 'Continuing load program')
+                        # break
                         #
                     # if not release:
                         # log(LogLevel.CRITICAL, 'Small nergy release , we are stuck in the matrix')
@@ -541,23 +552,27 @@ def numerical_test(
                 else:
                     # warn
                     log(LogLevel.CRITICAL, 'Found zero increment, we are stuck in the matrix')
-                    log(LogLevel.WARNING, 'Continuing load program')
-                    break
+                    log(LogLevel.WARNING, 'Exploring next mode')
+                    exhaust_modes.append(opt_mode)
+                    import pdb; pdb.set_trace()
+                    # log(LogLevel.WARNING, 'Continuing load program')
+                    # break
 
             solver.update()
-
+            np.save(os.path.join(outdir, 'bifurcation_loads'), bifurcation_loads, allow_pickle=True, fix_imports=True)
+            
             if save_current_bifurcation:
                 time_data_i['h_opt'] = h_opt
-                time_data_i['max_h'] = hmax
-                time_data_i['min_h'] = hmin
+                time_data_i['max_h'] = hbounds[opt_mode][1]
+                time_data_i['min_h'] = hbounds[opt_mode][0]
 
                 modes = np.where(stability.eigs < 0)[0]
                 leneigs = len(modes)
                 maxmodes = min(3, leneigs)
 
                 with file_bif as file:
-                    for n in range(maxmodes):
-                        mode = dolfin.project(stability.linsearch[n]['beta_n'], V_alpha)
+                    for n in range(len(pert)):
+                        mode = dolfin.project(stability.perturbations_beta[n], V_alpha)
                         modename = 'beta-%d'%n
                         mode.rename(modename, modename)
                         log(LogLevel.INFO, 'Saved mode {}'.format(modename))
@@ -573,7 +588,8 @@ def numerical_test(
                     # file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
                     # file.write_checkpoint(alpha, 'alpha', 0, append=True)
 
-                np.save(os.path.join(outdir, 'energy_perturbations'), energy_perturbations, allow_pickle=True, fix_imports=True)
+                np.save(os.path.join(outdir, 'energy_perturbations'), en_perts, allow_pickle=True, fix_imports=True)
+
 
                 with file_eig as file:
                     _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
@@ -582,6 +598,8 @@ def numerical_test(
                     _beta.rename('perturbation damage', 'perturbation damage')
                     file.write(_v, load)
                     file.write(_beta, load)
+
+                # save_current_bifurcation = False
 
         time_data_i["load"] = load
         time_data_i["alpha_max"] = max(alpha.vector()[:])
@@ -614,17 +632,12 @@ def numerical_test(
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
         if rank == 0:
+            plt.clf()
             plot(alpha)
             plt.savefig(os.path.join(outdir, 'alpha.pdf'))
             log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
             plt.close('all')
-    
-        # import postprocess as pp
-        # tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
-        # (fig2, ax1, ax2) =pp.plot_spectrum(parameters, time_data_pd, tc)
-        # plt.legend(loc='lower left')
-        # ax2.set_ylim(-1e-7, 2e-4)
-        # fig2.savefig(os.path.join(outdir, "spectrum.pdf"), bbox_inches='tight')
+
             fig = plt.figure()
             for i,d in enumerate(time_data_pd['eigs']):
                 # if d is not (np.inf or np.nan or float('inf')):
@@ -632,27 +645,28 @@ def numerical_test(
                     lend = len(d) if isinstance(d, np.ndarray) else 1
                     plt.scatter([(time_data_pd['load'].values)[i]]*lend, d,
                                c=np.where(np.array(d)<0., 'red', 'black'))
-                               # c=np.where(np.array(d)<tol, 'C1', 'C2'))
 
             plt.axhline(0, c='k', lw=2.)
             plt.xlabel('t')
-            fig.savefig(os.path.join(outdir, "spectrum.pdf"), bbox_inches='tight')
+            # [plt.axvline(b) for b in bifurcation_loads]
+            # import pdb; pdb.set_trace()
+            plt.xticks(list(plt.xticks()[0]) + bifurcation_loads)
+            plt.savefig(os.path.join(outdir, "spectrum.pdf"), bbox_inches='tight')
         # plt.plot()
 
-    def format_space(x, pos, xresol = 100):
-        return '$%1.1f$'%((-x+xresol/2)/xresol)
+    # def format_space(x, pos, xresol = 100):
+    #     return '$%1.1f$'%((-x+xresol/2)/xresol)
 
-    def format_time(t, pos, xresol = 100):
-        return '$%1.1f$'%((t-parameters['loading']['load_min'])/parameters['loading']['n_steps']*parameters['loading']['load_max'])
+    # def format_time(t, pos, xresol = 100):
+    #     return '$%1.1f$'%((t-parameters['loading']['load_min'])/parameters['loading']['n_steps']*parameters['loading']['load_max'])
 
-    from matplotlib.ticker import FuncFormatter, MaxNLocator
+    # from matplotlib.ticker import FuncFormatter, MaxNLocator
 
     # ax = plt.gca()
 
     # ax.yaxis.set_major_formatter(FuncFormatter(format_space))
     # ax.xaxis.set_major_formatter(FuncFormatter(format_time))
 
-    # import pdb; pdb.set_trace()
 
     return time_data_pd, outdir
 

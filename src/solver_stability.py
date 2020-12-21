@@ -133,7 +133,7 @@ class EigenSolver(object):
 
     def solve(self, n_eig):
         E = self.E
-        # E.setDimensions(n_eig)
+        E.setDimensions(n_eig)
         # self.set_options(self.slepc_options)
         E.setFromOptions()
         E.solve()
@@ -653,7 +653,7 @@ class StabilitySolver(object):
             tol, maxit = eigen.E.getTolerances()
             log(LogLevel.INFO, "Eigensolver stopping condition: tol={:.4g}, maxit={:d}".format(tol, maxit))
 
-            nconv, it = eigen.solve(min(maxmodes, negev))
+            nconv, it = eigen.solve(min(maxmodes, negev+1))
 
             if nconv == 0:
                 log(LogLevel.WARNING, 'Eigensolver did not converge')

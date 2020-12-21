@@ -433,7 +433,7 @@ class EquilibriumSolver:
                     file.write(alpha, it)
                     file.write(u, it)
 
-            print('Written AM step {}'.format(it))
+            # print('Written AM step {}'.format(it))
 
         irrev = alpha.vector()-self.damage.problem.lb
         if min(irrev[:]) >=0:
@@ -532,8 +532,8 @@ class ElasticitySolver:
                 PETScOptions.set(prefix + parameter)
 
         snes.setFromOptions()
-        snes.view()
 
+        # snes.view()
     def solve(self):
         # Get the problem
         log(LogLevel.INFO, '________________________ EQUILIBRIUM _________________________')

@@ -133,11 +133,11 @@ class LineSearch(object):
                 log(LogLevel.INFO, 'Line search failed, h_opt={:3e} not in feasible interval'.format(h_opt))
                 return h_opt, (self.hmin, self.hmax), 0
 
-        log(LogLevel.INFO, 'Line search h_opt = {:3f} in ({:.3f}, {:.3f}), h_opt/hmax {:3f}\
-            '.format(h_opt, self.hmin, self.hmax, h_opt/self.hmax))
-        log(LogLevel.INFO, 'Line search polynomial approximation =\n {}'.format(p))
-        log(LogLevel.INFO, 'h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
-        log(LogLevel.INFO, 'p(h_opt) {:.5f}, en0 {:.5f}'.format(p(h_opt),en0))
+        log(LogLevel.INFO, 'Line search h_opt = {:3f} in ({:.3f}, {:.3f})\
+            '.format(h_opt, self.hmin, self.hmax))
+        # log(LogLevel.INFO, 'Line search polynomial approximation =\n {}'.format(p))
+        # log(LogLevel.INFO, 'h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
+        # log(LogLevel.INFO, 'p(h_opt) {:.5f}, en0 {:.5f}'.format(p(h_opt),en0))
         en_var = ((p(h_opt))/en0)
         log(LogLevel.INFO, 'Line search estimate, relative energy variation={:.3e}'.format(en_var))
 

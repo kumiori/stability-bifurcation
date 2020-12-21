@@ -8,16 +8,17 @@ loading:
     # tc = 0.5916079783 (nu = .3)
     load_min: 0.58
     # load_min: .7
-    load_max: 1.
-    n_steps: 30
+    load_max: .8
+    n_steps: 50
 
 #  === Model === #
 material:
     E: 1
     nu: 0.3
-    ell: 0.05
+    ell: 0.03
     ell_e: 0.2
-    k_res: 1.e-6
+    # k_res: 1.e-6
+    k_res: 0.
     sigma_D0: 1.
 
 geometry:
@@ -25,20 +26,35 @@ geometry:
     n: 2
 
 equilibrium:
-    tol: 1e-5
+    tol: 1e-4
     max_it: 300
 
 elasticity:
+    # ksp_type: gmres
+    # pc_type: hypre
+    # pc_hypre_type: boomeramg
+    # pc_hypre_boomeramg_cycle_type: V
+    # pc_hypre_boomeramg_relax_type_all: backward-SOR/Jacobi # SOR/Jacobi
+    # pc_hypre_boomeramg_measure_type: global # local
+    # pc_hypre_boomeramg_coarsen_type: Falgout
+    # pc_hypre_boomeramg_strong_threshold: 0.3     # 3D: 0.7 (> 0.5)
+    # pc_hypre_boomeramg_agg_nl: 1
+    # pc_hypre_boomeramg_print_statistics: 0 
+
     ksp_type: gmres
-    pc_type: hypre
-    pc_hypre_type: boomeramg
-    pc_hypre_boomeramg_cycle_type: V
-    pc_hypre_boomeramg_relax_type_all: backward-SOR/Jacobi # SOR/Jacobi
-    pc_hypre_boomeramg_measure_type: global # local
-    pc_hypre_boomeramg_coarsen_type: Falgout
-    pc_hypre_boomeramg_strong_threshold: 0.3     # 3D: 0.7 (> 0.5)
-    pc_hypre_boomeramg_agg_nl: 1
-    pc_hypre_boomeramg_print_statistics: 0 
+    pc_type: gamg
+    pc_gamg_type: agg
+    pc_gamg_repartition: 1
+    pc_gamg_reuse_interpolation: 1
+    pc_gamg_asm_use_agg: 1
+    pc_gamg_agg_nsmooths: 1
+    pc_gamg_square_graph: 1
+    pc_gamg_threshold: 0.01
+    pc_gamg_sym_graph: 1
+    mg_levels_esteig_ksp_type: cg
+    mg_levels_ksp_type: chebyshev
+    mg_levels_pc_type: jacobi
+    mg_levels_ksp_chebyshev_esteig_steps: 50
 
 damage:
     type:
@@ -62,7 +78,7 @@ stability:
     checkstability: 'True'
     continuation: 'False'
     cont_rtol: 1.0e-10
-    inactiveset_gatol: 1.e-15
+    inactiveset_gatol: 1.e-8
     inactiveset_ubtol: 1.e-1
 
 inertia:

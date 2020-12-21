@@ -101,7 +101,7 @@ def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
     fig = plt.figure()
     for i,d in enumerate(data['eigs']):
         # if d is not (np.inf or np.nan or float('inf')):
-        if np.isfinite(d):
+        if np.isfinite(d).all():
             lend = len(d) if isinstance(d, np.ndarray) else 1
             plt.scatter([(data['load'].values)[i]]*lend, d,
                        c=np.where(np.array(d)<tol, 'red', 'C2'))
@@ -120,8 +120,8 @@ def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
     ax2 = plt.twinx()
     ax2.plot(data['load'].values, data['alpha_max'].values, label='max(alpha)')
     plt.legend()
-    tbif = t_bif(ell)
-    tstab = t_stab(ell)
+    # tbif = t_bif(ell)
+    # tstab = t_stab(ell)
     ax2.set_ylabel('max alpha')
     ax2.set_yticks([0, 1.])
     ax2.set_yticklabels(['0','1'])
@@ -137,7 +137,7 @@ def plot_spectrum(parameters, data, tc, ax=None, tol=1e-12):
     # ax2.scatter(data['load'].values[~stable],     data['stable'].values[~stable], c='red', marker='s', s=70, label='unstable')
 
     ax1.tick_params(axis='y', labelrotation=90 )
-    plot_fills(ax, ell, tc)
+    # plot_fills(ax, ell, tc)
 
     plt.legend(loc="upper left")
     # plt.savefig(os.path.join(outdir, 'spectrum.pdf'))
