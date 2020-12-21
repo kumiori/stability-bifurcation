@@ -92,5 +92,6 @@ inertia:
 eigen:
     eps_type: "krylovschur"
     eps_tol: 1e-5
+    eig_rtol: 1e-8
     # eps_monitor:
     eps_max_it: 100
