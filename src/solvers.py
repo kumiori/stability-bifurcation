@@ -371,11 +371,11 @@ class EquilibriumSolver:
     def solve(self, debugpath=''):
         parameters = self.parameters
         it = 0
-        err_alpha = 1
+        # err_alpha = 1
         u = self.u
         alpha = self.alpha
         alpha_old = alpha.copy(deepcopy=True)
-        alpha_error = alpha.copy(deepcopy=True)
+        alpha_diff = alpha.copy(deepcopy=True)
         criterion = 1
 
         alt_min_data = {
@@ -388,15 +388,19 @@ class EquilibriumSolver:
         # log(LogLevel.WARNING, '{}'.format(self.damage.problem.lb[:]))
         self.damage.solver.solver.setVariableBounds(self.damage.problem.lb.vec(),
             self.damage.problem.ub.vec())
-        
-        # import pdb; pdb.set_trace()
+
         if debugpath:
             file_am = XDMFFile(os.path.join(debugpath, "am_new.xdmf"))
             file_am.parameters["functions_share_mesh"] = True
             file_am.parameters["flush_output"] = True
         # else:
             # file_am = XDMFFile("am_new.xdmf")
-            
+        inactive_IS = self.damage.solver.inactive_set_indicator()
+        Ealpha_vec = as_backend_type(assemble(self.damage.solver.Ealpha)).vec()
+        Ealpha_residual = Ealpha_vec.getSubVector(inactive_IS)
+
+        # import pdb; pdb.set_trace()
+
         while criterion > float(self.parameters['equilibrium']["tol"]) and it < self.parameters['equilibrium']["max_it"]:
             it = it + 1
             (u_it, u_reason) = self.elasticity.solve()
@@ -410,17 +414,23 @@ class EquilibriumSolver:
             #     #     .format(self.alpha.vector()[pd]-self.alpha_old[pd]))
             #     log(LogLevel.WARNING, 'Continuing')
 
-            alpha_error.vector()[:] = alpha.vector() - alpha_old.vector()
-            # crit: energy norm
-            err_alpha = abs(alpha_error.vector().max())
-            # err_alpha = norm(alpha_error,'h1')
-            criterion = err_alpha
+            alpha_diff.vector()[:] = alpha.vector() - alpha_old.vector()
 
+            if self.parameters['equilibrium']['criterion'] == 'linf':
+                criterion = abs(alpha_diff.vector().max())
+            if self.parameters['equilibrium']['criterion'] == 'l2':
+                criterion = norm(alpha_diff, 'l2')
+            if self.parameters['equilibrium']['criterion'] == 'h1':
+                criterion = norm(alpha_diff, 'h1')
+            if self.parameters['equilibrium']['criterion'] == 'residual':
+                criterion = Ealpha_residual.norm(2)
 
             log(LogLevel.INFO,
-                "   AM iter {:2d}: alpha_error={:.4g}, alpha_max={:.4g}, energy = {:.6e}".format(
+                "   AM iter {:2d}: convergence criterion: {}, alpha_error={:.3e}, alpha_max={:.4g}, energy = {:.6e}".format(
                     it,
-                    err_alpha,
+                    self.parameters['equilibrium']['criterion'],
+                    criterion,
+                    # err_alpha,
                     alpha.vector().max(),
                     assemble(self.energy)
                 )
@@ -442,13 +452,13 @@ class EquilibriumSolver:
             log(LogLevel.INFO,'Pointwise irrev {}'.format(' NOK'))
             import pdb; pdb.set_trace()
 
-        alt_min_data["alpha_error"].append(err_alpha)
+        alt_min_data["alpha_error"].append(criterion)
         alt_min_data["alpha_max"].append(alpha.vector().max())
         alt_min_data["iterations"].append(it)
         alt_min_data["energy"].append(assemble(self.energy))
 
         log(LogLevel.INFO,
-                "AM converged in {} iterations, err_alpha = {:.8e}, energy = {:.6e}".format(it, err_alpha, assemble(self.energy)))
+                "AM converged in {} iterations, err_alpha = {:.8e}, energy = {:.6e}".format(it, criterion, assemble(self.energy)))
 
         return (alt_min_data, it)
 
@@ -609,16 +619,20 @@ class DamageSolverSNES:
         self.problem = problem
         self.energy = problem.energy
         self.state = problem.state
-        alpha = problem.state['alpha']
-        self.alpha_dvec = as_backend_type(alpha.vector())
+        self.alpha = problem.state['alpha']
+        # self.alpha = problem.state['alpha']
+        self.alpha_dvec = as_backend_type(self.alpha.vector())
         self.alpha_pvec = self.alpha_dvec.vec()
 
         self.bcs = problem.bcs
         self.parameters = parameters
-        comm = alpha.function_space().mesh().mpi_comm()
+        comm = self.alpha.function_space().mesh().mpi_comm()
         self.comm = comm
-        V = alpha.function_space()
-
+        V = self.alpha.function_space()
+        self.V = V
+        self.Ealpha = derivative(self.energy, self.alpha,
+            dolfin.TestFunction(self.alpha.ufl_function_space()))
+        self.dm = self.alpha.function_space().dofmap()
         solver = PETScSNESSolver()
         snes = solver.snes()
         # lb = self.alpha_init
@@ -698,6 +712,25 @@ class DamageSolverSNES:
         xv = as_backend_type(x.vector()).vec()
         # Solve the problem
         self.solver.solve(None, xv)
+
+    def inactive_set_indicator(self, tol=1.0e-5):
+        Ealpha = assemble(self.Ealpha)
+
+        mask_grad = Ealpha[:] < tol
+        mask_ub = self.alpha.vector()[:] < 1.-tol
+        mask_lb = self.alpha.vector()[:] > self.problem.lb[:] + tol
+
+        local_inactive_set_alpha = set(np.where(mask_ub == True)[0])  \
+            & set(np.where(mask_grad == True)[0])               \
+            & set(np.where(mask_lb == True)[0])
+
+        _set_alpha = [self.dm.local_to_global_index(k) for k in local_inactive_set_alpha]
+        inactive_set_alpha = set(_set_alpha) | set(self.dm.dofs())
+
+        index_set = petsc4py.PETSc.IS()
+        index_set.createGeneral(list(inactive_set_alpha))  
+
+        return index_set
 
 class DamageProblemSNES(NonlinearProblem):
     """

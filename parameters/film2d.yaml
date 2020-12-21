@@ -28,6 +28,7 @@ geometry:
 equilibrium:
     tol: 1e-4
     max_it: 300
+    criterion: linf                                 # avail: h1, l2, residual
 
 elasticity:
     # ksp_type: gmres
@@ -40,11 +41,15 @@ elasticity:
     # pc_hypre_boomeramg_strong_threshold: 0.3     # 3D: 0.7 (> 0.5)
     # pc_hypre_boomeramg_agg_nl: 1
     # pc_hypre_boomeramg_print_statistics: 0 
+    # ---------
     snes_type: ksponly    
     ksp_type: preonly
     pc_factor_mat_solver_type: mumps
     pc_type: lu
-
+    ksp_atol: 1.0e-08
+    ksp_rtol: 1.0e-08
+    ksp_stol: 1.0e-08
+    # ---------
     # ksp_type: gmres
     # pc_type: gamg
     # pc_gamg_type: agg
