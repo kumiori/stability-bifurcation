@@ -335,13 +335,18 @@ class AlternateMinimizationSolver(object):
 
 set_log_level(LogLevel.INFO)
 
-class EquilibriumSolver:
-    """docstring for EquilibriumSolver"""
+class EquilibriumAM:
+    """docstring for EquilibriumAM"""
     def __init__(self, energy, state, bcs, state_0 = {}, parameters={}):
-        super(EquilibriumSolver, self).__init__()
+        super(EquilibriumAM, self).__init__()
         self.energy = energy
         self.state = state
         self.bcs = bcs
+
+        OptDB = PETSc.Options()
+        OptDB.view()
+        OptDB.setFromOptions()
+        # import pdb; pdb.set_trace()
 
         self.u = state['u']
         self.alpha = state['alpha']
@@ -363,7 +368,6 @@ class EquilibriumSolver:
             self.u_0 = self.u.copy(deepcopy=True)
             self.alpha_0 = self.alpha.copy(deepcopy=True)
 
-        # import pdb; pdb.set_trace()
 
         self.elasticity = ElasticitySolver(energy, state, bcs['elastic'], parameters['elasticity'])
         self.damage = DamageSolver(energy, state, bcs['damage'], parameters['damage'])
@@ -390,7 +394,11 @@ class EquilibriumSolver:
             self.damage.problem.ub.vec())
 
         if debugpath:
-            file_am = XDMFFile(os.path.join(debugpath, "am_new.xdmf"))
+            fname = 'am.xdmf'
+            if os.path.exists(fname):
+                os.remove(fname)
+
+            file_am = XDMFFile(os.path.join(debugpath, fname))
             file_am.parameters["functions_share_mesh"] = True
             file_am.parameters["flush_output"] = True
         # else:
@@ -415,6 +423,7 @@ class EquilibriumSolver:
             #     log(LogLevel.WARNING, 'Continuing')
 
             alpha_diff.vector()[:] = alpha.vector() - alpha_old.vector()
+            # import pdb; pdb.set_trace()
 
             if self.parameters['equilibrium']['criterion'] == 'linf':
                 criterion = abs(alpha_diff.vector().max())
@@ -425,16 +434,20 @@ class EquilibriumSolver:
             if self.parameters['equilibrium']['criterion'] == 'residual':
                 criterion = Ealpha_residual.norm(2)
 
+            log(LogLevel.INFO, 'linf {}'.format(abs(alpha_diff.vector().max())))
+            log(LogLevel.INFO, 'l2   {}'.format(norm(alpha_diff, 'l2')))
+            log(LogLevel.INFO, 'h1   {}'.format(norm(alpha_diff, 'h1')))
+            log(LogLevel.INFO, 'res  {}'.format(Ealpha_residual.norm(2)))
+
             log(LogLevel.INFO,
-                "   AM iter {:2d}: convergence criterion: {}, alpha_error={:.3e}, alpha_max={:.4g}, energy = {:.6e}".format(
+                "Equilibrium solver iteration {:2d}: convergence criterion: {}, alpha_error={:.3e} (tol={:.3e}), alpha_max={:.4g}, energy = {:.6e}".format(
                     it,
                     self.parameters['equilibrium']['criterion'],
                     criterion,
+                    float(self.parameters['equilibrium']['tol']),
                     # err_alpha,
                     alpha.vector().max(),
-                    assemble(self.energy)
-                )
-            )
+                    assemble(self.energy)))
 
             # update
             alpha_old.assign(alpha)
@@ -532,18 +545,18 @@ class ElasticitySolver:
 
         prefix = "elasticity_"
         snes.setOptionsPrefix(prefix)
-
+        print(parameters)
         for parameter, value in parameters.items():
-            if value is not None:
-                log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value)) 
-                PETScOptions.set(prefix + parameter, value)
-            else:
-                log(LogLevel.INFO, "Set: {}".format(prefix + parameter)) 
-                PETScOptions.set(prefix + parameter)
+        # if value is not None:
+            log(LogLevel.INFO, "Set: {} = {}".format(prefix + parameter, value)) 
+            PETScOptions.set(prefix + parameter, value)
+            # else:
+            #     log(LogLevel.INFO, "Set: {}".format(prefix + parameter)) 
+            #     PETScOptions.set(prefix + parameter)
 
         snes.setFromOptions()
-
         # snes.view()
+
     def solve(self):
         # Get the problem
         log(LogLevel.INFO, '________________________ EQUILIBRIUM _________________________')
@@ -611,7 +624,7 @@ class DamageSolver:
             raise RuntimeError("Damage solvers did not converge")
         # Check if the resolution is successfull
         # if not success:
-# 
+
 class DamageSolverSNES:
     """docstring for DamageSolverSNES"""
     def __init__(self, problem, parameters={}, lb=None):
@@ -635,20 +648,23 @@ class DamageSolverSNES:
         self.dm = self.alpha.function_space().dofmap()
         solver = PETScSNESSolver()
         snes = solver.snes()
+
         # lb = self.alpha_init
         if lb == None: 
             lb=interpolate(Constant(0.), V)
         ub = interpolate(Constant(1.), V)
 
         prefix = "damage_"
-        # prefix = ""
         snes.setOptionsPrefix(prefix)
+        # import pdb; pdb.set_trace()
         for option, value in self.parameters["snes"].items():
             PETScOptions.set(prefix+option, value)
+            # log(LogLevel.INFO, "PETScOptions.set({}, {})".format(prefix + option,value))
             log(LogLevel.INFO, "Set: {} = {}".format(prefix + option,value))
+
         snes.setFromOptions()
+
         # snes.view()
-        # import pdb; pdb.set_trace()
 
         (J, F, bcs_alpha) = (problem.J, problem.F, problem.bcs)
         # Create the SystemAssembler
@@ -720,8 +736,8 @@ class DamageSolverSNES:
         mask_ub = self.alpha.vector()[:] < 1.-tol
         mask_lb = self.alpha.vector()[:] > self.problem.lb[:] + tol
 
-        local_inactive_set_alpha = set(np.where(mask_ub == True)[0])  \
-            & set(np.where(mask_grad == True)[0])               \
+        local_inactive_set_alpha = set(np.where(mask_ub == True)[0])    \
+            & set(np.where(mask_grad == True)[0])                       \
             & set(np.where(mask_lb == True)[0])
 
         _set_alpha = [self.dm.local_to_global_index(k) for k in local_inactive_set_alpha]
@@ -781,4 +797,345 @@ class DamageProblemSNES(NonlinearProblem):
         self.lb = alpha.copy(deepcopy = True).vector()
         # log(LogLevel.INFO, '________________________ IRREV _________________________')
         log(LogLevel.INFO, 'INFO: Updated irreversibility')
+
+
+
+class EquilibriumNewton:
+    """docstring for EquilibriumNewton"""
+    def __init__(self, energy, state, bcs, z_0 = {}, parameters={}):
+        super(EquilibriumNewton, self).__init__()
+        self.energy = energy
+        self.state = state
+        self.bcs = bcs
+
+        OptDB = PETSc.Options()
+        OptDB.view()
+        OptDB.setFromOptions()
+
+        # self.u = state['u']
+        # self.alpha = state['alpha']
+
+        self.Z = dolfin.FunctionSpace(self.mesh, 
+            dolfin.MixedElement([state['u'].ufl_element(),
+                state['alpha'].ufl_element()]))
+
+        self.z = Function(self.Z)
+
+        self.assigner = dolfin.FunctionAssigner(
+            Z,            # receiving space
+            [Z.sub(0), Z.sub(1)]) # assigning space
+
+        # handle bcs -> mixed space
+        # self.bcs_u = bcs['elastic']
+        # self.bcs_alpha = bcs['damage']
+
+        self.bcs = self.get_bcs(bcs)
+
+        comm = self.z.function_space().mesh().mpi_comm()
+        self.comm = comm
+
+        self.parameters = parameters
+
+        if z_0:
+            # self.u_0 = state_0['alpha']
+            self.alpha_0 = state_0['alpha']
+            self.u_0 = state_0['u']
+            
+        else:
+            # self.u_0 = self.u.copy(deepcopy=True)
+            self.z_0 = self.z.copy(deepcopy=True)
+
+        parameters['newton'] = {}
+
+        # self.equilibrium = 
+        self.problem = EquilibriumProblemSNES(energy, state, bcs)
+        self.solver = EquilibriumSolverSNES(energy, state, bcs, parameters['newton'])
+        # self.solver = DamageSolverSNES(self.problem, parameters)
+
+    def get_bcs(self, bcs):
+        """
+        Construct the blocked u-DOF's for the stability problem
+        """
+        # Construct homogeneous BCs
+        bcs_Z = []
+        zero = dolfin.Constant(0.0)
+
+        if self.state['u'].geometric_dimension()>1:
+            # vector
+            zeros = dolfin.Constant([0.0,]*self.state['u'].geometric_dimension())
+        elif self.state['u'].geometric_dimension()==1:
+            # scalar
+            zeros = dolfin.Constant(0.)
+
+        for bc in bcs['elastic']:
+            if hasattr(bc, 'sub_domain'):
+                new_bc = dolfin.DirichletBC(self.Z.sub(0), zeros, bc.sub_domain, bc.method())
+            elif hasattr(bc, 'domain_args'):
+                new_bc = dolfin.DirichletBC(self.Z.sub(0), zeros, bc.domain_args[0], bc.domain_args[1], bc.method())
+            else:
+                raise RuntimeError("Couldn't find where bcs for displacement are applied")
+
+            bcs_Z.append(new_bc)
+        for bc in self.bcs['damage']:
+            if hasattr(bc, 'sub_domain'):
+                new_bc = dolfin.DirichletBC(self.Z.sub(1), zero, bc.sub_domain, bc.method())
+            elif hasattr(bc, 'domain_args'):
+                new_bc = dolfin.DirichletBC(self.Z.sub(1), zero, bc.domain_args[0], bc.domain_args[1], bc.method())
+            else:
+                raise RuntimeError("Couldn't find where bcs for damage are applied")
+            bcs_Z.append(new_bc)
+
+        # Locate the DOF's corresponding to the BC
+        bc_keys = [set(bc.get_boundary_values().keys()) for bc in bcs_Z]
+        dofmap = self.Z.dofmap()
+        bc_keys_glob = []
+        for bc_key in bc_keys:
+            bc_key_global = []
+            for x in bc_key:
+                bc_key_global.append(dofmap.local_to_global_index(x))
+            bc_keys_glob.append(set(bc_key_global))
+        if bc_keys_glob:
+            self.bc_dofs  = reduce(lambda x, y: x.union(y), bc_keys_glob)
+        else:
+            self.bc_dofs  = set()
+
+        self.bcs_Z = bcs_Z
+        return self.bc_dofs
+
+    def solve(self, debugpath=''):
+        parameters = self.parameters
+        # log(LogLevel.WARNING,'self.damage.problem.lb[:]')
+        # log(LogLevel.WARNING, '{}'.format(self.damage.problem.lb[:]))
+        self.solver.setVariableBounds(self.problem.lb.vec(),
+            self.problem.ub.vec())
+        inactive_IS = self.solver.inactive_set_indicator()
+        self.solver.solve()
+
+        return
+
+    def update(self):
+        self.problem.update_lower_bound()
+        log(LogLevel.PROGRESS, 'PROGRESS: Updated irreversibility')
+
+        # if self.parameters["solver_alpha"] == "snes2":
+        #     self.problem_alpha.lb.assign(self.alpha)
+        #     self.problem_alpha.set_bounds(self.alpha, interpolate(Constant("2."), self.alpha.function_space()))
+        #     print('Updated irreversibility')
+        # else:
+        #     self.problem_alpha.update_lb()
+        #     print('Updated irreversibility')
+
+class EquilbriumSolverSNES:
+    """docstring for EquilbriumSolverSNES"""
+    def __init__(self, problem, parameters={}):
+        super(EquilbriumSolverSNES, self).__init__()
+        self.problem = problem
+        self.energy = problem.energy
+        self.z = problem.z
+        # self.alpha = problem.state['alpha']
+        # self.alpha = problem.state['alpha']
+        # self.alpha_dvec = as_backend_type(self.alpha.vector())
+        # self.alpha_pvec = self.alpha_dvec.vec()
+
+        self.z_dvec = as_backend_type(self.z.vector())
+        self.z_pvec = self.z_dvec.vec()
+        assigner = problem.assigner
+
+        self.bcs = problem.bcs
+        self.parameters = parameters
+        comm = self.z.function_space().mesh().mpi_comm()
+        self.comm = comm
+        Z = self.z.function_space()
+        self.Z = Z
+        # self.Ealpha = derivative(self.energy, self.alpha,
+            # dolfin.TestFunction(self.alpha.ufl_function_space()))
+        self.dm = self.z.function_space().dofmap()
+        solver = PETScSNESSolver()
+        snes = solver.snes()
+
+        # lb = self.alpha_init
+        # if lb == None:
+        #     lb_alpha=interpolate(Constant(0.), V.sub(1))
+        #     lb_u=interpolate(Constant(1./DOLFIN_EPS), V.sub(0))
+        #     lb = Function(V)
+        #     assigner.assign(lb, [lb_u, lb_alpha])
+
+        # ub_alpha = interpolate(Constant(1.), V.sub(1))
+        # ub_u = interpolate(Constant(1./DOLFIN_EPS), V.sub(0))
+        # ub = Function(V)
+        # assigner.assign(ub, [ub_u, ub_alpha])
+
+        prefix = "equilibrium_"
+        snes.setOptionsPrefix(prefix)
+        # import pdb; pdb.set_trace()
+        for option, value in self.parameters["snes"].items():
+            PETScOptions.set(prefix+option, value)
+            # log(LogLevel.INFO, "PETScOptions.set({}, {})".format(prefix + option,value))
+            log(LogLevel.INFO, "Set: {} = {}".format(prefix + option,value))
+
+        snes.setFromOptions()
+
+        # snes.view()
+
+        (J, F, bcs) = (problem.J, problem.F, problem.bcs)
+        # Create the SystemAssembler
+        self.ass = SystemAssembler(J, F, bcs)
+        # Intialise the residual
+        self.b = self.init_residual()
+        # Set the residual
+        snes.setFunction(self.residual, self.b.vec())
+        # Initialise the Jacobian
+        self.A = self.init_jacobian()
+        # Set the Jacobian
+        snes.setJacobian(self.jacobian, self.A.mat())
+        snes.ksp.setOperators(self.A.mat())
+
+        # Set the bounds
+        snes.setVariableBounds(self.problem.lb.vec(),
+            self.problem.ub.vec())
+
+        self.solver = snes
+
+    def update_x(self, x):
+        """
+        Given a PETSc Vec x, update the storage of our solution function z.
+        """
+        x.copy(self.z_pvec)
+        self.z_dvec.update_ghost_values()
+
+    def init_residual(self):
+        # Get the state
+        z = self.problem.z
+        # Initialise b
+        b = as_backend_type(
+            Function(z.function_space()).vector()
+            )
+        return b
+
+    def init_jacobian(self):
+        A = PETScMatrix(self.comm)
+        self.ass.init_global_tensor(A, Form(self.problem.J))
+        return A
+
+    def residual(self, snes, x, b):
+        self.update_x(x)
+        b_wrap = PETScVector(b)
+        self.ass.assemble(b_wrap, self.z_dvec)
+
+    def jacobian(self, snes, x, A, P):
+        self.update_x(x)
+        A_wrap = PETScMatrix(A)
+        self.ass.assemble(A_wrap)
+
+    def solve(self):
+        # alpha = self.problem.state["alpha"]
+        # self.solver.solve(self.problem,
+        #             alpha.vector())
+        #         # del self.solver_alpha
+
+        # alpha = self.problem.state["alpha"]
+        z = self.problem.z
+        # Need a copy for line searches etc. to work correctly.
+        x = z.copy(deepcopy=True)
+        xv = as_backend_type(x.vector()).vec()
+        # Solve the problem
+        self.solver.solve(None, xv)
+
+    def inactive_set_indicator(self, tol=1.0e-5):
+        Ealpha = assemble(self.Ealpha)
+
+        mask_grad = Ealpha[:] < tol
+        mask_ub = self.alpha.vector()[:] < 1.-tol
+        mask_lb = self.alpha.vector()[:] > self.problem.lb[:] + tol
+
+        local_inactive_set_alpha = set(np.where(mask_ub == True)[0])  \
+            & set(np.where(mask_grad == True)[0])               \
+            & set(np.where(mask_lb == True)[0])
+
+        _set_alpha = [self.dm.local_to_global_index(k) for k in local_inactive_set_alpha]
+        inactive_set_alpha = set(_set_alpha) | set(self.dm.dofs())
+
+        index_set = petsc4py.PETSc.IS()
+        index_set.createGeneral(list(inactive_set_alpha))  
+
+        return index_set
+
+class EquilibriumProblemSNES(NonlinearProblem):
+    """
+    Class for the Equilibrium problem with and NonlinearVariationalProblem.
+    """
+    def __init__(self, energy, state, bcs=None):
+        """
+        Initializes the damage problem.
+
+        Arguments:
+            * energy
+            * state
+            * boundary conditions
+        """
+        # Initialize the NonlinearProblem
+        NonlinearProblem.__init__(self)
+        # Set the problem type
+        self.type = "snes"
+        # Store the boundary conditions
+        self.bcs = bcs
+        # Get function space
+        # Get state variables
+        self.mesh = state['alpha'].function_space().mesh()
+        self.Z = dolfin.FunctionSpace(self.mesh, 
+            dolfin.MixedElement([state['u'].ufl_element(),
+                state['alpha'].ufl_element()]))
+
+        self.z = Function(self.Z)
+
+        self.assigner = dolfin.FunctionAssigner(
+            Z,            # receiving space
+            [Z.sub(0), Z.sub(1)]) # assigning space
+
+        self.assigner.assign(self.z, [state['u'], state['alpha']])
+
+        z = self.z
+        Z = self.Z
+        # self.state = z
+        # alpha = state["alpha"]
+        # Create trial function and test function
+        # alpha_v = TestFunction(Z)
+        # dalpha = TrialFunction(Z)
+        zv = TestFunction(Z)
+        dz = TrialFunction(Z)
+        # Determine the residual
+        self.energy = energy
+        self.F = derivative(energy, z, TestFunction(Z))
+        # Determine the Jacobian matrix
+        self.J = derivative(self.F, z, TrialFunction(Z))
+
+        # Set the bound of the problem (converted to petsc vector)
+
+        # lb_alpha=interpolate(Constant(0.), V.sub(1))
+        lb_alpha=state['alpha'].copy(True).vector()
+        lb_u=interpolate(Constant(-1./DOLFIN_EPS), Z.sub(0))
+        lb = Function(Z)
+        assigner.assign(lb, [lb_u, lb_alpha])
+        self.lb = lb
+
+        ub_alpha = interpolate(Constant(1.), Z.sub(1))
+        ub_u = interpolate(Constant(1./DOLFIN_EPS), Z.sub(0))
+        ub = Function(Z)
+        assigner.assign(ub, [ub_u, ub_alpha])
+        self.ub = ub.vector()
+
+    def update_lower_bound(self):
+        """
+        Update the lower bounds.
+        """
+        # Get the damage variable
+        z = self.z
+        # alpha = self.state["alpha"]
+        # Update the current bound values
+        # self.lb = alpha.copy(deepcopy = True).vector().vec()
+        self.lb = z.copy(deepcopy = True).vector()
+        # log(LogLevel.INFO, '________________________ IRREV _________________________')
+        log(LogLevel.INFO, 'INFO: Updated irreversibility')
+
+
 

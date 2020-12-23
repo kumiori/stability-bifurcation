@@ -283,8 +283,8 @@ class StabilitySolver(object):
         self.energy = energy
 
         (z_u, z_a) = dolfin.split(self.z)
-        # energy = ufl.replace(energy, {self.u: z_u, self.alpha: z_a})
-        energy = ufl.replace(energy, {state['u']: z_u, state['alpha']: z_a})
+        energy = ufl.replace(energy, {self.u: z_u, self.alpha: z_a})
+        # energy = ufl.replace(energy, {state['u']: z_u, state['alpha']: z_a})
         self.J = derivative(energy, self.z, dolfin.TestFunction(self.Z))
         self.H = derivative(self.J, self.z, dolfin.TrialFunction(self.Z))
 
@@ -569,12 +569,11 @@ class StabilitySolver(object):
             log(LogLevel.INFO, 'Current state: elastic')
             self.stable = True
             self.negev = np.nan
-            return self.stable, 0
+            # return self.stable, 0
         else:
             log(LogLevel.INFO, 'Current state: inelastic')
 
         inactive_dofs = self.get_inactive_set()
-
         free_dofs = list(sorted(inactive_dofs - self.bc_dofs))
 
         index_set = petsc4py.PETSc.IS()
@@ -586,14 +585,17 @@ class StabilitySolver(object):
         if hasattr(self, 'Hessian'):
             log(LogLevel.INFO, 'Inertia: Using user-provided Hessian')
             self.H_reduced = self.reduce_Hessian(self.Hessian, restricted_dofs_is = index_set)
-            log(LogLevel.INFO, 'Hessian norm {}'.format(assemble(self.Hessian).norm('frobenius')))
+            log(LogLevel.INFO, 'H norm (provided) {}'.format(assemble(self.Hessian).norm('frobenius')))
+            # import pdb; pdb.set_trace()
+
+            log(LogLevel.INFO, 'H reduced norm (provided) {}'.format(self.H_reduced.norm(2)))
             self.Hessian_norm = assemble(self.Hessian).norm('frobenius')
         else:
-            log(LogLevel.INFO, 'Inertia: Using computed Hessian')
+            log(LogLevel.INFO, 'Inertnia: Using computed Hessian')
             self.H_reduced = self.reduce_Hessian(self.H, restricted_dofs_is = index_set)
 
-        log(LogLevel.INFO, 'H norm {}'.format(assemble(self.H).norm('frobenius')))
-        log(LogLevel.INFO, 'H reduced norm {}'.format(self.H_reduced.norm(2)))
+        log(LogLevel.INFO, 'H norm (computed) {}'.format(assemble(self.H).norm('frobenius')))
+        log(LogLevel.INFO, 'H reduced norm (computed) {}'.format(self.H_reduced.norm(2)))
         # typedef enum {NORM_1=0,NORM_2=1,NORM_FROBENIUS=2,NORM_INFINITY=3,NORM_1_AND_2=4} NormType;
 
         # self.Id_reduced = self.reduce_Hessian(self.Identity, restricted_dofs_is = index_set)
@@ -702,16 +704,16 @@ class StabilitySolver(object):
                     # print(rank, [self.is_compatible(bc, u_r, homogeneous = True) for bc in self.bcs_Z])
                     norm_coeff = self.normalise_eigen(v_n, beta_n, mode='max')
 
-                    log(LogLevel.INFO, '||vn||_l2 = {}'.format(dolfin.norm(v_n, 'l2')))
-                    log(LogLevel.INFO, '||βn||_l2 = {}'.format(dolfin.norm(beta_n, 'l2')))
-                    log(LogLevel.INFO, '||vn||_h1 = {}'.format(dolfin.norm(v_n, 'h1')))
-                    log(LogLevel.INFO, '||βn||_h1 = {}'.format(dolfin.norm(beta_n, 'h1')))
+                    log(LogLevel.DEBUG, '||vn||_l2 = {}'.format(dolfin.norm(v_n, 'l2')))
+                    log(LogLevel.DEBUG, '||βn||_l2 = {}'.format(dolfin.norm(beta_n, 'l2')))
+                    log(LogLevel.DEBUG, '||vn||_h1 = {}'.format(dolfin.norm(v_n, 'h1')))
+                    log(LogLevel.DEBUG, '||βn||_h1 = {}'.format(dolfin.norm(beta_n, 'h1')))
                     # eig, u_r, u_im, err = eigen.get_eigenpair(n)
 
                     # order = self.stability_parameters['order']
 
                     linsearch.append({'n': n, 'lambda_n': eig.real,
-                        'v_n': v_n, 'beta_n': beta_n})
+                        'v_n': v_n, 'beta_n': beta_n, 'norm_coeff': norm_coeff})
 
             eig, u_r, u_im, err = eigen.get_eigenpair(0)
             self.eigs = eigs[:,0]
