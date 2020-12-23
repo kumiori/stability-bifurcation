@@ -289,7 +289,6 @@ class AlternateMinimizationSolver(object):
 
             if self.parameters["solver_alpha"] == "snes":
                 self.set_solver_alpha_snes()
-                import pdb; pdb.set_trace()
                 (alpha_it, alpha_reason) = self.solver_alpha.solve(
                     self.problem_alpha,
                     self.alpha.vector(),
@@ -839,8 +838,8 @@ class EquilibriumNewton:
 
         if z_0:
             # self.u_0 = state_0['alpha']
-            self.alpha_0 = state_0['alpha']
-            self.u_0 = state_0['u']
+            self.alpha_0 = z_0['alpha']
+            self.u_0 = z_0['u']
             
         else:
             # self.u_0 = self.u.copy(deepcopy=True)
@@ -848,7 +847,6 @@ class EquilibriumNewton:
 
         # self.equilibrium = 
         self.problem = EquilibriumProblemSNES(energy, state, self.bcs)
-        import pdb; pdb.set_trace()
         self.solver= EquilibriumSolverSNES(self.problem, parameters['newton'])
         # self.solver = DamageSolverSNES(self.problem, parameters)
 
@@ -903,13 +901,48 @@ class EquilibriumNewton:
         # return self.bc_dofs
         return bcs_Z
 
-    def solve(self, debugpath=''):
+    def solve(self, z_0={}, debugpath=''):
         parameters = self.parameters
         # log(LogLevel.WARNING,'self.damage.problem.lb[:]')
         # log(LogLevel.WARNING, '{}'.format(self.damage.problem.lb[:]))
-        self.solver.setVariableBounds(self.problem.lb.vec(),
+        if z_0:
+            self.alpha_0 = z_0['alpha']
+            self.u_0 = z_0['u']
+
+            dolfin.assign(self.problem.z.sub(0), self.u_0)
+            dolfin.assign(self.problem.z.sub(1), self.alpha_0)
+
+            # lb_alpha=self.alpha_0.copy(True).vector()
+
+            lb_u=interpolate(
+                Constant([-1./dolfin.DOLFIN_EPS, -1./dolfin.DOLFIN_EPS]),
+                self.Z.sub(0).collapse())
+
+            ub_alpha = interpolate(Constant(1.), self.Z.sub(1).collapse())
+
+            ub_u = interpolate(
+                Constant([1./dolfin.DOLFIN_EPS, 1./dolfin.DOLFIN_EPS]),
+                self.Z.sub(0).collapse())
+
+            lb, ub = Function(self.Z), Function(self.Z)
+
+            dolfin.assign(lb.sub(0), lb_u)
+            dolfin.assign(lb.sub(1), self.alpha_0)
+            dolfin.assign(ub.sub(0), ub_u)
+            dolfin.assign(ub.sub(1), ub_alpha)
+
+            self.problem.update_bounds(z={'lb': lb, 'ub': ub})
+            # dolfin.assign(self.problem.lb.sub(0), lb_u)
+            # dolfin.assign(self.problem.lb.sub(1), self.alpha_0)
+
+            # dolfin.assign(self.problem.ub.sub(0), ub_u)
+            # dolfin.assign(self.problem.ub.sub(1), ub_alpha)
+
+        self.solver.solver.setVariableBounds(self.problem.lb.vec(),
             self.problem.ub.vec())
+
         inactive_IS = self.solver.inactive_set_indicator()
+
         self.solver.solve()
 
         return
@@ -947,6 +980,10 @@ class EquilibriumSolverSNES:
         self.comm = comm
         Z = self.z.function_space()
         self.Z = Z
+        self.Ealpha = derivative(self.energy,
+            problem.alpha, 
+            TestFunction(problem.alpha.ufl_function_space()))
+
         # self.Ealpha = derivative(self.energy, self.alpha,
             # dolfin.TestFunction(self.alpha.ufl_function_space()))
         self.dm = self.z.function_space().dofmap()
@@ -978,7 +1015,7 @@ class EquilibriumSolverSNES:
 
         (J, F, bcs) = (problem.J, problem.F, problem.bcs)
         # Create the SystemAssembler
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         self.ass = SystemAssembler(J, F, bcs)
         # Intialise the residual
         self.b = self.init_residual()
@@ -1039,24 +1076,28 @@ class EquilibriumSolverSNES:
         x = z.copy(deepcopy=True)
         xv = as_backend_type(x.vector()).vec()
         # Solve the problem
+        import pdb; pdb.set_trace()
+
         self.solver.solve(None, xv)
 
     def inactive_set_indicator(self, tol=1.0e-5):
         Ealpha = assemble(self.Ealpha)
+        z = self.problem.z
+        # alpha = z.sub(1)
 
-        mask_grad = Ealpha[:] < tol
-        mask_ub = self.alpha.vector()[:] < 1.-tol
-        mask_lb = self.alpha.vector()[:] > self.problem.lb[:] + tol
+        # mask_grad = Ealpha[:] < tol
+        mask_ub = z.vector()[:] < self.problem.ub - tol
+        mask_lb = z.vector()[:] > self.problem.lb[:] + tol
 
-        local_inactive_set_alpha = set(np.where(mask_ub == True)[0])  \
-            & set(np.where(mask_grad == True)[0])               \
+        local_inactive_set_z = set(np.where(mask_ub == True)[0])  \
             & set(np.where(mask_lb == True)[0])
+            # & set(np.where(mask_grad == True)[0])               \
 
-        _set_alpha = [self.dm.local_to_global_index(k) for k in local_inactive_set_alpha]
-        inactive_set_alpha = set(_set_alpha) | set(self.dm.dofs())
+        _set_z = [self.dm.local_to_global_index(k) for k in local_inactive_set_z]
+        inactive_set_z = set(_set_z) | set(self.dm.dofs())
 
         index_set = petsc4py.PETSc.IS()
-        index_set.createGeneral(list(inactive_set_alpha))  
+        index_set.createGeneral(list(inactive_set_z))  
 
         return index_set
 
@@ -1096,7 +1137,7 @@ class EquilibriumProblemSNES(NonlinearProblem):
 
         # au= dolfin.project(1., Z.sub(1).collapse())
         # uu= dolfin.project(Constant([1./dolfin.DOLFIN_EPS, 1./dolfin.DOLFIN_EPS]), Z.sub(0).collapse())
-
+        self.alpha = state['alpha']
         dolfin.assign(self.z.sub(0), state['u'])
         dolfin.assign(self.z.sub(1), state['alpha'])
 
@@ -1142,6 +1183,15 @@ class EquilibriumProblemSNES(NonlinearProblem):
 
         self.lb = lb.vector()
         self.ub = ub.vector()
+
+    def update_bounds(self, z):
+        lb = z['lb']
+        ub = z['ub']
+        self.lb = lb.copy(deepcopy = True).vector()
+        self.ub = ub.copy(deepcopy = True).vector()
+        log(LogLevel.INFO, 'INFO: Updated bounds')
+
+        return
 
     def update_lower_bound(self):
         """
