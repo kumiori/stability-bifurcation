@@ -72,6 +72,8 @@ def getDefaultParameters():
         elasticity_parameters = yaml.load(f, Loader=yaml.FullLoader)['elasticity']
     with open('../parameters/film2d.yaml') as f:
         material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
+    with open('../parameters/film2d.yaml') as f:
+        newton_parameters = yaml.load(f, Loader=yaml.FullLoader)['newton']
     with open('../parameters/loading.yaml') as f:
         loading_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
     with open('../parameters/stability.yaml') as f:
@@ -89,6 +91,7 @@ def getDefaultParameters():
         'inertia': {**inertia_parameters},
         'loading': {**loading_parameters},
         'material': {**material_parameters},
+        'newton': {**newton_parameters},
         'equilibrium':{**equilibrium_parameters},
         'damage':{**damage_parameters},
         'elasticity':{**elasticity_parameters},
@@ -291,7 +294,6 @@ def numerical_test(
     log(LogLevel.INFO, 'HX.norm: {}'.format(HX.norm('frobenius')))
     log(LogLevel.INFO, 'HH.norm: {}'.format(HH.norm('frobenius')))
 
-    import pdb; pdb.set_trace()
 
     Hessian = derivative(derivative(Wppt*dx, z, TestFunction(Z)), z, TrialFunction(Z))
 
@@ -317,6 +319,7 @@ def numerical_test(
 
     solver = EquilibriumAM(energy, state, bcs, parameters=parameters)
     stability = StabilitySolver(energy, state, bcs, parameters = parameters, Hessian = Hessian)
+    import pdb; pdb.set_trace()
     equilibrium = EquilibriumNewton(energy, state, bcs, parameters = parameters)
     # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh= [rP, rN])
     linesearch = LineSearch(energy, state)

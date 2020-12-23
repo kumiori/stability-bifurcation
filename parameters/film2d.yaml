@@ -30,6 +30,17 @@ equilibrium:
     max_it: 300
     criterion: linf                                 # avail: h1, l2, residual
 
+
+# TODO
+# equilibrium:
+#     type:
+#         - AM
+#         - newton
+#     AM:
+#         ...
+#     newton:
+#         ...
+        
 elasticity:
     # ksp_type: gmres
     # pc_type: hypre
@@ -81,6 +92,21 @@ damage:
         snes_max_it: 500
         snes_divergence_tolerance: -1.0
         # snes_monitor: ""
+
+newton:
+    snes_type: vinewtonrsls
+    snes_linesearch_type: basic
+    ksp_type: preonly
+    pc_type: lu
+    pc_factor_mat_solver_type: mumps
+    snes_atol: 1.0e-08
+    ksp_rtol: 1.0e-08
+    snes_rtol: 1.0e-08
+    snes_stol: 0.0
+    snes_max_it: 500
+    snes_divergence_tolerance: -1.0
+    # snes_monitor: ""
+
 stability:
     order: 3
     projection: 'None'

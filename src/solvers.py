@@ -814,16 +814,17 @@ class EquilibriumNewton:
 
         # self.u = state['u']
         # self.alpha = state['alpha']
-
+        self.mesh = state['alpha'].function_space().mesh()
         self.Z = dolfin.FunctionSpace(self.mesh, 
             dolfin.MixedElement([state['u'].ufl_element(),
                 state['alpha'].ufl_element()]))
 
         self.z = Function(self.Z)
 
+
         self.assigner = dolfin.FunctionAssigner(
-            Z,            # receiving space
-            [Z.sub(0), Z.sub(1)]) # assigning space
+            self.Z,            # receiving space
+            [self.Z.sub(0), self.Z.sub(1)]) # assigning space
 
         # handle bcs -> mixed space
         # self.bcs_u = bcs['elastic']
@@ -845,11 +846,10 @@ class EquilibriumNewton:
             # self.u_0 = self.u.copy(deepcopy=True)
             self.z_0 = self.z.copy(deepcopy=True)
 
-        parameters['newton'] = {}
-
         # self.equilibrium = 
-        self.problem = EquilibriumProblemSNES(energy, state, bcs)
-        self.solver = EquilibriumSolverSNES(energy, state, bcs, parameters['newton'])
+        self.problem = EquilibriumProblemSNES(energy, state, self.bcs)
+        import pdb; pdb.set_trace()
+        self.solver= EquilibriumSolverSNES(self.problem, parameters['newton'])
         # self.solver = DamageSolverSNES(self.problem, parameters)
 
     def get_bcs(self, bcs):
@@ -886,21 +886,22 @@ class EquilibriumNewton:
             bcs_Z.append(new_bc)
 
         # Locate the DOF's corresponding to the BC
-        bc_keys = [set(bc.get_boundary_values().keys()) for bc in bcs_Z]
-        dofmap = self.Z.dofmap()
-        bc_keys_glob = []
-        for bc_key in bc_keys:
-            bc_key_global = []
-            for x in bc_key:
-                bc_key_global.append(dofmap.local_to_global_index(x))
-            bc_keys_glob.append(set(bc_key_global))
-        if bc_keys_glob:
-            self.bc_dofs  = reduce(lambda x, y: x.union(y), bc_keys_glob)
-        else:
-            self.bc_dofs  = set()
+        # bc_keys = [set(bc.get_boundary_values().keys()) for bc in bcs_Z]
+        # dofmap = self.Z.dofmap()
+        # bc_keys_glob = []
+        # for bc_key in bc_keys:
+        #     bc_key_global = []
+        #     for x in bc_key:
+        #         bc_key_global.append(dofmap.local_to_global_index(x))
+        #     bc_keys_glob.append(set(bc_key_global))
+        # if bc_keys_glob:
+        #     self.bc_dofs  = reduce(lambda x, y: x.union(y), bc_keys_glob)
+        # else:
+        #     self.bc_dofs  = set()
 
-        self.bcs_Z = bcs_Z
-        return self.bc_dofs
+        # self.bcs_Z = bcs_Z
+        # return self.bc_dofs
+        return bcs_Z
 
     def solve(self, debugpath=''):
         parameters = self.parameters
@@ -925,10 +926,10 @@ class EquilibriumNewton:
         #     self.problem_alpha.update_lb()
         #     print('Updated irreversibility')
 
-class EquilbriumSolverSNES:
-    """docstring for EquilbriumSolverSNES"""
+class EquilibriumSolverSNES:
+    """docstring for EquilibriumSolverSNES"""
     def __init__(self, problem, parameters={}):
-        super(EquilbriumSolverSNES, self).__init__()
+        super(EquilibriumSolverSNES, self).__init__()
         self.problem = problem
         self.energy = problem.energy
         self.z = problem.z
@@ -939,7 +940,6 @@ class EquilbriumSolverSNES:
 
         self.z_dvec = as_backend_type(self.z.vector())
         self.z_pvec = self.z_dvec.vec()
-        assigner = problem.assigner
 
         self.bcs = problem.bcs
         self.parameters = parameters
@@ -967,8 +967,7 @@ class EquilbriumSolverSNES:
 
         prefix = "equilibrium_"
         snes.setOptionsPrefix(prefix)
-        # import pdb; pdb.set_trace()
-        for option, value in self.parameters["snes"].items():
+        for option, value in self.parameters.items():
             PETScOptions.set(prefix+option, value)
             # log(LogLevel.INFO, "PETScOptions.set({}, {})".format(prefix + option,value))
             log(LogLevel.INFO, "Set: {} = {}".format(prefix + option,value))
@@ -979,6 +978,7 @@ class EquilbriumSolverSNES:
 
         (J, F, bcs) = (problem.J, problem.F, problem.bcs)
         # Create the SystemAssembler
+        import pdb; pdb.set_trace()
         self.ass = SystemAssembler(J, F, bcs)
         # Intialise the residual
         self.b = self.init_residual()
@@ -1088,11 +1088,19 @@ class EquilibriumProblemSNES(NonlinearProblem):
 
         self.z = Function(self.Z)
 
-        self.assigner = dolfin.FunctionAssigner(
-            Z,            # receiving space
-            [Z.sub(0), Z.sub(1)]) # assigning space
+        # self.assigner = dolfin.FunctionAssigner(
+        #     self.Z,            # receiving space
+        #     [self.Z.sub(0), self.Z.sub(1)]) # assigning space
 
-        self.assigner.assign(self.z, [state['u'], state['alpha']])
+
+
+        # au= dolfin.project(1., Z.sub(1).collapse())
+        # uu= dolfin.project(Constant([1./dolfin.DOLFIN_EPS, 1./dolfin.DOLFIN_EPS]), Z.sub(0).collapse())
+
+        dolfin.assign(self.z.sub(0), state['u'])
+        dolfin.assign(self.z.sub(1), state['alpha'])
+
+        # self.assigner.assign(self.z, [state['u'], state['alpha']])
 
         z = self.z
         Z = self.Z
@@ -1112,16 +1120,27 @@ class EquilibriumProblemSNES(NonlinearProblem):
         # Set the bound of the problem (converted to petsc vector)
 
         # lb_alpha=interpolate(Constant(0.), V.sub(1))
-        lb_alpha=state['alpha'].copy(True).vector()
-        lb_u=interpolate(Constant(-1./DOLFIN_EPS), Z.sub(0))
-        lb = Function(Z)
-        assigner.assign(lb, [lb_u, lb_alpha])
-        self.lb = lb
+        lb, ub = Function(Z), Function(Z)
 
-        ub_alpha = interpolate(Constant(1.), Z.sub(1))
-        ub_u = interpolate(Constant(1./DOLFIN_EPS), Z.sub(0))
-        ub = Function(Z)
-        assigner.assign(ub, [ub_u, ub_alpha])
+        # lb_alpha=state['alpha'].copy(True).vector()
+        lb_u=interpolate(
+            Constant([-1./dolfin.DOLFIN_EPS, -1./dolfin.DOLFIN_EPS]),
+            Z.sub(0).collapse())
+        # assigner.assign(lb, [lb_u, lb_alpha])
+
+        ub_alpha = interpolate(Constant(1.), Z.sub(1).collapse())
+        ub_u = interpolate(
+            Constant([1./dolfin.DOLFIN_EPS, 1./dolfin.DOLFIN_EPS]),
+            Z.sub(0).collapse())
+        # assigner.assign(ub, [ub_u, ub_alpha])
+
+        dolfin.assign(lb.sub(0), lb_u)
+        dolfin.assign(lb.sub(1), state['alpha'])
+
+        dolfin.assign(ub.sub(0), ub_u)
+        dolfin.assign(ub.sub(1), ub_alpha)
+
+        self.lb = lb.vector()
         self.ub = ub.vector()
 
     def update_lower_bound(self):
