@@ -555,6 +555,7 @@ class StabilitySolver(object):
         self.alpha_old = alpha_old
         # postfix = 'seq' if size == 1 else 'mpi'
         self.H_norm = assemble(self.H).norm('frobenius')
+        self.assigner.assign(self.z, [self.u, self.alpha])
 
         locnumbcs = np.array(len(self.bc_dofs))
 
@@ -612,7 +613,6 @@ class StabilitySolver(object):
         # self.save_matrix(self.H_reduced, 'H-red-{}.txt'.format(size))
         negev = self.get_inertia(self.H_reduced)
         # import pdb; pdb.set_trace()
-        # self.assigner.assign(self.z, [self.u, self.alpha])
 
 
         # if negev > 0:

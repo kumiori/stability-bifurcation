@@ -319,8 +319,8 @@ def numerical_test(
 
     solver = EquilibriumAM(energy, state, bcs, parameters=parameters)
     stability = StabilitySolver(energy, state, bcs, parameters = parameters, Hessian = Hessian)
-    import pdb; pdb.set_trace()
-    equilibrium = EquilibriumNewton(energy, state, bcs, parameters = parameters)
+    # import pdb; pdb.set_trace()
+    # equilibrium = EquilibriumNewton(energy, state, bcs, parameters = parameters)
     # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh= [rP, rN])
     linesearch = LineSearch(energy, state)
 

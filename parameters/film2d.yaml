@@ -23,12 +23,12 @@ material:
 
 geometry:
     R: 1.
-    n: 1
+    n: 3
 
 equilibrium:
     tol: 1e-3
     max_it: 300
-    criterion: linf                                 # avail: h1, l2, residual
+    criterion: l2                                 # avail: h1, l2, residual
 
 
 # TODO
@@ -40,7 +40,7 @@ equilibrium:
 #         ...
 #     newton:
 #         ...
-        
+
 elasticity:
     # ksp_type: gmres
     # pc_type: hypre

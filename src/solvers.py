@@ -647,7 +647,6 @@ class DamageSolverSNES:
         self.dm = self.alpha.function_space().dofmap()
         solver = PETScSNESSolver()
         snes = solver.snes()
-
         # lb = self.alpha_init
         if lb == None: 
             lb=interpolate(Constant(0.), V)
@@ -655,7 +654,6 @@ class DamageSolverSNES:
 
         prefix = "damage_"
         snes.setOptionsPrefix(prefix)
-        # import pdb; pdb.set_trace()
         for option, value in self.parameters["snes"].items():
             PETScOptions.set(prefix+option, value)
             # log(LogLevel.INFO, "PETScOptions.set({}, {})".format(prefix + option,value))
@@ -681,6 +679,9 @@ class DamageSolverSNES:
 
         snes.setVariableBounds(self.problem.lb.vec(),
             self.problem.ub.vec()) # 
+
+        # import pdb; pdb.set_trace()
+        snes.solve(None, Function(V).vector().vec())
 
         self.solver = snes
 
@@ -903,6 +904,9 @@ class EquilibriumNewton:
 
     def solve(self, z_0={}, debugpath=''):
         parameters = self.parameters
+        log(LogLevel.INFO, '________________________ EQUILIBRIUM _________________________')
+        log(LogLevel.INFO, "Solving equilibrium (Newton)")
+
         # log(LogLevel.WARNING,'self.damage.problem.lb[:]')
         # log(LogLevel.WARNING, '{}'.format(self.damage.problem.lb[:]))
         if z_0:
@@ -938,14 +942,16 @@ class EquilibriumNewton:
             # dolfin.assign(self.problem.ub.sub(0), ub_u)
             # dolfin.assign(self.problem.ub.sub(1), ub_alpha)
 
-        self.solver.solver.setVariableBounds(self.problem.lb.vec(),
+        self.solver.snes.setVariableBounds(self.problem.lb.vec(),
             self.problem.ub.vec())
 
         inactive_IS = self.solver.inactive_set_indicator()
 
-        self.solver.solve()
+        # import pdb; pdb.set_trace()
 
-        return
+        (z_it, z_reason) = self.solver.solve()
+
+        return (z_it, z_reason)
 
     def update(self):
         self.problem.update_lower_bound()
@@ -966,10 +972,6 @@ class EquilibriumSolverSNES:
         self.problem = problem
         self.energy = problem.energy
         self.z = problem.z
-        # self.alpha = problem.state['alpha']
-        # self.alpha = problem.state['alpha']
-        # self.alpha_dvec = as_backend_type(self.alpha.vector())
-        # self.alpha_pvec = self.alpha_dvec.vec()
 
         self.z_dvec = as_backend_type(self.z.vector())
         self.z_pvec = self.z_dvec.vec()
@@ -984,23 +986,9 @@ class EquilibriumSolverSNES:
             problem.alpha, 
             TestFunction(problem.alpha.ufl_function_space()))
 
-        # self.Ealpha = derivative(self.energy, self.alpha,
-            # dolfin.TestFunction(self.alpha.ufl_function_space()))
         self.dm = self.z.function_space().dofmap()
         solver = PETScSNESSolver()
         snes = solver.snes()
-
-        # lb = self.alpha_init
-        # if lb == None:
-        #     lb_alpha=interpolate(Constant(0.), V.sub(1))
-        #     lb_u=interpolate(Constant(1./DOLFIN_EPS), V.sub(0))
-        #     lb = Function(V)
-        #     assigner.assign(lb, [lb_u, lb_alpha])
-
-        # ub_alpha = interpolate(Constant(1.), V.sub(1))
-        # ub_u = interpolate(Constant(1./DOLFIN_EPS), V.sub(0))
-        # ub = Function(V)
-        # assigner.assign(ub, [ub_u, ub_alpha])
 
         prefix = "equilibrium_"
         snes.setOptionsPrefix(prefix)
@@ -1031,7 +1019,9 @@ class EquilibriumSolverSNES:
         snes.setVariableBounds(self.problem.lb.vec(),
             self.problem.ub.vec())
 
-        self.solver = snes
+        # import pdb; pdb.set_trace()
+
+        self.snes = snes
 
     def update_x(self, x):
         """
@@ -1076,9 +1066,10 @@ class EquilibriumSolverSNES:
         x = z.copy(deepcopy=True)
         xv = as_backend_type(x.vector()).vec()
         # Solve the problem
-        import pdb; pdb.set_trace()
 
-        self.solver.solve(None, xv)
+        self.snes.solve(None, xv)
+
+        return (self.snes.getIterationNumber(), self.snes.getConvergedReason())
 
     def inactive_set_indicator(self, tol=1.0e-5):
         Ealpha = assemble(self.Ealpha)
