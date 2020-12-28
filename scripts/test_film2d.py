@@ -250,7 +250,7 @@ def numerical_test(
 
     ell = parameters['material']['ell']
 
-    # Problem definition
+    # -----------------------
     # Problem definition
     k_res = parameters['material']['k_res']
     a = (1 - alpha) ** 2. + k_res
@@ -265,7 +265,38 @@ def numerical_test(
         + a*parameters['material']['E']/(2.*(1+nu))*(inner(eps-eps0t, eps-eps0t))                           \
     + 1./2.*1./parameters['material']['ell_e']**2.*dot(u, u)
 
-    energy = Wt * dx + w_1 *( alpha + parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
+    # energy = Wt * dx + w_1 *( alpha + parameters['material']['ell']** 2.*inner(grad(alpha), grad(alpha)))*dx
+
+
+    # -------------------
+
+    ell = parameters['material']['ell']
+    ell_e = parameters['material']['ell_e']
+    E = parameters['material']['E']
+
+    def elastic_energy(u,alpha, E=E, nu=nu, ell_e=ell_e, eps0t=eps0t, k_res=k_res):
+        a = (1 - alpha) ** 2. + k_res
+        eps = sym(grad(u))
+        Wt = a*E*nu/(2*(1-nu**2.)) * tr(eps-eps0t)**2.                                \
+            + a*E/(2.*(1+nu))*(inner(eps-eps0t, eps-eps0t))                           \
+            + 1./2.*1./ell_e**2.*dot(u, u)
+        return Wt * dx 
+
+    def dissipated_energy(alpha,w_1=w_1,ell=ell):
+        return w_1 *( alpha + ell** 2.*inner(grad(alpha), grad(alpha)))*dx
+
+    def total_energy(u, alpha, k_res=k_res, w_1=w_1, 
+                            E=E, 
+                            nu=nu, 
+                            ell_e=ell_e,
+                            ell=ell,
+                            eps0t=eps0t):
+        elastic_energy_ = elastic_energy(u,alpha, E=E, nu=nu, ell_e=ell_e, eps0t=eps0t, k_res=k_res)
+        dissipated_energy_ = dissipated_energy(alpha,w_1=w_1,ell=ell)
+        return elastic_energy_ + dissipated_energy_
+
+    energy = total_energy(u,alpha)
+
 
     c1 = parameters['material']['E']*nu/(2*(1-nu**2.))
     c2 = parameters['material']['E']/(2.*(1+nu))
@@ -446,13 +477,14 @@ def numerical_test(
 
                     # plt.close()
 
-                    fig = plt.figure(figsize=((_nmodes+1)*3, 3), dpi=80, facecolor='w', edgecolor='k')
-                    fig.suptitle('Load {:3f}'.format(load), fontsize=16)
-                    plt.subplot(2, _nmodes+1, 1)
-                    plt.title('alpha (max = {:2.2f})'.format(max(alpha.vector()[:])))
-                    plt.set_cmap('coolwarm')
-                    plt.axis('off')
-                    plot(alpha, vmin=0., vmax=1.)
+                    # fig = plt.figure(figsize=((_nmodes+1)*3, 3), dpi=80, facecolor='w', edgecolor='k')
+                    # fig.suptitle('Load {:3f}'.format(load), fontsize=16)
+                    # plt.subplot(2, _nmodes+1, 1)
+                    # plt.title('alpha (max = {:2.2f})'.format(max(alpha.vector()[:])))
+                    # plt.set_cmap('coolwarm')
+                    # plt.axis('off')
+                    # # import pdb; pdb.set_trace()
+                    # plot(alpha, vmin=0., vmax=1.)
 
                     plt.set_cmap('hot')
 
@@ -461,8 +493,11 @@ def numerical_test(
                         plt.axis('off')
                         plot(mode[1], cmap = cm.ocean)
 
-                        plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
-                            .format(i, h_opts[i], i, stability.eigs[i], en_vars[i]), fontsize= 15)
+                        # plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
+                        #     .format(i, h_opts[i], i, stability.eigs[i], en_vars[i]), fontsize= 15)
+
+                        plt.title('mode {}'
+                            .format(i), fontsize= 15)
 
                         plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
                         plt.axis('off')
@@ -503,31 +538,62 @@ def numerical_test(
                     file.write(Ealpha, load)
 
                 save_current_bifurcation = True
+
                 # pick the first of the non exhausted modes-
                 non_zero_h = np.where(abs(np.array(h_opts)) > DOLFIN_EPS)[0]
                 log(LogLevel.INFO, 'Nonzero h {}'.format(non_zero_h))
                 # opt_mode = list(set(range(_nmodes))-set(exhaust_modes))[0]
                 avail_modes = set(non_zero_h)-set(exhaust_modes)
-                if len(avail_modes)>0:
-                    opt_mode = list(avail_modes)[0]
-                    # opt_mode = np.argmin(en_vars)
-                    opt_sort = np.argsort(en_vars)
-                    log(LogLevel.INFO, 'Energy vars {}'.format(en_vars))
-                    log(LogLevel.INFO, 'Sorting idxs {}'.format(opt_sort))
-                    log(LogLevel.INFO, 'Avail modes {}'.format(avail_modes))
-                    log(LogLevel.INFO, 'Pick bifurcation mode {} out of {}'.format(opt_mode, len(en_vars)))
-                    h_opt = h_opts[opt_mode]
-                    perturbation_v    = stability.perturbations_v[opt_mode]
-                    perturbation_beta = stability.perturbations_beta[opt_mode]
 
-                else:
-                    log(LogLevel.CRITICAL, 'We are stuck in the matrix')
-                    log(LogLevel.WARNING, 'Continuing load program')
-                    break
+                opt_mode = 0
+                # opt_mode = np.argmin(en_vars)
+                log(LogLevel.INFO, 'Energy vars {}'.format(en_vars))
+                log(LogLevel.INFO, 'Pick bifurcation mode {} out of {}'.format(opt_mode, len(en_vars)))
+                h_opt = min(h_opts[opt_mode],1.e-2)
+                perturbation_v    = stability.perturbations_v[opt_mode]
+                perturbation_beta = stability.perturbations_beta[opt_mode]
+                minmode = stability.minmode
+                (perturbation_v, perturbation_beta) = minmode.split(deepcopy=True)
+                # (perturbation_v, perturbation_beta) = stability.perturbation_v, stability.perturbation_beta
 
+                def energy_1d(h):
+                    #return assemble(energy_functional(u + h * perturbation_v, alpha + h * perturbation_beta))
+                    u_ = Function(u.function_space())
+                    alpha_ = Function(alpha.function_space())
+                    u_.vector()[:] = u.vector()[:] + h * perturbation_v.vector()[:]
+                    alpha_.vector()[:] = alpha.vector()[:] + h * perturbation_beta.vector()[:]
+                    u_.vector().vec().ghostUpdate()
+                    alpha_.vector().vec().ghostUpdate()
+                    return assemble(total_energy(u_, alpha_))
+
+                (hmin, hmax) = linesearch.admissible_interval(alpha, alpha_old, perturbation_beta)
+                hs = np.linspace(hmin,hmax,20)
+                energy_vals = np.array([energy_1d(h) for h in hs])
+                stability.solve(solver.damage.problem.lb)
+
+                Hzz = assemble(stability.H*minmode*minmode)
+                Gz = assemble(stability.J*minmode)
+                mineig_z = Hzz/assemble(dot(minmode,minmode)*dx)
+
+                energy_vals_quad = energy_1d(0) + hs*Gz + hs**2*Hzz/2
+                
+                h_opt = hs[np.argmin(energy_vals)]
+                print(h_opt)
+                print("%%%%%%%%% ",mineig_z,"-",mineig)
+                
+                if rank == 0:
+                    plt.figure()
+                    plt.plot(hs,energy_vals, marker = 'o')
+                    plt.plot(hs,energy_vals,label="exact")
+                    plt.plot(hs,energy_vals_quad,label="quadratic approximation")
+                    plt.legend()
+                    plt.title("eig {:.4f} vs {:.4f} expected".format(mineig_z, mineig))
+                    plt.axvline(h_opt)
+                    # import pdb; pdb.set_trace()
+                    plt.savefig(os.path.join(outdir, "energy1d-{:.3f}.pdf".format(load)))
 
                 # the following should always be true by now.
-                # if h_opt != 0:
+
                 iteration += 1
                 log(LogLevel.CRITICAL, 'Bifurcating')
 

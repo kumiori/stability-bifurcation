@@ -718,6 +718,7 @@ class StabilitySolver(object):
             eig, u_r, u_im, err = eigen.get_eigenpair(0)
             self.eigs = eigs[:,0]
             self.mineig = eig.real
+            self.minmode = u_r
             # self.stable = negev <= 0  # based on inertia
 
             self.negev = negev  # based on inertia

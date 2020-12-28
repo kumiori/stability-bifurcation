@@ -6,7 +6,7 @@ general:
 loading: 
     # tc = np.sqrt((1-nu)/2)
     # tc = 0.5916079783 (nu = .3)
-    load_min: 0.5
+    load_min: 0.59
     # load_min: .7
     load_max: .8
     n_steps: 50
@@ -16,19 +16,19 @@ material:
     E: 1
     nu: 0.3
     ell: 0.03
-    ell_e: 0.15
+    ell_e: 0.2
     # k_res: 1.e-6
     k_res: 0.
     sigma_D0: 1.
 
 geometry:
-    R: 1.
+    R: .5
     n: 3
 
 equilibrium:
     tol: 1e-3
-    max_it: 500
-    criterion: h1                                 # avail: h1, l2, residual
+    max_it: 300
+    criterion: linf                                 # avail: h1, l2, residual
 
 
 # TODO
@@ -110,12 +110,12 @@ newton:
 stability:
     order: 3
     projection: 'None'
-    maxmodes: 3
+    maxmodes: 2
     checkstability: 'True'
     continuation: 'False'
     cont_rtol: 1.0e-10
     inactiveset_gatol: 1.e-8
-    inactiveset_ubtol: 1.e-8
+    inactiveset_ubtol: 1.e-3
 
 inertia:
     # MUMPS
