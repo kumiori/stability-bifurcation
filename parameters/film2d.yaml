@@ -18,7 +18,7 @@ material:
     ell: 0.03
     ell_e: 0.15
     # k_res: 1.e-6
-    k_res: 0.
+    k_res: 1.e-14
     sigma_D0: 1.
 
 geometry:
@@ -103,7 +103,7 @@ newton:
     ksp_rtol: 1.0e-08
     snes_rtol: 1.0e-08
     snes_stol: 0.0
-    snes_max_it: 500
+    snes_max_it: 501
     snes_divergence_tolerance: -1.0
     # snes_monitor: ""
 
@@ -115,7 +115,7 @@ stability:
     continuation: 'False'
     cont_rtol: 1.0e-10
     inactiveset_gatol: 1.e-8
-    inactiveset_ubtol: 1.e-8
+    inactiveset_ubtol: 1.e-3
 
 inertia:
     # MUMPS
