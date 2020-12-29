@@ -1,5 +1,13 @@
+general:
+    dim: 2
 material:
     E: 1
     ell: 0.05
     sigma_D0: 1.0
     k_res: 1.e-8
+    nu: 0.
+
+geometry:
+    Lx: 3.
+    Ly: .1
+    n: 5
