@@ -59,6 +59,45 @@ code_parameters = get_versions()
 set_log_level(LogLevel.INFO)
 
 
+
+def getDefaultParameters():
+
+    with open('../parameters/form_compiler.yml') as f:
+        form_compiler_parameters = yaml.load(f, Loader=yaml.FullLoader)
+    with open('../parameters/solvers_default.yml') as f:
+        equilibrium_parameters = yaml.load(f, Loader=yaml.FullLoader)['equilibrium']
+    with open('../parameters/solvers_default.yml') as f:
+        damage_parameters = yaml.load(f, Loader=yaml.FullLoader)['damage']
+    with open('../parameters/solvers_default.yml') as f:
+        elasticity_parameters = yaml.load(f, Loader=yaml.FullLoader)['elasticity']
+    with open('../parameters/model1d.yaml') as f:
+        material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
+    with open('../parameters/loading.yaml') as f:
+        loading_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
+    with open('../parameters/stability.yaml') as f:
+        stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
+    with open('../parameters/stability.yaml') as f:
+        inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
+    with open('../parameters/stability.yaml') as f:
+        eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
+
+    default_parameters = {
+        'code': {**code_parameters},
+        'compiler': {**form_compiler_parameters},
+        'eigen': {**eigen_parameters},
+        # 'geometry': {**geometry_parameters},
+        'inertia': {**inertia_parameters},
+        'loading': {**loading_parameters},
+        'material': {**material_parameters},
+        # 'newton': {**newton_parameters},
+        'equilibrium':{**equilibrium_parameters},
+        'damage':{**damage_parameters},
+        'elasticity':{**elasticity_parameters},
+        'stability': {**stability_parameters},
+        }
+
+    return default_parameters
+    
 def numerical_test(
     user_parameters,
     ell=0.05,

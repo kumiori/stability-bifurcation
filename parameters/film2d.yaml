@@ -103,7 +103,7 @@ newton:
     ksp_rtol: 1.0e-08
     snes_rtol: 1.0e-08
     snes_stol: 0.0
-    snes_max_it: 501
+    snes_max_it: 502
     snes_divergence_tolerance: -1.0
     # snes_monitor: ""
 
