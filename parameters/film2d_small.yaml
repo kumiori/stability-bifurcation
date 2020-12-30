@@ -15,7 +15,7 @@ loading:
 material:
     E: 1
     nu: 0.3
-    ell: 0.03
+    ell: 0.1
     ell_e: 0.2
     # k_res: 1.e-6
     k_res: 0.

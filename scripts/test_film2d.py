@@ -1,59 +1,54 @@
-# sys.path.append("../src/")
+# Generic imports
 import sys
 sys.path.append("../src/")
-# from post_processing import compute_sig, local_project
 import site
-import sys
-
+import subprocess
+import yaml
 import pandas as pd
-
-import sys
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
-# import mshr
-import dolfin
-from dolfin import MPI
-import ufl
 import os
-import sympy
-import numpy as np
-# import post_processing as pp
-import petsc4py
-from functools import reduce
-from string import Template
-
-petsc4py.init(sys.argv)
-
-from petsc4py import PETSc
-# from hashlib import md5
 from pathlib import Path
 import json
 import hashlib
-
 from copy import deepcopy
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import sympy
+import numpy as np
+from functools import reduce
+from string import Template
 
+# FEniCS and PETSc related imports
+import dolfin
+from dolfin import MPI
+import ufl
+from dolfin.cpp.log import log, LogLevel, set_log_level
 import mpi4py
+import petsc4py
+from petsc4py import PETSc
+from dolfin import *
+set_log_level(ERROR)
 
+# Imports from our module
+from solvers import EquilibriumAM, EquilibriumNewton
+from solver_stability import StabilitySolver
+from linsearch import LineSearch
+from utils import get_versions
+
+petsc4py.init(sys.argv)
 comm = mpi4py.MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
 
-from dolfin.cpp.log import log, LogLevel, set_log_level
+set_log_level(LogLevel.ERROR)
+if MPI.rank(mpi_comm_world()) == 0:
+    set_log_level(LogLevel.INFO)
+
 dolfin.parameters["std_out_all_processes"] = False
 
-from solvers import EquilibriumAM, EquilibriumNewton
-from solver_stability import StabilitySolver
-from linsearch import LineSearch
-import subprocess
-
-import yaml
-
-from utils import get_versions
-code_parameters = get_versions()
-print("VERSIONS::::",code_parameters)
-set_log_level(LogLevel.INFO)
+try:
+    code_parameters = get_versions()
+    print("VERSIONS::::",code_parameters)
 
 def compile_continuation_data(state, energy):
     continuation_data_i = {}
