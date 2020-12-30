@@ -22,33 +22,31 @@ from string import Template
 import dolfin
 from dolfin import MPI
 import ufl
-from dolfin.cpp.log import log, LogLevel, set_log_level
 import mpi4py
 import petsc4py
 from petsc4py import PETSc
-from dolfin import *
-set_log_level(ERROR)
+from dolfin.cpp.log import log, set_log_level, LogLevel
 
 # Imports from our module
 from solvers import EquilibriumAM, EquilibriumNewton
 from solver_stability import StabilitySolver
 from linsearch import LineSearch
-from utils import get_versions
+from utils import get_versions, ColorPrint
 
 petsc4py.init(sys.argv)
-comm = mpi4py.MPI.COMM_WORLD
+comm = MPI.comm_world
 rank = comm.Get_rank()
 size = comm.Get_size()
 
 set_log_level(LogLevel.ERROR)
-if MPI.rank(mpi_comm_world()) == 0:
+if MPI.rank(comm) == 0:
     set_log_level(LogLevel.INFO)
-
-dolfin.parameters["std_out_all_processes"] = False
 
 try:
     code_parameters = get_versions()
-    print("VERSIONS::::",code_parameters)
+    ColorPrint.print_info(f"VERSIONS:::: {code_parameters}")
+except:
+    code_parameters = None
 
 def compile_continuation_data(state, energy):
     continuation_data_i = {}
@@ -79,7 +77,7 @@ def getDefaultParameters():
         eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
 
     default_parameters = {
-        'code': {**code_parameters},
+        'code': None,
         'compiler': {**form_compiler_parameters},
         'eigen': {**eigen_parameters},
         # 'geometry': {**geometry_parameters},
@@ -92,6 +90,9 @@ def getDefaultParameters():
         'elasticity':{**elasticity_parameters},
         'stability': {**stability_parameters},
         }
+
+    if code_parameters is not None:
+        default_parameters["code"] = {**code_parameters}
 
     return default_parameters
 
@@ -107,44 +108,38 @@ def numerical_test(
     save_current_bifurcation = False
     bifurc_i = 0
     bifurcation_loads = []
-
-    # Create mesh and define function space
-    # Define Dirichlet boundaries
+    savelag = 1
     comm = MPI.comm_world
 
     default_parameters = getDefaultParameters()
     default_parameters.update(user_parameters)
-    # FIXME: Not nice
     parameters = default_parameters
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir = '../output/film2d/{}-{}CPU'.format(signature, size)
-    Path(outdir).mkdir(parents=True, exist_ok=True)
+    outdir = f'../output/film2d/{signature}-{size}CPU'
+    if rank == 0:
+        Path(outdir).mkdir(parents=True, exist_ok=True)
 
-    log(LogLevel.INFO, 'INFO: Outdir is: '+outdir)
+    ColorPrint.print_info(f"INFO: Outdir is: {outdir}")
     R = parameters['geometry']['R']
+    mesh_size = parameters['material']['ell']/parameters['geometry']['n']
     BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-    d={'rad': parameters['geometry']['R'],
-        'h': parameters['material']['ell']/parameters['geometry']['n']}
-
+    d = {'rad': R,'h': mesh_size}
     geom_signature = hashlib.md5(str(d).encode('utf-8')).hexdigest()
 
-
-    # --------------------------------------------------------
-    # Mesh creation with gmsh
-
-    fname = os.path.join('../meshes', 'circle-{}'.format(geom_signature))
+    mesh_path = '../meshes'
+    fname = os.path.join(mesh_path, f'circle-{geom_signature}')
     mesh_template = open('../scripts/templates/circle_template.geo')
+    
+    if os.path.isfile(f'{fname}.xdmf'):
+        ColorPrint.print_info(f"Meshfile {fname} exists")
+    
+    else:            
+        ColorPrint.print_info("Creating meshfile: %s"%fname)
+        ColorPrint.print_info("INFO: parameters: %s"%d)
 
-    if os.path.isfile(fname+'.xml'):
-        log(LogLevel.INFO, "Meshfile {} exists".format(fname))
-        mesh = dolfin.Mesh("{}.xml".format(fname))
-    else:
-        log(LogLevel.INFO, "Creating meshfile: %s"%fname)
-        log(LogLevel.INFO, "INFO: parameters: %s"%d)
-
-        if MPI.rank(MPI.comm_world) == 0:
-
+        if rank == 0:
+            Path(mesh_path).mkdir(parents=True, exist_ok=True)
             src = Template(mesh_template.read())
             geofile = src.substitute(d)
 
@@ -152,36 +147,28 @@ def numerical_test(
                 f.write(geofile)
 
             cmd1 = 'gmsh {}.geo -2 -o {}.msh'.format(fname, fname)
-            cmd2 = 'meshio-convert -i gmsh {}.msh {}.xml --prune-z-0'.format(fname, fname)
+            cmd2 = 'meshio-convert -i gmsh {}.msh {}.xdmf --prune-z-0'.format(fname, fname)
             # meshio-convert -> xdmf
-            log(LogLevel.INFO, 'Unable to handle mesh generation at the moment, please generate the mesh and test again.')
-            log(LogLevel.INFO, cmd1)
-            log(LogLevel.INFO, cmd2)
+            ColorPrint.print_info(cmd1)
+            ColorPrint.print_info(cmd2)
             subprocess.call(cmd1,shell=True)
             subprocess.call(cmd2,shell=True)
 
-        mesh = Mesh('{}.xml'.format(fname))
-        with XDMFFile("{}.xdmf".format(fname)) as mesh_xdmf:
-            mesh_xdmf.write(mesh)
-    dolfin.parameters["std_out_all_processes"] = False
-    log(LogLevel.INFO, fname)
-    log(LogLevel.INFO, 'Number of dofs: {}'.format(mesh.num_vertices()*(1+parameters['general']['dim'])))
+    mesh = dolfin.Mesh()
+    with dolfin.XDMFFile(f"{fname}.xdmf") as infile:
+        infile.read(mesh)
+    ColorPrint.print_info( fname)
+    ColorPrint.print_info( 'Number of dofs: {}'.format(mesh.num_vertices()*(1+parameters['general']['dim'])))
 
     if size == 1:
         meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
-        # meshf << mesh
         dolfin.plot(mesh)
         plt.savefig(os.path.join(outdir, "mesh.pdf"), bbox_inches='tight')
 
     with open(os.path.join(outdir, 'parameters.yaml'), "w") as f:
         yaml.dump(parameters, f, default_flow_style=False)
 
-    R = parameters['geometry']['R']
-    ell =  parameters['material']['ell']
-    savelag = 1
-
-    mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
-    ds = dolfin.Measure("ds", subdomain_data=mf)
+    ds = dolfin.Measure("ds", metadata=parameters['compiler'], domain=mesh)
     dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=mesh)
 
     # Function Spaces
@@ -197,7 +184,6 @@ def numerical_test(
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
 
-
     state = {'u': u, 'alpha': alpha}
     Z = dolfin.FunctionSpace(mesh, 
             dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
@@ -210,15 +196,11 @@ def numerical_test(
 
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 
-    ell = parameters['material']['ell']
 
     # -----------------------
     # Problem definition
     k_res = parameters['material']['k_res']
-    a = (1 - alpha) ** 2. + k_res
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
-    w = w_1 * alpha
-    eps = ufl.sym(ufl.grad(u))
     eps0t = dolfin.Expression([['t', 0.],[0.,'t']], t=0., degree=0)
     lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
     mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
@@ -290,7 +272,7 @@ def numerical_test(
     perturb = False
     from matplotlib import cm
 
-    log(LogLevel.INFO, '{}'.format(parameters))
+    ColorPrint.print_info( '{}'.format(parameters))
     for step, load in enumerate(load_steps):
         plt.clf()
         mineigs = []
@@ -309,15 +291,15 @@ def numerical_test(
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
-        # log(LogLevel.INFO, 'INFO: lmbda min {}'.format(lmbda_min_prev))
-        log(LogLevel.INFO, 'INFO: mineig {:.5e}'.format(mineig))
+        # ColorPrint.print_info( 'INFO: lmbda min {}'.format(lmbda_min_prev))
+        ColorPrint.print_info( 'INFO: mineig {:.5e}'.format(mineig))
         Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
 
         if (mineig + Deltav)*(lmbda_min_prev+dolfin.DOLFIN_EPS) < 0 and not bifurcated:
             bifurcated = True
 
             # save 3 bif modes
-            log(LogLevel.INFO, 'INFO: About to bifurcate load {:.3f} step {}'.format(load, step))
+            ColorPrint.print_info( 'INFO: About to bifurcate load {:.3f} step {}'.format(load, step))
             bifurcation_loads.append(load)
             modes = np.where(stability.eigs < 0)[0]
 
@@ -328,14 +310,14 @@ def numerical_test(
         # we postpone the update after the stability check
         if stable:
             solver.update()
-            log(LogLevel.INFO,'    Current state is{}stable'.format(' ' if stable else ' un'))
+            ColorPrint.print_info('    Current state is{}stable'.format(' ' if stable else ' un'))
         else:
             # Continuation
             iteration = 1
             mineigs.append(stability.mineig)
 
             while stable == False:
-                log(LogLevel.INFO, 'Continuation iteration {}'.format(iteration))
+                ColorPrint.print_info( 'Continuation iteration {}'.format(iteration))
                 plt.close('all')
                 pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
                 _nmodes = len(pert)
@@ -414,11 +396,11 @@ def numerical_test(
                     plt.savefig(os.path.join(outdir, "{:.3f}-modes-{}.pdf".format(load, iteration)))
                     plt.close(fig)
                     plt.clf()
-                    log(LogLevel.INFO, 'plotted modes')
+                    ColorPrint.print_info( 'plotted modes')
 
                 cont_data_pre = compile_continuation_data(state, energy)
 
-                log(LogLevel.INFO, 'Estimated energy variation {:.3e}'.format(en_var))
+                ColorPrint.print_info( 'Estimated energy variation {:.3e}'.format(en_var))
 
                 Ealpha = Function(V_alpha)
                 Ealpha.vector()[:]=assemble(stability.inactiveEalpha)[:]
@@ -431,14 +413,14 @@ def numerical_test(
 
                 # pick the first of the non exhausted modes-
                 non_zero_h = np.where(abs(np.array(h_opts)) > DOLFIN_EPS)[0]
-                log(LogLevel.INFO, 'Nonzero h {}'.format(non_zero_h))
+                ColorPrint.print_info( 'Nonzero h {}'.format(non_zero_h))
                 # opt_mode = list(set(range(_nmodes))-set(exhaust_modes))[0]
                 avail_modes = set(non_zero_h)-set(exhaust_modes)
 
                 opt_mode = 0
                 # opt_mode = np.argmin(en_vars)
-                log(LogLevel.INFO, 'Energy vars {}'.format(en_vars))
-                log(LogLevel.INFO, 'Pick bifurcation mode {} out of {}'.format(opt_mode, len(en_vars)))
+                ColorPrint.print_info( 'Energy vars {}'.format(en_vars))
+                ColorPrint.print_info( 'Pick bifurcation mode {} out of {}'.format(opt_mode, len(en_vars)))
                 h_opt = min(h_opts[opt_mode],1.e-2)
                 perturbation_v    = stability.perturbations_v[opt_mode]
                 perturbation_beta = stability.perturbations_beta[opt_mode]
@@ -496,26 +478,26 @@ def numerical_test(
                 u.vector().vec().ghostUpdate()
                 alpha.vector().vec().ghostUpdate()
 
-                log(LogLevel.INFO, 'min a+h_opt beta_{} = {}'.format(opt_mode, min(aval)))
-                log(LogLevel.INFO, 'max a+h_opt beta_{} = {}'.format(opt_mode, max(aval)))
-                log(LogLevel.INFO, 'Solving equilibrium from perturbed state')
+                ColorPrint.print_info( 'min a+h_opt beta_{} = {}'.format(opt_mode, min(aval)))
+                ColorPrint.print_info( 'max a+h_opt beta_{} = {}'.format(opt_mode, max(aval)))
+                ColorPrint.print_info( 'Solving equilibrium from perturbed state')
                 (time_data_i, am_iter) = solver.solve(outdir)
                 # (time_data_i, am_iter) = solver.solve()
-                log(LogLevel.INFO, 'Checking stability of new state')
+                ColorPrint.print_info( 'Checking stability of new state')
                 (stable, negev) = stability.solve(solver.damage.problem.lb)
                 mineigs.append(stability.mineig)
 
-                log(LogLevel.INFO, 'Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
+                ColorPrint.print_info( 'Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
 
                 cont_data_post = compile_continuation_data(state, energy)
                 DeltaE = (cont_data_post['energy']-cont_data_pre['energy'])
                 relDeltaE = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy']
                 release = DeltaE < 0 and np.abs(DeltaE) > parameters['stability']['cont_rtol']
 
-                log(LogLevel.INFO, 'Continuation: post energy {} - pre energy {}'.format(cont_data_post['energy'], cont_data_pre['energy']))
-                log(LogLevel.INFO, 'Actual absolute energy variation Delta E = {:.7e}'.format(DeltaE))
-                log(LogLevel.INFO, 'Actual relative energy variation relDelta E = {:.7e}'.format(relDeltaE))
-                log(LogLevel.INFO, 'Iter {} mineigs = {}'.format(iteration, mineigs))
+                ColorPrint.print_info( 'Continuation: post energy {} - pre energy {}'.format(cont_data_post['energy'], cont_data_pre['energy']))
+                ColorPrint.print_info( 'Actual absolute energy variation Delta E = {:.7e}'.format(DeltaE))
+                ColorPrint.print_info( 'Actual relative energy variation relDelta E = {:.7e}'.format(relDeltaE))
+                ColorPrint.print_info( 'Iter {} mineigs = {}'.format(iteration, mineigs))
 
                 if rank == 0:
                     plt.plot(mineigs, marker = 'o')
@@ -524,16 +506,16 @@ def numerical_test(
 
                 # continuation criterion
                 if abs(np.diff(mineigs)[-1]) > 1e-8:
-                    log(LogLevel.INFO, 'Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
-                    log(LogLevel.INFO, 'Continuing perturbations')
+                    ColorPrint.print_info( 'Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
+                    ColorPrint.print_info( 'Continuing perturbations')
                 else:
-                    log(LogLevel.INFO, 'Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
+                    ColorPrint.print_info( 'Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
                     log(LogLevel.CRITICAL, 'We are stuck in the matrix')
                     log(LogLevel.WARNING, 'Exploring next mode')
                     exhaust_modes.append(opt_mode)
 
             solver.update()
-            log(LogLevel.INFO, 'bifurcation loads : {}'.format(bifurcation_loads))
+            ColorPrint.print_info( 'bifurcation loads : {}'.format(bifurcation_loads))
             np.save(os.path.join(outdir, 'bifurcation_loads'), bifurcation_loads, allow_pickle=True, fix_imports=True)
             
             if save_current_bifurcation:
@@ -550,7 +532,7 @@ def numerical_test(
                         mode = dolfin.project(stability.perturbations_beta[n], V_alpha)
                         modename = 'beta-%d'%n
                         mode.rename(modename, modename)
-                        log(LogLevel.INFO, 'Saved mode {}'.format(modename))
+                        ColorPrint.print_info( 'Saved mode {}'.format(modename))
                         file.write(mode, load)
 
                 np.save(os.path.join(outdir, 'energy_perturbations'), en_perts, allow_pickle=True, fix_imports=True)
@@ -574,7 +556,7 @@ def numerical_test(
         time_data_i["# neg ev"] = stability.negev
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
 
-        log(LogLevel.INFO,
+        ColorPrint.print_info(
             "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4e}".format(
                 time_data_i["load"],
                 time_data_i["iterations"][0],
@@ -590,7 +572,7 @@ def numerical_test(
         with file_postproc as file:
             file.write_checkpoint(alpha, "alpha-{}".format(step), step, append = True)
             file.write_checkpoint(u, "u-{}".format(step), step, append = True)
-            log(LogLevel.INFO, 'INFO: written postprocessing step {}'.format(step))
+            ColorPrint.print_info( 'INFO: written postprocessing step {}'.format(step))
 
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
@@ -598,7 +580,7 @@ def numerical_test(
             plt.clf()
             dolfin.plot(alpha)
             plt.savefig(os.path.join(outdir, 'alpha.pdf'))
-            log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
+            ColorPrint.print_info( "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
             plt.close('all')
 
             fig = plt.figure()
@@ -613,7 +595,7 @@ def numerical_test(
             plt.xlabel('t')
             # [plt.axvline(b) for b in bifurcation_loads]
             # import pdb; pdb.set_trace()
-            log(LogLevel.INFO, 'Spectrum bifurcation loads : {}'.format(bifurcation_loads))
+            ColorPrint.print_info( 'Spectrum bifurcation loads : {}'.format(bifurcation_loads))
             plt.xticks(list(plt.xticks()[0]) + bifurcation_loads)
             [plt.axvline(bif, lw=2, c='k') for bif in bifurcation_loads]
             plt.savefig(os.path.join(outdir, "spectrum.pdf"), bbox_inches='tight')
@@ -629,8 +611,8 @@ if __name__ == "__main__":
     data, experiment = numerical_test(user_parameters = parameters)
     print(data)
 
-    log(LogLevel.INFO, '________________________ VIZ _________________________')
-    log(LogLevel.INFO, "Postprocess")
+    ColorPrint.print_info( '________________________ VIZ _________________________')
+    ColorPrint.print_info( "Postprocess")
     import postprocess as pp
 
     with open(os.path.join(experiment, 'parameters.yaml')) as f:
