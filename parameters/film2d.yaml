@@ -8,14 +8,14 @@ loading:
     # tc = 0.5916079783 (nu = .3)
     load_min: 0.5
     # load_min: .7
-    load_max: .8
+    load_max: 0.8
     n_steps: 50
 
 #  === Model === #
 material:
     E: 1
     nu: 0.3
-    ell: 0.03
+    ell: 0.06
     ell_e: 0.15
     # k_res: 1.e-6
     k_res: 1.e-14
@@ -26,9 +26,9 @@ geometry:
     n: 3
 
 equilibrium:
-    tol: 1e-3
-    max_it: 500
-    criterion: h1                                 # avail: h1, l2, residual
+    tol: 1e-4
+    max_it: 200
+    criterion: l2                                 # avail: h1, l2, residual
 
 
 # TODO
@@ -110,9 +110,9 @@ newton:
 stability:
     order: 3
     projection: 'None'
-    maxmodes: 3
+    maxmodes: 1
     checkstability: 'True'
-    continuation: 'False'
+    continuation: 'True'
     cont_rtol: 1.0e-10
     inactiveset_gatol: 1.e-8
     inactiveset_ubtol: 1.e-3
