@@ -50,56 +50,13 @@ from linsearch import LineSearch
 from dolfin import *
 import yaml
 import mshr
+from lib import create_output, compile_continuation_data, getDefaultParameters
 
 from utils import get_versions
 code_parameters = get_versions()
 
 set_log_level(LogLevel.INFO)
 
-def compile_continuation_data(state, energy):
-    continuation_data_i = {}
-    continuation_data_i["energy"] = assemble(energy)
-    return continuation_data_i
-
-def getDefaultParameters():
-
-    with open('../parameters/form_compiler.yml') as f:
-        form_compiler_parameters = yaml.load(f, Loader=yaml.FullLoader)
-    with open('../parameters/solvers_default.yml') as f:
-        equilibrium_parameters = yaml.load(f, Loader=yaml.FullLoader)['equilibrium']
-    with open('../parameters/solvers_default.yml') as f:
-        damage_parameters = yaml.load(f, Loader=yaml.FullLoader)['damage']
-    with open('../parameters/solvers_default.yml') as f:
-        elasticity_parameters = yaml.load(f, Loader=yaml.FullLoader)['elasticity']
-    with open('../parameters/model1d.yaml') as f:
-        material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
-    # with open('../parameters/film.yaml') as f:
-        # newton_parameters = yaml.load(f, Loader=yaml.FullLoader)['newton']
-    with open('../parameters/loading.yaml') as f:
-        loading_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
-    with open('../parameters/stability.yaml') as f:
-        stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
-    with open('../parameters/stability.yaml') as f:
-        inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
-    with open('../parameters/stability.yaml') as f:
-        eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
-
-    default_parameters = {
-        'code': {**code_parameters},
-        'compiler': {**form_compiler_parameters},
-        'eigen': {**eigen_parameters},
-        # 'geometry': {**geometry_parameters},
-        'inertia': {**inertia_parameters},
-        'loading': {**loading_parameters},
-        'material': {**material_parameters},
-        # 'newton': {**newton_parameters},
-        'equilibrium':{**equilibrium_parameters},
-        'damage':{**damage_parameters},
-        'elasticity':{**elasticity_parameters},
-        'stability': {**stability_parameters},
-        }
-
-    return default_parameters
 
 def numerical_test(
     user_parameters
@@ -122,11 +79,11 @@ def numerical_test(
     default_parameters.update(user_parameters)
     # FIXME: Not nice
     parameters = default_parameters
+    parameters['code']['script'] = __file__
     # import pdb; pdb.set_trace()
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir = '../output/film/{}-{}CPU'.format(signature, size)
-    # outdir = '../output/film2d-param/{}'.format(signature)
+    outdir = '../output/traction/{}-{}CPU'.format(signature, size)
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     log(LogLevel.INFO, 'INFO: Outdir is: '+outdir)
@@ -156,7 +113,8 @@ def numerical_test(
     resolution = 50
 
     geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
-    mesh = mshr.generate_mesh(geom, n * int(float(Lx / ell)))
+    # mesh = mshr.generate_mesh(geom, n * int(float(Lx / ell)))
+    mesh = mshr.generate_mesh(geom, resolution)
 
     log(LogLevel.INFO, 'Number of dofs: {}'.format(mesh.num_vertices()*(1+parameters['general']['dim'])))
     if size == 1:
@@ -190,13 +148,24 @@ def numerical_test(
 
 
     state = {'u': u, 'alpha': alpha}
-    Z = dolfin.FunctionSpace(mesh, 
+    Z = dolfin.FunctionSpace(mesh,
             dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
     z = dolfin.Function(Z)
     v, beta = dolfin.split(z)
+    left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
+    right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
+    bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
+    top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
+    left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
 
+    mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
+    right.mark(mf, 1)
+    left.mark(mf, 2)
+    bottom.mark(mf, 3)
     ut = dolfin.Expression("t", t=0.0, degree=0)
-    bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0., 0.)), 'on_boundary')]
+    bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), left),
+             dolfin.DirichletBC(V_u.sub(0), ut, right),
+             dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
     bcs_alpha = []
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
     ell = parameters['material']['ell']
@@ -241,25 +210,36 @@ def numerical_test(
 
     # Hessian = derivative(derivative(Wppt*dx, z, TestFunction(Z)), z, TrialFunction(Z))
 
-    file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
-    file_out.parameters["functions_share_mesh"] = True
-    file_out.parameters["flush_output"] = True
-    file_postproc = dolfin.XDMFFile(os.path.join(outdir, "postprocess.xdmf"))
-    file_postproc.parameters["functions_share_mesh"] = True
-    file_postproc.parameters["flush_output"] = True
-    file_eig = dolfin.XDMFFile(os.path.join(outdir, "perturbations.xdmf"))
-    file_eig.parameters["functions_share_mesh"] = True
-    file_eig.parameters["flush_output"] = True
-    file_bif = dolfin.XDMFFile(os.path.join(outdir, "bifurcation.xdmf"))
-    file_bif.parameters["functions_share_mesh"] = True
-    file_bif.parameters["flush_output"] = True
-    file_bif_postproc = dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf"))
-    file_bif_postproc.parameters["functions_share_mesh"] = True
-    file_bif_postproc.parameters["flush_output"] = True
-    file_ealpha = dolfin.XDMFFile(os.path.join(outdir, "elapha.xdmf"))
-    file_ealpha.parameters["functions_share_mesh"] = True
-    file_ealpha.parameters["flush_output"] = True
+    def create_output(outdir):
+        file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
+        file_out.parameters["functions_share_mesh"] = True
+        file_out.parameters["flush_output"] = True
+        file_postproc = dolfin.XDMFFile(os.path.join(outdir, "postprocess.xdmf"))
+        file_postproc.parameters["functions_share_mesh"] = True
+        file_postproc.parameters["flush_output"] = True
+        file_eig = dolfin.XDMFFile(os.path.join(outdir, "perturbations.xdmf"))
+        file_eig.parameters["functions_share_mesh"] = True
+        file_eig.parameters["flush_output"] = True
+        file_bif = dolfin.XDMFFile(os.path.join(outdir, "bifurcation.xdmf"))
+        file_bif.parameters["functions_share_mesh"] = True
+        file_bif.parameters["flush_output"] = True
+        file_bif_postproc = dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf"))
+        file_bif_postproc.parameters["functions_share_mesh"] = True
+        file_bif_postproc.parameters["flush_output"] = True
+        file_ealpha = dolfin.XDMFFile(os.path.join(outdir, "elapha.xdmf"))
+        file_ealpha.parameters["functions_share_mesh"] = True
+        file_ealpha.parameters["flush_output"] = True
 
+        files = {'output': file_out, 
+                 'postproc': file_postproc,
+                 'eigen': file_eig,
+                 'bifurcation': file_bif,
+                 'ealpha': file_ealpha}
+
+        return files
+
+
+    files = create_output(outdir)
 
     solver = EquilibriumAM(energy, state, bcs, parameters=parameters)
     stability = StabilitySolver(energy, state, bcs, parameters = parameters)
@@ -294,7 +274,7 @@ def numerical_test(
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
         alpha_old.assign(alpha)
-        eps0t.t = load
+        ut.t = load
         # (time_data_i, am_iter) = solver.solve(outdir)
         (time_data_i, am_iter) = solver.solve()
 
@@ -371,10 +351,12 @@ def numerical_test(
                     dolfin.plot(
                         project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.)
                     plt.title('intersec deriv, ub')
-                    plt.savefig(os.path.join(outdir, "{:.3f}-inactivesets-{:d}.pdf".format(load, iteration)))
+                    plt.savefig(os.path.join(outdir, "inactivesets-{:.3f}-{:d}.pdf".format(load, iteration)))
 
 
                     plt.set_cmap('hot')
+
+                    fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
 
                     for i,mode in enumerate(pert):
                         plt.subplot(2, _nmodes+1, i+2)
@@ -409,7 +391,7 @@ def numerical_test(
                         # plt.title('{}'.format(i))
                         plt.tight_layout(h_pad=1.5, pad=1.5)
                     # plt.legend()
-                    plt.savefig(os.path.join(outdir, "{:.3f}-modes-{}.pdf".format(load, iteration)))
+                    plt.savefig(os.path.join(outdir, "modes-{:.3f}-{}.pdf".format(load, iteration)))
                     plt.close(fig)
                     plt.clf()
                     log(LogLevel.INFO, 'plotted modes')
@@ -422,7 +404,7 @@ def numerical_test(
                 Ealpha.vector()[:]=assemble(stability.inactiveEalpha)[:]
                 Ealpha.rename('Ealpha-{}'.format(iteration), 'Ealpha-{}'.format(iteration))
 
-                with file_ealpha as file:
+                with files['ealpha'] as file:
                     file.write(Ealpha, load)
 
                 save_current_bifurcation = True
@@ -563,7 +545,7 @@ def numerical_test(
                 leneigs = len(modes)
                 maxmodes = min(3, leneigs)
 
-                with file_bif as file:
+                with files['bifurcation'] as file:
                     for n in range(len(pert)):
                         mode = dolfin.project(stability.perturbations_beta[n], V_alpha)
                         modename = 'beta-%d'%n
@@ -571,7 +553,7 @@ def numerical_test(
                         log(LogLevel.INFO, 'Saved mode {}'.format(modename))
                         file.write(mode, load)
 
-                # with file_bif_postproc as file:
+                # with files['file_bif_postproc'] as file:
                     # leneigs = len(modes)
                     # maxmodes = min(3, leneigs)
                     # beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
@@ -584,7 +566,7 @@ def numerical_test(
                 np.save(os.path.join(outdir, 'energy_perturbations'), en_perts, allow_pickle=True, fix_imports=True)
 
 
-                with file_eig as file:
+                with files['eigen'] as file:
                     _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
                     _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
                     _v.rename('perturbation displacement', 'perturbation displacement')
@@ -613,11 +595,11 @@ def numerical_test(
         time_data.append(time_data_i)
         time_data_pd = pd.DataFrame(time_data)
 
-        with file_out as file:
+        with files['output'] as file:
             file.write(alpha, load)
             file.write(u, load)
 
-        with file_postproc as file:
+        with files['postproc'] as file:
             file.write_checkpoint(alpha, "alpha-{}".format(step), step, append = True)
             file.write_checkpoint(u, "u-{}".format(step), step, append = True)
             log(LogLevel.INFO, 'INFO: written postprocessing step {}'.format(step))
@@ -625,16 +607,19 @@ def numerical_test(
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
         if rank == 0:
-            plt.clf()
-            # import pdb; pdb.set_trace()
+            # plt.clf()
+            # if load>1.1:
+                # import pdb; pdb.set_trace()
             # plt.plot(time_data_i["alpha_error"],  marker='o')
             # plt.title('error, criterion: {}'.format(parameters['equilibrium']['criterion']))
             # plt.axhline(parameters['equilibrium']['tol'])
             # plt.savefig(os.path.join(outdir, 'errors-{}.pdf'.format(step)))
             # plt.clf()
-            plot(alpha)
-            plt.savefig(os.path.join(outdir, 'alpha.pdf'))
-            log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
+            # plt.colorbar(plot(alpha))
+            # fig = plt.figure()
+            # plot(alpha)
+            # plt.savefig(os.path.join(outdir, 'alpha.pdf'))
+            # log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
             plt.close('all')
 
             fig = plt.figure()
@@ -680,34 +665,15 @@ if __name__ == "__main__":
     size = comm.Get_size()
 
     if rank == 0:
-        lab = '\\ell={}, ell_e={}, E={}, \\sigma_D = {}'.format(
+        lab = '\\ell={}, E={}, \\sigma_D = {}'.format(
             parameters['material']['ell'],
-            parameters['material']['ell_e'],
             parameters['material']['E'],
             parameters['material']['sigma_D0'])
         tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
         tc = sqrt(2.)/2.
         ell = parameters['material']['ell']
-        # import pdb; pdb.set_trace()
-        fig1, ax1 =pp.plot_energy(parameters, data, tc)
-        # from math import tanh
-        # L = parameters['geometry']['R']
-        # F_L = L/2. - tanh(L/2.)
-        # elast_en = [1./2.*parameters['material']['E']*t**2*F_L for t in data['load']]
-        # visuals.setspines2()
-        # print(data['elastic_energy'])
-        # mu = parameters['material']['E']/2.
-        # elast_en = [1./2.*2.*mu*eps**2 for eps in data['load']]
-        # Lx = 1.
-        # Ly = .1
-        # Omega = Lx*Ly
-        # elast_en = [parameters['material']['E']*eps**2 for eps in data['load']]
-        # plt.plot(data['load'], elast_en, c='k', label='analytic')
-        # plt.axhline(parameters['geometry']['Ly'], c='k')
-        # plt.legend()
 
-        # plt.ylim(0, 1.)
-        # plt.title('${}$'.format(lab))
+        fig1, ax1 =pp.plot_energy(parameters, data, tc)
 
         fig1.savefig(os.path.join(experiment, "energy.pdf"), bbox_inches='tight')
 

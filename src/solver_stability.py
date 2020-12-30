@@ -724,7 +724,9 @@ class StabilitySolver(object):
             self.negev = negev  # based on inertia
 
             modes = negconv if negconv < maxmodes else maxmodes
-            if eigs[0,0]<0:
+            # if eigs[0,0] < float(self.eigen_parameters['eig_rtol']):
+            # if eigs[0,0] < 0:
+            if eigs[0,0] < dolfin.DOLFIN_EPS:
                 self.perturbation_v = linsearch[0]['v_n']
                 self.perturbation_beta = linsearch[0]['beta_n']
                 self.perturbations_v = [linsearch[n]['v_n'] for n in range(modes)]
