@@ -4,30 +4,30 @@ general:
 
 # === Loading === #
 loading: 
+    bc_u: "free"
     # tc = np.sqrt((1-nu)/2)
     # tc = 0.5916079783 (nu = .3)
-    load_min: 0.5
+    load_min: 0.7
     # load_min: .7
-    load_max: 0.8
-    n_steps: 50
+    load_max: 1.
+    n_steps: 40
 
 #  === Model === #
 material:
     E: 1
     nu: 0.3
-    ell: 0.1
+    ell: 0.04
     ell_e: 0.2
-    # k_res: 1.e-6
     k_res: 1.e-14
     sigma_D0: 1.
 
 geometry:
-    R: 1.
-    n: 3
+    R: .5
+    n: 8
 
 equilibrium:
     tol: 1e-4
-    max_it: 200
+    max_it: 400
     criterion: l2                                 # avail: h1, l2, residual
 
 
@@ -42,17 +42,6 @@ equilibrium:
 #         ...
 
 elasticity:
-    # ksp_type: gmres
-    # pc_type: hypre
-    # pc_hypre_type: boomeramg
-    # pc_hypre_boomeramg_cycle_type: V
-    # pc_hypre_boomeramg_relax_type_all: backward-SOR/Jacobi # SOR/Jacobi
-    # pc_hypre_boomeramg_measure_type: global # local
-    # pc_hypre_boomeramg_coarsen_type: Falgout
-    # pc_hypre_boomeramg_strong_threshold: 0.3     # 3D: 0.7 (> 0.5)
-    # pc_hypre_boomeramg_agg_nl: 1
-    # pc_hypre_boomeramg_print_statistics: 0 
-    # ---------
     snes_type: ksponly
     ksp_type: preonly
     pc_factor_mat_solver_type: mumps
@@ -60,21 +49,6 @@ elasticity:
     ksp_atol: 1.0e-08
     ksp_rtol: 1.0e-08
     ksp_stol: 1.0e-08
-    # ---------
-    # ksp_type: gmres
-    # pc_type: gamg
-    # pc_gamg_type: agg
-    # pc_gamg_repartition: 1
-    # pc_gamg_reuse_interpolation: 1
-    # pc_gamg_asm_use_agg: 1
-    # pc_gamg_agg_nsmooths: 1
-    # pc_gamg_square_graph: 1
-    # pc_gamg_threshold: 0.01
-    # pc_gamg_sym_graph: 1
-    # mg_levels_esteig_ksp_type: cg
-    # mg_levels_ksp_type: chebyshev
-    # mg_levels_pc_type: jacobi
-    # mg_levels_ksp_chebyshev_esteig_steps: 50
 
 damage:
     type:
@@ -112,7 +86,7 @@ stability:
     projection: 'None'
     maxmodes: 1
     checkstability: 'True'
-    continuation: 'True'
+    continuation: 'False'
     cont_rtol: 1.0e-10
     inactiveset_gatol: 1.e-8
     inactiveset_ubtol: 1.e-3
