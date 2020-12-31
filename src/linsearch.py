@@ -1,6 +1,6 @@
 import dolfin
 import numpy as np
-# from utils import log
+from utils import ColorPrint
 import mpi4py
 
 comm = mpi4py.MPI.COMM_WORLD
@@ -122,24 +122,24 @@ class LineSearch(object):
             p = np.poly1d(z)
 
             if m==2:
-                log(LogLevel.INFO, 'Line search using quadratic interpolation')
+                ColorPrint.print_info('Line search using quadratic interpolation')
                 h_opt = - z[1]/(2*z[0])
             else:
-                log(LogLevel.INFO, 'Line search using polynomial interpolation (order {})'.format(m))
+                ColorPrint.print_info('Line search using polynomial interpolation (order {})'.format(m))
                 h = np.linspace(self.hmin, self.hmax, 100)
                 h_opt = h[np.argmin(p(h))]
 
             if h_opt < self.hmin or h_opt > self.hmax:
-                log(LogLevel.INFO, 'Line search failed, h_opt={:3e} not in feasible interval'.format(h_opt))
+                ColorPrint.print_info('Line search failed, h_opt={:3e} not in feasible interval'.format(h_opt))
                 return h_opt, (self.hmin, self.hmax), 0
 
-        log(LogLevel.INFO, 'Line search h_opt = {:3f} in ({:.3f}, {:.3f})\
+        ColorPrint.print_info('Line search h_opt = {:3f} in ({:.3f}, {:.3f})\
             '.format(h_opt, self.hmin, self.hmax))
         # log(LogLevel.INFO, 'Line search polynomial approximation =\n {}'.format(p))
         # log(LogLevel.INFO, 'h in ({:.5f},{:.5f})'.format(self.hmin,self.hmax))
         # log(LogLevel.INFO, 'p(h_opt) {:.5f}, en0 {:.5f}'.format(p(h_opt),en0))
         en_var = ((p(h_opt))/en0)
-        log(LogLevel.INFO, 'Line search estimate, relative energy variation={:.3e}'.format(en_var))
+        ColorPrint.print_info('Line search estimate, relative energy variation={:.3e}'.format(en_var))
 
         # restore solution
         u.vector()[:] = u_0[:]

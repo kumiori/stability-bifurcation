@@ -7,9 +7,6 @@ import json
 import time
 import mpi4py
 
-# Colored printing functions for strings that use universal ANSI escape sequences.
-# fail: bold red, pass: bold green, warn: bold yellow,
-# info: bold blue, bold: bold white
 
 def get_code_ver():
     version = check_output(['git', 'rev-parse', 'HEAD']).strip().decode('utf-8')
@@ -52,21 +49,31 @@ class ColorPrint:
     def print_fail(message, end="\n"):
         if MPI.comm_world.rank == 0:
             sys.stderr.write("\x1b[1;31m" + message.strip() + "\x1b[0m" + end)
+    
+    @staticmethod
+    def print_red(message, end="\n"):
+        if MPI.comm_world.rank == 0:
+            sys.stderr.write("\x1b[1;31m" + message.strip() + "\x1b[0m" + end)
+
+    @staticmethod
+    def print_green(message, end="\n"):
+        if MPI.comm_world.rank == 0:
+            sys.stderr.write("\x1b[1;32m" + message.strip() + "\x1b[0m" + end)
 
     @staticmethod
     def print_pass(message, end="\n"):
         if MPI.comm_world.rank == 0:
-            sys.stdout.write("\x1b[1;32m" + message.strip() + "\x1b[0m" + end)
+            sys.stdout.write("\x1b[1;32m    " + message.strip() + "\x1b[0m" + end)
 
     @staticmethod
     def print_warn(message, end="\n"):
         if MPI.comm_world.rank == 0:
-            sys.stderr.write("\x1b[1;33m" + message.strip() + "\x1b[0m" + end)
+            sys.stderr.write("\x1b[1;33m    " + message.strip() + "\x1b[0m" + end)
 
     @staticmethod
     def print_info(message, end="\n"):
         if MPI.comm_world.rank == 0:
-            sys.stdout.write("\x1b[1;34m" + message.strip() + "\x1b[0m" + end)
+            sys.stdout.write("\x1b[1;34m    " + message.strip() + "\x1b[0m" + end)
 
     @staticmethod
     def print_bold(message, end="\n"):

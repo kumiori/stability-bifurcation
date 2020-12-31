@@ -1,4 +1,5 @@
-# Generic imports
+import sys
+sys.path.append("../src/")
 from utils import get_versions, ColorPrint
 from linsearch import LineSearch
 from solver_stability import StabilitySolver
@@ -13,8 +14,6 @@ import dolfin
 from string import Template
 from functools import reduce
 import numpy as np
-import sympy
-from matplotlib import cm
 import matplotlib.pyplot as plt
 import matplotlib
 from copy import deepcopy
@@ -25,9 +24,6 @@ import os
 import pandas as pd
 import yaml
 import subprocess
-import site
-import sys
-sys.path.append("../src/")
 matplotlib.use('Agg')
 
 
@@ -53,7 +49,7 @@ except:
 
 def compile_continuation_data(state, energy):
     continuation_data_i = {}
-    continuation_data_i["energy"] = assemble(energy)
+    continuation_data_i["energy"] = dolfin.assemble(energy)
     return continuation_data_i
 
 
@@ -142,7 +138,44 @@ def import_mesh(mesh_name, mesh_parameters,
     return mesh
 
 
-def numerical_test(user_parameters):
+
+#       for i, mode in enumerate(pert):
+#           plt.subplot(2, _nmodes+1, i+2)
+#           plt.axis('off')
+#           dolfin.plot(mode[1], cmap=cm.ocean)
+#
+#           plt.title('mode {}'
+#                     .format(i), fontsize=15)
+#
+#           plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
+#           plt.axis('off')
+#           _pert_beta = mode[1]
+#           _pert_v = mode[0]
+#
+#           if h_bounds[i][0] == h_bounds[i][1] == 0:
+#               plt.plot(h_bounds[i][0], 0)
+#           else:
+#               hs = np.linspace(h_bounds[i][0], h_bounds[i][1], 100)
+#               z = np.polyfit(np.linspace(h_bounds[i][0], h_bounds[i][1],
+#                                          len(en_perts[i])), en_perts[i], parameters['stability']['order'])
+#               p = np.poly1d(z)
+#               plt.plot(hs, p(hs), c='k')
+#               plt.plot(np.linspace(h_bounds[i][0], h_bounds[i][1],
+#                                    len(en_perts[i])), en_perts[i], marker='o', markersize=10, c='k')
+#               # import pdb; pdb.set_trace()
+#               plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
+#               plt.axvline(h_opts[i], lw=.3, c='k')
+#               plt.axvline(0, lw=2, c='k')
+#           # plt.title('{}'.format(i))
+#           plt.tight_layout(h_pad=1.5, pad=1.5)
+#       # plt.legend()
+#       if file_name is not None:
+#           plt.savefig(file_name)
+#       plt.close(fig)
+#       plt.clf()
+
+
+def numerical_test(user_parameters, plotting=True):
     time_data = []
     time_data_pd = []
     spacetime = []
@@ -197,7 +230,10 @@ def numerical_test(user_parameters):
     v, beta = dolfin.split(z)
 
     ut = dolfin.Expression("t", t=0.0, degree=0)
-    bcs_u = []
+    if parameters['loading']['bc_u'] == "clamped":
+        bcs_u = [dolfin.DirichletBC(V_u,(0,0),"on_boundary")]
+    else:
+        bcs_u = []
     bcs_alpha = []
 
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
@@ -207,10 +243,6 @@ def numerical_test(user_parameters):
     k_res = parameters['material']['k_res']
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
     eps0t = dolfin.Expression([['t', 0.], [0., 't']], t=0., degree=0)
-    lmbda0 = parameters['material']['E'] * parameters['material']['nu'] / \
-        (1. - parameters['material']['nu'])**2.
-    mu0 = parameters['material']['E'] / 2. / \
-        (1.0 + parameters['material']['nu'])
     nu = parameters['material']['nu']
     ell = parameters['material']['ell']
     ell_e = parameters['material']['ell_e']
@@ -265,11 +297,8 @@ def numerical_test(user_parameters):
 
     time_data = []
     time_data_pd = []
-    lmbda_min_prev = 1e-6
-    bifurcated = False
     bifurcation_loads = []
     save_current_bifurcation = False
-    bifurc_i = 0
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
     bifurcation_loads = []
@@ -279,9 +308,9 @@ def numerical_test(user_parameters):
         mineigs = []
         exhaust_modes = []
 
-        ColorPrint.info_bold(
-            '====================== STEPPING ==========================')
-        olorPrint.info_bold('CRITICAL: Solving load t = {:.2f}'.format(load))
+        ColorPrint.print_bold(
+            '===================== TIME STEPPING =======================')
+        ColorPrint.print_bold('CRITICAL: Solving load t = {:.2f}'.format(load))
         alpha_old.assign(alpha)
         eps0t.t = load
         # (time_data_i, am_iter) = solver.solve(outdir)
@@ -289,170 +318,73 @@ def numerical_test(user_parameters):
 
         # Second order stability conditions
         (stable, negev) = stability.solve(solver.damage.problem.lb)
-        mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
+        mineig = stability.mineig
 
-        ColorPrint.info_bold(
-            'Current state is{}stable'.format(' ' if stable else ' un'))
-        ColorPrint.print_info('INFO: mineig {:.5e}'.format(mineig))
         # we postpone the update after the stability check
         if stable:
             solver.update()
-            ColorPrint.print_info(
-                '    Current state is{}stable'.format(' ' if stable else ' un'))
+            ColorPrint.print_green('    Current state is stable')
         else:
             # Continuation
-            iteration = 1
+            ColorPrint.print_red('    Current state is unstable')
+            iteration = 0
+            max_iter_stab = 10
             mineigs.append(stability.mineig)
             bifurcation_loads.append(load)
-            modes = np.where(stability.eigs < 0)[0]
+            neg_eign_idx = np.where(stability.eigs < 0)[0]
+            continuation = parameters["stability"]["continuation"]
 
-            while stable == False:
+            while (stable == False) and (iteration < max_iter_stab) and (continuation == True):
+                iteration += 1
                 ColorPrint.print_info(
                     'Perturbation iteration {}'.format(iteration))
-                plt.close('all')
-                pert = [(_v, _b) for _v, _b in zip(
-                    stability.perturbations_v, stability.perturbations_beta)]
-                _nmodes = len(pert)
-                en_vars = []
-                h_opts = []
-                hbounds = []
-                en_perts = []
-
-                for i, mode in enumerate(pert):
-                    h_opt, bounds, enpert, en_var = linesearch.search(
+                modes = stability.modes
+                perturbation_v, perturbation_beta = modes[0].split(deepcopy=True)
+                h_opt, h_bounds, en_pert, en_var = linesearch.search(
                         {'u': u, 'alpha': alpha, 'alpha_old': alpha_old},
-                        mode[0], mode[1])
-                    h_opts.append(h_opt)
-                    en_vars.append(en_var)
-                    hbounds.append(bounds)
-                    en_perts.append(enpert)
-                # import pdb; pdb.set_trace()
-
-                # if False:
-                if rank == 0:
-                    fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-                    plt.subplot(1, 4, 1)
-                    plt.set_cmap('binary')
-                    # dolfin.plot(mesh, alpha = 1.)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker1, L2), alpha=1., vmin=0., vmax=1.))
-                    plt.title('derivative zero')
-                    plt.subplot(1, 4, 2)
-                    # dolfin.plot(mesh, alpha = .5)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker2, L2), alpha=1., vmin=0., vmax=1.))
-                    plt.title('ub tolerance')
-                    plt.subplot(1, 4, 3)
-                    # dolfin.plot(mesh, alpha = .5)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker3, L2), alpha=1., vmin=0., vmax=1.))
-                    plt.title('alpha-alpha_old')
-                    plt.subplot(1, 4, 4)
-                    # dolfin.plot(mesh, alpha = .5)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker4, L2), alpha=1., vmin=0., vmax=1.))
-                    plt.title('intersec deriv, ub')
-                    plt.savefig(os.path.join(
-                        outdir, "{:.3f}-inactivesets-{:d}.pdf".format(load, iteration)))
-                    plt.set_cmap('hot')
-
-                    for i, mode in enumerate(pert):
-                        plt.subplot(2, _nmodes+1, i+2)
-                        plt.axis('off')
-                        dolfin.plot(mode[1], cmap=cm.ocean)
-
-                        plt.title('mode {}'
-                                  .format(i), fontsize=15)
-
-                        plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
-                        plt.axis('off')
-                        _pert_beta = mode[1]
-                        _pert_v = mode[0]
-
-                        if hbounds[i][0] == hbounds[i][1] == 0:
-                            plt.plot(hbounds[i][0], 0)
-                        else:
-                            hs = np.linspace(hbounds[i][0], hbounds[i][1], 100)
-                            z = np.polyfit(np.linspace(hbounds[i][0], hbounds[i][1],
-                                                       len(en_perts[i])), en_perts[i], parameters['stability']['order'])
-                            p = np.poly1d(z)
-                            plt.plot(hs, p(hs), c='k')
-                            plt.plot(np.linspace(hbounds[i][0], hbounds[i][1],
-                                                 len(en_perts[i])), en_perts[i], marker='o', markersize=10, c='k')
-                            # import pdb; pdb.set_trace()
-                            plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
-                            plt.axvline(h_opts[i], lw=.3, c='k')
-                            plt.axvline(0, lw=2, c='k')
-                        # plt.title('{}'.format(i))
-                        plt.tight_layout(h_pad=1.5, pad=1.5)
-                    # plt.legend()
-                    plt.savefig(os.path.join(
-                        outdir, "{:.3f}-modes-{}.pdf".format(load, iteration)))
-                    plt.close(fig)
-                    plt.clf()
-                    ColorPrint.print_info('plotted modes')
-
+                        perturbation_v, perturbation_beta)
                 cont_data_pre = compile_continuation_data(state, energy)
-
                 ColorPrint.print_info(
                     'Estimated energy variation {:.3e}'.format(en_var))
 
-                Ealpha = Function(V_alpha)
-                Ealpha.vector()[:] = assemble(stability.inactiveEalpha)[:]
-                Ealpha.rename('Ealpha-{}'.format(iteration),
-                              'Ealpha-{}'.format(iteration))
+                if size == 1 and plotting == True:
+                    modes_file_name = os.path.join(outdir,f"{load:.3f}-modes-{iteration}.pdf")
+                    stability.plot_inactive_set(file_name=modes_file_name)
+
+                Ealpha = dolfin.Function(V_alpha)
+                Ealpha.vector()[:] = dolfin.assemble(stability.inactiveEalpha)[:]
+                Ealpha.rename('E_alpha-{}'.format(iteration),
+                              'E_alpha-{}'.format(iteration))
 
                 with file_ealpha as file:
                     file.write(Ealpha, load)
-
-                save_current_bifurcation = True
-
-                # pick the first of the non exhausted modes-
-                non_zero_h = np.where(abs(np.array(h_opts)) > DOLFIN_EPS)[0]
-                ColorPrint.print_info('Nonzero h {}'.format(non_zero_h))
-                # opt_mode = list(set(range(_nmodes))-set(exhaust_modes))[0]
-                avail_modes = set(non_zero_h)-set(exhaust_modes)
-
-                opt_mode = 0
-                # opt_mode = np.argmin(en_vars)
-                ColorPrint.print_info('Energy vars {}'.format(en_vars))
-                ColorPrint.print_info(
-                    'Pick bifurcation mode {} out of {}'.format(opt_mode, len(en_vars)))
-                h_opt = min(h_opts[opt_mode], 1.e-2)
-                perturbation_v = stability.perturbations_v[opt_mode]
-                perturbation_beta = stability.perturbations_beta[opt_mode]
-                (perturbation_v, perturbation_beta) = stability.perturbation_v, stability.perturbation_beta
-
+                
                 def energy_1d(h):
-                    # return assemble(energy_functional(u + h * perturbation_v, alpha + h * perturbation_beta))
-                    u_ = Function(u.function_space())
-                    alpha_ = Function(alpha.function_space())
-                    u_.vector()[:] = u.vector()[:] + h * \
-                        perturbation_v.vector()[:]
-                    alpha_.vector()[:] = alpha.vector()[:] + \
-                        h * perturbation_beta.vector()[:]
+                    u_ = dolfin.Function(u.function_space())
+                    alpha_ = dolfin.Function(alpha.function_space())
+                    u_.vector()[:] = u.vector()[:] + h * perturbation_v.vector()[:]
+                    alpha_.vector()[:] = alpha.vector()[:] + h * perturbation_beta.vector()[:]
                     u_.vector().vec().ghostUpdate()
                     alpha_.vector().vec().ghostUpdate()
-                    return assemble(total_energy(u_, alpha_))
+                    return dolfin.assemble(total_energy(u_, alpha_))
 
-                (hmin, hmax) = linesearch.admissible_interval(
-                    alpha, alpha_old, perturbation_beta)
-                hs = np.linspace(hmin, hmax, 20)
+
+                hs = np.linspace(h_bounds[0], h_bounds[1], 20)
                 energy_vals = np.array([energy_1d(h) for h in hs])
-                stability.solve(solver.damage.problem.lb)
-
-                Hzz = assemble(stability.H*minmode*minmode)
-                Gz = assemble(stability.J*minmode)
-                mineig_z = Hzz/assemble(dot(minmode, minmode)*dx)
+                #stability.solve(solver.damage.problem.lb)
+                minmode = modes[0]
+                Hzz = dolfin.assemble(stability.H*minmode*minmode)
+                Gz = dolfin.assemble(stability.J*minmode)
+                norm_z_2 = dolfin.assemble(ufl.dot(minmode, minmode)*dx)
+                mineig_z = Hzz/norm_z_2
 
                 energy_vals_quad = energy_1d(0) + hs*Gz + hs**2*Hzz/2
 
-                h_opt = hs[np.argmin(energy_vals)]
+                #h_opt = hs[np.argmin(energy_vals)]
 
                 if rank == 0:
                     plt.figure()
-                    plt.plot(hs, energy_vals, marker='o')
-                    plt.plot(hs, energy_vals, label="exact")
+                    plt.plot(hs, energy_vals, marker='o', label="exact")
                     plt.plot(hs, energy_vals_quad,
                              label="quadratic approximation")
                     plt.legend()
@@ -462,39 +394,28 @@ def numerical_test(user_parameters):
                     # import pdb; pdb.set_trace()
                     plt.savefig(os.path.join(
                         outdir, "energy1d-{:.3f}.pdf".format(load)))
+                    plt.close("all")
 
-                # the following should always be true by now.
+                ColorPrint.print_bold('Bifurcating')
 
-                iteration += 1
-                log(LogLevel.CRITICAL, 'Bifurcating')
-
-                save_current_bifurcation = True
                 alpha_bif.assign(alpha)
                 alpha_bif_old.assign(alpha_old)
 
                 # admissible perturbation
-                uval = u.vector()[:] + h_opt * perturbation_v.vector()[:]
-                aval = alpha.vector()[:] + h_opt * \
+                u.vector()[:] = u.vector()[:] + h_opt * perturbation_v.vector()[:]
+                alpha.vector()[:] = alpha.vector()[:] + h_opt * \
                     perturbation_beta.vector()[:]
-
-                u.vector()[:] = uval
-                alpha.vector()[:] = aval
                 u.vector().vec().ghostUpdate()
                 alpha.vector().vec().ghostUpdate()
-
                 ColorPrint.print_info(
-                    'min a+h_opt beta_{} = {}'.format(opt_mode, min(aval)))
-                ColorPrint.print_info(
-                    'max a+h_opt beta_{} = {}'.format(opt_mode, max(aval)))
-                ColorPrint.print_info(
-                    'Solving equilibrium from perturbed state')
+                    f'       Solving equilibrium from perturbed state with hopt = {h_opt} along mode 0')
                 (time_data_i, am_iter) = solver.solve(outdir)
                 # (time_data_i, am_iter) = solver.solve()
-                ColorPrint.print_info('Checking stability of new state')
+                ColorPrint.print_info('     Checking stability of new state')
                 (stable, negev) = stability.solve(solver.damage.problem.lb)
                 mineigs.append(stability.mineig)
 
-                ColorPrint.print_info('Continuation iteration {}, current state is{}stable'.format(
+                ColorPrint.print_info('     Continuation iteration {}, current state is{}stable'.format(
                     iteration, ' ' if stable else ' un'))
 
                 cont_data_post = compile_continuation_data(state, energy)
@@ -504,61 +425,54 @@ def numerical_test(user_parameters):
                 release = DeltaE < 0 and np.abs(
                     DeltaE) > parameters['stability']['cont_rtol']
 
-                ColorPrint.print_info('Continuation: post energy {} - pre energy {}'.format(
+                ColorPrint.print_info('     Continuation: post energy {} - pre energy {}'.format(
                     cont_data_post['energy'], cont_data_pre['energy']))
                 ColorPrint.print_info(
-                    'Actual absolute energy variation Delta E = {:.7e}'.format(DeltaE))
-                ColorPrint.print_info(
-                    'Actual relative energy variation relDelta E = {:.7e}'.format(relDeltaE))
-                ColorPrint.print_info(
-                    'Iter {} mineigs = {}'.format(iteration, mineigs))
+                    '       Iter {} mineigs = {}'.format(iteration, mineigs))
 
                 if rank == 0:
+                    plt.figure()
                     plt.plot(mineigs, marker='o')
                     plt.axhline(0.)
                     plt.savefig(os.path.join(
                         outdir, "mineigs-{:.3f}.pdf".format(load)))
+                    plt.close("all")
 
                 # continuation criterion
                 if abs(np.diff(mineigs)[-1]) > 1e-8:
                     ColorPrint.print_info(
-                        'Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
-                    ColorPrint.print_info('Continuing perturbations')
+                        '       Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
+                    ColorPrint.print_info('     Continuing perturbations')
                 else:
                     ColorPrint.print_info(
-                        'Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
-                    log(LogLevel.CRITICAL, 'We are stuck in the matrix')
-                    log(LogLevel.WARNING, 'Exploring next mode')
-                    exhaust_modes.append(opt_mode)
+                        '       Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
+                    ColorPrint.print_red('        We are stuck in the matrix')
 
             solver.update()
             ColorPrint.print_info(
                 'bifurcation loads : {}'.format(bifurcation_loads))
-            np.save(os.path.join(outdir, 'bifurcation_loads'),
+            if rank == 0:
+                np.save(os.path.join(outdir, 'bifurcation_loads'),
                     bifurcation_loads, allow_pickle=True, fix_imports=True)
 
-            if save_current_bifurcation:
+            if continuation == True:
                 time_data_i['h_opt'] = h_opt
-                time_data_i['max_h'] = hbounds[opt_mode][1]
-                time_data_i['min_h'] = hbounds[opt_mode][0]
+                time_data_i['max_h'] = h_bounds[1]
+                time_data_i['min_h'] = h_bounds[0]
 
-                modes = np.where(stability.eigs < 0)[0]
-                leneigs = len(modes)
-                maxmodes = min(3, leneigs)
-
-                with file_bif as file:
-                    for n in range(len(pert)):
-                        mode = dolfin.project(
-                            stability.perturbations_beta[n], V_alpha)
-                        modename = 'beta-%d' % n
-                        mode.rename(modename, modename)
-                        ColorPrint.print_info('Saved mode {}'.format(modename))
-                        file.write(mode, load)
-
-                np.save(os.path.join(outdir, 'energy_perturbations'),
-                        en_perts, allow_pickle=True, fix_imports=True)
+                neg_modes = np.where(stability.eigs < 0)[0]
 
                 with file_eig as file:
+                    perturbation_beta.rename('beta', 'beta')
+                    perturbation_beta.rename('v', 'v')
+                    file.write(perturbation_beta, load)
+                    file.write(perturbation_v, load)
+
+                if rank == 0:
+                    np.save(os.path.join(outdir, 'energy_perturbations'),
+                        en_pert, allow_pickle=True, fix_imports=True)
+
+                with file_bif as file:
                     _v = dolfin.project(dolfin.Constant(
                         h_opt)*perturbation_v, V_u)
                     _beta = dolfin.project(dolfin.Constant(
@@ -569,7 +483,6 @@ def numerical_test(user_parameters):
                     file.write(_v, load)
                     file.write(_beta, load)
 
-                # save_current_bifurcation = False
 
         time_data_i["load"] = load
         time_data_i["alpha_max"] = max(alpha.vector()[:])
@@ -579,7 +492,7 @@ def numerical_test(user_parameters):
             dissipated_energy(alpha))
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
-        time_data_i["eigs"] = stability.eigs if hasattr(
+        time_data_i["eigs"] = stability.eigs[:,0] if hasattr(
             stability, 'eigs') else np.inf
 
         ColorPrint.print_info(
@@ -604,7 +517,7 @@ def numerical_test(user_parameters):
 
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
-        if rank == 0:
+        if size == 1:
             plt.clf()
             dolfin.plot(alpha)
             plt.savefig(os.path.join(outdir, 'alpha.pdf'))
@@ -617,9 +530,7 @@ def numerical_test(user_parameters):
                 # if d is not (np.inf or np.nan or float('inf')):
                 if np.isfinite(d).all():
                     lend = len(d) if isinstance(d, np.ndarray) else 1
-                    plt.scatter([(time_data_pd['load'].values)[i]]*lend, d,
-                                c=np.where(np.array(d) < 0., 'red', 'black'))
-
+                    plt.scatter([(time_data_pd['load'].values)[i]]*lend, d,c=np.where(np.array(d) < 0., 'red', 'black'))
             plt.axhline(0, c='k', lw=2.)
             plt.xlabel('t')
             # [plt.axvline(b) for b in bifurcation_loads]
@@ -647,7 +558,8 @@ if __name__ == "__main__":
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     data, experiment = numerical_test(user_parameters=parameters)
-    ColorPrint.print_info(data)
+    if rank == 0:
+        print(data)
 
     ColorPrint.print_info(
         '________________________ VIZ _________________________')
@@ -664,7 +576,7 @@ if __name__ == "__main__":
             parameters['material']['sigma_D0'])
         tc = (parameters['material']['sigma_D0'] /
               parameters['material']['E'])**(.5)
-        tc = sqrt(2.)/2.
+        tc = np.sqrt(2.)/2.
         ell = parameters['material']['ell']
 
         fig1, ax1 = pp.plot_energy(parameters, data, tc)
