@@ -493,7 +493,7 @@ def numerical_test(user_parameters, plotting=True):
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
         time_data_i["eigs"] = stability.eigs[:,0] if hasattr(
-            stability, 'eigs') else np.inf
+            stability, 'eigs') else np.array([np.inf,0])
 
         ColorPrint.print_info(
             "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4e}".format(
@@ -525,6 +525,7 @@ def numerical_test(user_parameters, plotting=True):
                 os.path.join(outdir, 'alpha.pdf')))
             plt.close('all')
 
+        if rank == 0:
             fig = plt.figure()
             for i, d in enumerate(time_data_pd['eigs']):
                 # if d is not (np.inf or np.nan or float('inf')):
@@ -564,9 +565,6 @@ if __name__ == "__main__":
     ColorPrint.print_info(
         '________________________ VIZ _________________________')
     ColorPrint.print_info("Postprocess")
-
-    with open(os.path.join(experiment, 'parameters.yaml')) as f:
-        parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     if rank == 0:
         lab = '\\ell={}, ell_e={}, E={}, \\sigma_D = {}'.format(
