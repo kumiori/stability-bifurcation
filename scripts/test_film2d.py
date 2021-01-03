@@ -1,5 +1,6 @@
 import sys
 sys.path.append("../src/")
+
 from utils import get_versions, ColorPrint
 from linsearch import LineSearch
 from solver_stability import StabilitySolver
@@ -24,7 +25,9 @@ import os
 import pandas as pd
 import yaml
 import subprocess
-matplotlib.use('Agg')
+from matplotlib import rc
+rc('text', usetex=False)
+matplotlib.use('PDF')
 
 
 # FEniCS and PETSc related imports
@@ -192,6 +195,10 @@ def numerical_test(user_parameters, plotting=True):
     default_parameters.update(user_parameters)
     parameters = default_parameters
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
+
+    job_id = os.getenv("PBS_JOBID")  
+    if job_id is not None:
+        signature = f"{job_id}-{signature}"
     outdir = f'../output/film2d/{signature}-{size}CPU'
     if rank == 0:
         Path(outdir).mkdir(parents=True, exist_ok=True)
@@ -304,7 +311,6 @@ def numerical_test(user_parameters, plotting=True):
     bifurcation_loads = []
 
     for step, load in enumerate(load_steps):
-        plt.clf()
         mineigs = []
         exhaust_modes = []
 
@@ -383,18 +389,21 @@ def numerical_test(user_parameters, plotting=True):
                 #h_opt = hs[np.argmin(energy_vals)]
 
                 if rank == 0:
-                    plt.figure()
-                    plt.plot(hs, energy_vals, marker='o', label="exact")
-                    plt.plot(hs, energy_vals_quad,
-                             label="quadratic approximation")
-                    plt.legend()
-                    plt.title("eig {:.4f} vs {:.4f} expected".format(
-                        mineig_z, mineig))
-                    plt.axvline(h_opt)
-                    # import pdb; pdb.set_trace()
-                    plt.savefig(os.path.join(
-                        outdir, "energy1d-{:.3f}.pdf".format(load)))
-                    plt.close("all")
+                    try:
+                        plt.figure()
+                        plt.plot(hs, energy_vals, marker='o', label="exact")
+                        plt.plot(hs, energy_vals_quad,
+                                 label="quadratic approximation")
+                        plt.legend()
+                        plt.title("eig {:.4f} vs {:.4f} expected".format(
+                            mineig_z, mineig))
+                        plt.axvline(h_opt)
+                        # import pdb; pdb.set_trace()
+                        plt.savefig(os.path.join(
+                            outdir, "energy1d-{:.3f}.pdf".format(load)))
+                        plt.close("all")
+                    except:
+                        None
 
                 ColorPrint.print_bold('Bifurcating')
 
@@ -431,13 +440,15 @@ def numerical_test(user_parameters, plotting=True):
                     '       Iter {} mineigs = {}'.format(iteration, mineigs))
 
                 if rank == 0:
-                    plt.figure()
-                    plt.plot(mineigs, marker='o')
-                    plt.axhline(0.)
-                    plt.savefig(os.path.join(
-                        outdir, "mineigs-{:.3f}.pdf".format(load)))
-                    plt.close("all")
-
+                    try:
+                        plt.figure()
+                        plt.plot(mineigs, marker='o')
+                        plt.axhline(0.)
+                        plt.savefig(os.path.join(
+                            outdir, "mineigs-{:.3f}.pdf".format(load)))
+                        plt.close("all")
+                    except:
+                        None
                 # continuation criterion
                 if abs(np.diff(mineigs)[-1]) > 1e-8:
                     ColorPrint.print_info(
@@ -518,30 +529,38 @@ def numerical_test(user_parameters, plotting=True):
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
         if size == 1:
-            plt.clf()
-            dolfin.plot(alpha)
-            plt.savefig(os.path.join(outdir, 'alpha.pdf'))
-            ColorPrint.print_info("Saved figure: {}".format(
-                os.path.join(outdir, 'alpha.pdf')))
-            plt.close('all')
+            try:
+                plt.figure()
+                dolfin.plot(alpha)
+                plt.title("alpha")
+                plt.rc('text', usetex=False) 
+                matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amsmath}"]
+                plt.savefig(os.path.join(outdir, 'alpha.pdf'))
+                ColorPrint.print_info("Saved figure: {}".format(
+                    os.path.join(outdir, 'alpha.pdf')))
+                plt.close('all')
+            except:
+                None
 
         if rank == 0:
-            fig = plt.figure()
-            for i, d in enumerate(time_data_pd['eigs']):
-                # if d is not (np.inf or np.nan or float('inf')):
-                if np.isfinite(d).all():
-                    lend = len(d) if isinstance(d, np.ndarray) else 1
-                    plt.scatter([(time_data_pd['load'].values)[i]]*lend, d,c=np.where(np.array(d) < 0., 'red', 'black'))
-            plt.axhline(0, c='k', lw=2.)
-            plt.xlabel('t')
-            # [plt.axvline(b) for b in bifurcation_loads]
-            # import pdb; pdb.set_trace()
-            ColorPrint.print_info(
-                'Spectrum bifurcation loads : {}'.format(bifurcation_loads))
-            plt.xticks(list(plt.xticks()[0]) + bifurcation_loads)
-            [plt.axvline(bif, lw=2, c='k') for bif in bifurcation_loads]
-            plt.savefig(os.path.join(outdir, "spectrum.pdf"),
-                        bbox_inches='tight')
+            try: 
+                fig = plt.figure()
+                for i, d in enumerate(time_data_pd['eigs']):
+                    # if d is not (np.inf or np.nan or float('inf')):
+                    if np.isfinite(d).all():
+                        lend = len(d) if isinstance(d, np.ndarray) else 1
+                        plt.scatter([(time_data_pd['load'].values)[i]]*lend, d,c=np.where   (np.array(d) < 0., 'red', 'black'))
+                plt.axhline(0, c='k', lw=2.)
+                plt.xlabel('t')
+                # [plt.axvline(b) for b in bifurcation_loads]
+                # import pdb; pdb.set_trace()
+                ColorPrint.print_info(
+                    'Spectrum bifurcation loads : {}'.format(bifurcation_loads))
+                plt.xticks(list(plt.xticks()[0]) + bifurcation_loads)
+                [plt.axvline(bif, lw=2, c='k') for bif in bifurcation_loads]
+                plt.savefig(os.path.join(outdir, "spectrum.pdf"))
+            except:
+                ColorPrint.print_warn("Cannot plot")
 
     return time_data_pd, outdir
 
@@ -577,14 +596,15 @@ if __name__ == "__main__":
         tc = np.sqrt(2.)/2.
         ell = parameters['material']['ell']
 
-        fig1, ax1 = pp.plot_energy(parameters, data, tc)
-        fig1.savefig(os.path.join(experiment, "energy.pdf"),
-                     bbox_inches='tight')
+        try:
+            fig1, ax1 = pp.plot_energy(parameters, data, tc)
+            fig1.savefig(os.path.join(experiment, "energy.pdf"))
 
-        (fig2, ax1, ax2) = pp.plot_spectrum(parameters, data, tc)
-        plt.legend(loc='lower left')
-        fig2.savefig(os.path.join(experiment, "spectrum.pdf"),
-                     bbox_inches='tight')
+            (fig2, ax1, ax2) = pp.plot_spectrum(parameters, data, tc)
+            plt.legend(loc='lower left')
+            fig2.savefig(os.path.join(experiment, "spectrum.pdf"))
+        except:
+            None
 
         list_timings(TimingClear.keep, [TimingType.wall, TimingType.system])
 
