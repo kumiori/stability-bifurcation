@@ -81,10 +81,10 @@ def plot_loadticks(ax, tc, ell):
     if t_stab(ell)-tc < .1:
         # label = '$t_c=t_b=t_s$'
         ax.set_xticks([0,tc])
-        ax.set_xticklabels(['0','$t_c$=$t_b$=$t_s$'])
+        ax.set_xticklabels(['0',r'$t_c$=$t_b$=$t_s$'])
     else:
         ax.set_xticks([0,tc, t_bif(ell), t_stab(ell)])
-        ax.set_xticklabels(['0','$t_c$', '$t_b$', '$t_s$'])
+        ax.set_xticklabels(['0',r'$t_c$', r'$t_b$', r'$t_s$'])
     return ax
 
 def plot_fills(ax, ell, tc):
@@ -157,23 +157,23 @@ def plot_sigmaeps(params, dataf, tc):
 
     t = np.linspace(0., params['loading']['load_max'], 100)
     fig = plt.figure()
-    plt.ylabel('$$\sigma$$')
-    plt.xlabel('$$t$$')
+    plt.ylabel(r'$\sigma$')
+    plt.xlabel(r'$t$')
 
     # plt.plot(dataf['load'].values,
         # dataf['load'].values*pow(dataf['S(alpha)'].values, -1), marker='o', label='$$\sigma$$')
 
     plt.plot(dataf['load'].values,
-        dataf['sigma'].values, marker='o', label='$$\sigma$$', c='k', alpha = 0.7)
+        dataf['sigma'].values, marker='o', label=r'$\sigma$', c='k', alpha = 0.7)
         # dataf['load'].values*dataf['A(alpha)'].values*E0/Ly, marker='o', label='$$\sigma$$')
 
     sigmaC = params['material']['sigma_D0']
     ax = plt.gca()
     ax.set_yticks([0, sigmaC])
-    ax.set_yticklabels(['0','$$\\sigma_c$$'])
+    ax.set_yticklabels(['0',r'$\sigma_c$'])
     # ax1.set_yticklabels(['0', '$$10^{-3}$$'])
     ax.set_xticks([0,tc, t_bif(ell), t_stab(ell)])
-    ax.set_xticklabels(['0','$t_c$', '$t_b$', '$t_s$'])
+    ax.set_xticklabels(['0',r'$t_c$', r'$t_b$', r'$t_s$'])
     plt.ylim([0, sigmaC*1.1])
     
     stable = dataf['stable'].values
@@ -208,7 +208,7 @@ def plot_energy(parameters, dataf, tc):
 
     En0 = w1 * Lx * Ly
     fig = plt.figure()
-    plt.xlabel('$$t$$')
+    plt.xlabel(r'$t$')
 
     dissi = dataf['dissipated_energy'].values
     elast = dataf['elastic_energy'].values
@@ -304,8 +304,8 @@ def plot_stability(prefix, tol=1e-5):
 
     ax = plt.gca()
     # ax.plot(loads, [2.*2.*np.pi*q/(q+1)**(3./2.)*np.sqrt(2)/i for i in loads], lw=3, c='k's)
-    ax.plot(loads, [coeff_sta/i for i in loads], '-', c='k', label='$$t_s(L/\ell)$$')
-    ax.plot(loads, [coeff_bif/i for i in loads], '-.', c='k', label='$$t_b(L/\ell)$$')
+    ax.plot(loads, [coeff_sta/i for i in loads], '-', c='k', label=r'$t_s(L/\ell)$')
+    ax.plot(loads, [coeff_bif/i for i in loads], '-.', c='k', label=r'$t_b(L/\ell)$')
     # plt.axvline(1.0, c='k', lw=1)
 
     ax.fill_betweenx([coeff_sta/i for i in loads], loads, 20., alpha=.3, facecolor=localis)
@@ -319,13 +319,13 @@ def plot_stability(prefix, tol=1e-5):
     plt.plot(x1, y1, lw=2, c='k')
 
     plt.legend(loc='upper right')
-    plt.xlabel('$t$')
-    plt.ylabel('$$L/\ell$$')
+    plt.xlabel(r'$t$')
+    plt.ylabel(r'$L/\ell$')
     plt.ylim(0., 1.5*coeff_sta)
     plt.xlim(0., max(loads))
 
     ax.set_yticks([0, 1, 1/.5, 1/.25, coeff_sta, coeff_bif])
-    ax.set_yticklabels(['0','1','2','4', '$$\\ell_s$$', '$$\\ell_b$$'])
+    ax.set_yticklabels(['0','1','2','4', r'$\ell_s$', 'r$\ell_b$'])
 
     # plt.loglog()
     plt.ylim(0.5, 3*coeff_sta)
@@ -339,6 +339,6 @@ def load_cont(prefix):
     return dataf
 
 def format_params(params):
-    return '$$\ell = {:.2f}, \\nu = {:.1f}, \\sigma_c = {:.1f}, ' \
-           'E = {:.1f}$$'.format(params['material']['ell'], params['material']['nu'],
+    return r'$\ell = {:.2f}, \nu = {:.1f}, \sigma_c = {:.1f}, ' \
+           'r$E = {:.1f}$'.format(params['material']['ell'], params['material']['nu'],
                 params['material']['sigma_D0'], params['material']['E'])
