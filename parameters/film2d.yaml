@@ -7,29 +7,28 @@ loading:
     bc_u: "free"
     # tc = np.sqrt((1-nu)/2)
     # tc = 0.5916079783 (nu = .3)
-    load_min: 0.7
+    load_min: 0.5
     # load_min: .7
     load_max: 1.
-    n_steps: 40
+    n_steps: 50
 
 #  === Model === #
 material:
     E: 1
     nu: 0.3
-    ell: 0.04
-    ell_e: 0.2
-    k_res: 1.e-14
+    ell: 0.02
+    ell_e: 0.1
+    k_res: 1.e-8
     sigma_D0: 1.
 
 geometry:
-    R: .5
+    R: 1
     n: 8
 
 equilibrium:
     tol: 1e-4
     max_it: 400
     criterion: l2                                 # avail: h1, l2, residual
-
 
 # TODO
 # equilibrium:
@@ -86,7 +85,7 @@ stability:
     projection: 'None'
     maxmodes: 1
     checkstability: 'True'
-    continuation: 'False'
+    continuation: 'True'
     cont_rtol: 1.0e-10
     inactiveset_gatol: 1.e-8
     inactiveset_ubtol: 1.e-3
