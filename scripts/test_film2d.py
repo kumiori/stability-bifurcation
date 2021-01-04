@@ -46,6 +46,7 @@ dolfin.parameters["std_out_all_processes"] = False
 from solvers import EquilibriumAM, EquilibriumNewton
 from solver_stability import StabilitySolver
 from linsearch import LineSearch
+import subprocess
 
 from dolfin import *
 import yaml
@@ -128,14 +129,13 @@ def numerical_test(
                 f.write(geofile)
 
             cmd1 = 'gmsh {}.geo -2 -o {}.msh'.format(fname, fname)
-            cmd2 = 'dolfin-convert -i gmsh {}.msh {}.xml'.format(fname, fname)
+            cmd2 = 'meshio-convert -i gmsh {}.msh {}.xml --prune-z-0'.format(fname, fname)
             # meshio-convert -> xdmf
             log(LogLevel.INFO, 'Unable to handle mesh generation at the moment, please generate the mesh and test again.')
             log(LogLevel.INFO, cmd1)
             log(LogLevel.INFO, cmd2)
-            sys.exit()
-            log(LogLevel.INFO, check_output([cmd1], shell=True))  # run in shell mode in case you are not run in terminal
-            Popen([cmd2], stdout=PIPE, shell=True).communicate()
+            subprocess.call(cmd1,shell=True)
+            subprocess.call(cmd2,shell=True)
 
         mesh = Mesh('{}.xml'.format(fname))
         mesh_xdmf = XDMFFile("{}.xdmf".format(fname))
@@ -202,6 +202,7 @@ def numerical_test(
              # ]
     # bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0,0)), 'on_boundary')]
     # bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0., 0.)), 'on_boundary')]
+    # bcs_u = []#dolfin.DirichletBC(V_u, dolfin.Constant((0., 0.)), 'on_boundary')]
     # bcs_alpha_l = DirichletBC(V_alpha,  Constant(0.0), left)
     # bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
     # bcs_alpha =[bcs_alpha_l, bcs_alpha_r]
