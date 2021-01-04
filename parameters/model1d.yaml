@@ -2,8 +2,8 @@ general:
     dim: 2
 material:
     E: 1
-    # ell: 0.588235         # short
-    ell: 0.2              # long
+    ell: 0.588235         # short
+    # ell: 0.2              # long
     sigma_D0: 1.0
     k_res: 1.e-8
     nu: 0.
@@ -80,8 +80,8 @@ inertia:
     mat_mumps_icntl_13: 1
 
 eigen:
-    # eps_type: "krylovschur"
-    eps_type: "lanczos"
+    eps_type: "krylovschur"
+    # eps_type: "lanczos"
     eps_tol: 1.e-7
     eig_rtol: 1.e-7
     eps_max_it: 100

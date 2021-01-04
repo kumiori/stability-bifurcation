@@ -87,13 +87,7 @@ def numerical_test(
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     log(LogLevel.INFO, 'INFO: Outdir is: '+outdir)
-    # log(LogLevel.INFO, '{}'.format(parameters))
-    # meshsize = parameters['material']['ell']/parameters['geometry']['n']
     BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-    # geom_signature = hashlib.md5(str(parameters['geometry']).encode('utf-8')).hexdigest()
-    # meshfile = "%s/meshes/circle-%s.xml"%(BASE_DIR, geom_signature)
-    # d={'rad': parameters['geometry']['R'], 'meshsize': meshsize}
-    # mesh = mshr.generate_mesh(geom,  resolution)
     print(parameters['geometry'])
     d={'Lx': parameters['geometry']['Lx'],'Ly': parameters['geometry']['Ly'],
         'h': parameters['material']['ell']/parameters['geometry']['n']}
@@ -110,7 +104,7 @@ def numerical_test(
     fname = os.path.join('../meshes', 'strip-{}'.format(geom_signature))
 
     resolution = max(parameters['geometry']['n'] * Lx / ell, 5/(Ly*10))
-    resolution = 50
+    resolution = 100
 
     geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
     # mesh = mshr.generate_mesh(geom, n * int(float(Lx / ell)))
@@ -505,7 +499,7 @@ def numerical_test(
                     plt.savefig(os.path.join(outdir, "mineigs-{:.3f}.pdf".format(load)))
 
                 # continuation criterion
-                if abs(np.diff(mineigs)[-1]) > 1e-8:
+                if abs(np.diff(mineigs)[-1]) > 1e-10:
                     log(LogLevel.INFO, 'Min eig change = {:.3e}'.format(np.diff(mineigs)[-1]))
                     log(LogLevel.INFO, 'Continuing perturbations')
                 else:
@@ -514,8 +508,8 @@ def numerical_test(
                     log(LogLevel.WARNING, 'Exploring next mode')
                     exhaust_modes.append(opt_mode)
                     # import pdb; pdb.set_trace()
-                    # log(LogLevel.WARNING, 'Continuing load program')
-                    # break
+                    log(LogLevel.WARNING, 'Continuing load program')
+                    break
                     #
                 # if not release:
                     # log(LogLevel.CRITICAL, 'Small nergy release , we are stuck in the matrix')

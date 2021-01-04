@@ -54,51 +54,8 @@ from utils import get_versions
 code_parameters = get_versions()
 
 set_log_level(LogLevel.INFO)
+from lib import create_output, compile_continuation_data, getDefaultParameters
 
-def compile_continuation_data(state, energy):
-    continuation_data_i = {}
-    continuation_data_i["energy"] = assemble(energy)
-    return continuation_data_i
-
-def getDefaultParameters():
-
-    with open('../parameters/form_compiler.yml') as f:
-        form_compiler_parameters = yaml.load(f, Loader=yaml.FullLoader)
-    with open('../parameters/solvers_default.yml') as f:
-        equilibrium_parameters = yaml.load(f, Loader=yaml.FullLoader)['equilibrium']
-    with open('../parameters/solvers_default.yml') as f:
-        damage_parameters = yaml.load(f, Loader=yaml.FullLoader)['damage']
-    with open('../parameters/solvers_default.yml') as f:
-        elasticity_parameters = yaml.load(f, Loader=yaml.FullLoader)['elasticity']
-    with open('../parameters/film2d.yaml') as f:
-        material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
-    with open('../parameters/film2d.yaml') as f:
-        newton_parameters = yaml.load(f, Loader=yaml.FullLoader)['newton']
-    with open('../parameters/loading.yaml') as f:
-        loading_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
-    with open('../parameters/stability.yaml') as f:
-        stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
-    with open('../parameters/stability.yaml') as f:
-        inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
-    with open('../parameters/stability.yaml') as f:
-        eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
-
-    default_parameters = {
-        'code': {**code_parameters},
-        'compiler': {**form_compiler_parameters},
-        'eigen': {**eigen_parameters},
-        # 'geometry': {**geometry_parameters},
-        'inertia': {**inertia_parameters},
-        'loading': {**loading_parameters},
-        'material': {**material_parameters},
-        'newton': {**newton_parameters},
-        'equilibrium':{**equilibrium_parameters},
-        'damage':{**damage_parameters},
-        'elasticity':{**elasticity_parameters},
-        'stability': {**stability_parameters},
-        }
-
-    return default_parameters
 
 def numerical_test(
     user_parameters
@@ -121,7 +78,6 @@ def numerical_test(
     default_parameters.update(user_parameters)
     # FIXME: Not nice
     parameters = default_parameters
-    # import pdb; pdb.set_trace()
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
     outdir = '../output/film2d/{}-{}CPU'.format(signature, size)
@@ -227,18 +183,25 @@ def numerical_test(
 
 
     state = {'u': u, 'alpha': alpha}
-    Z = dolfin.FunctionSpace(mesh, 
+    Z = dolfin.FunctionSpace(mesh,
             dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
     z = dolfin.Function(Z)
     v, beta = dolfin.split(z)
 
     ut = dolfin.Expression("t", t=0.0, degree=0)
+
+
+    if parameters['loading']['bc_u'] == "clamped":
+        bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0., 0.)), "on_boundary")]
+    else:
+        bcs_u = []
+
     # bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0,0)), left),
              # dolfin.DirichletBC(V_u, dolfin.Constant((0,0)), right),
              # dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")
              # ]
     # bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0,0)), 'on_boundary')]
-    bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0., 0.)), 'on_boundary')]
+    # bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0., 0.)), 'on_boundary')]
     # bcs_alpha_l = DirichletBC(V_alpha,  Constant(0.0), left)
     # bcs_alpha_r = DirichletBC(V_alpha, Constant(0.0), right)
     # bcs_alpha =[bcs_alpha_l, bcs_alpha_r]
@@ -298,35 +261,34 @@ def numerical_test(
     energy = total_energy(u,alpha)
 
 
-    c1 = parameters['material']['E']*nu/(2*(1-nu**2.))
-    c2 = parameters['material']['E']/(2.*(1+nu))
-    ap = -2*(1 - alpha)
-    app = 2
+    # c1 = parameters['material']['E']*nu/(2*(1-nu**2.))
+    # c2 = parameters['material']['E']/(2.*(1+nu))
+    # ap = -2*(1 - alpha)
+    # app = 2
 
-    Wppt = a*(c1* inner(sym(grad(v)), sym(grad(v))) + c2*tr(sym(grad(v)))**2.)                      \
-            + 1./parameters['material']['ell_e']**2.*dot(v, v)                                      \
-            + 2*ap*(c1*inner(eps-eps0t, sym(grad(v))) + c2*tr(eps-eps0t)*tr(sym(grad(v))))*beta     \
-            + app*(c1*inner(eps-eps0t, eps-eps0t)/2. + c2*(tr(eps-eps0t)**2.)/2.)*beta**2           \
-            + 2.*w_1*parameters['material']['ell']** 2.*inner(grad(beta), grad(beta))
-    # import pdb; pdb.set_trace()
-    _H1 = a*(c1* inner(sym(grad(v)), sym(grad(v))) + c2*tr(sym(grad(v)))**2.)*dx                    \
-            + 1./parameters['material']['ell_e']**2.*dot(v, v)*dx
-    _H2 = app*(c1*inner(eps-eps0t, eps-eps0t)/2. + c2*(tr(eps-eps0t)**2.)/2.)*beta**2*dx           \
-            + 2.*w_1*parameters['material']['ell']** 2.*inner(grad(beta), grad(beta))*dx
-    _HX =  2*ap*(c1*inner(eps-eps0t, sym(grad(v))) + c2*tr(eps-eps0t)*tr(sym(grad(v))))*beta*dx
+    # Wppt = a*(c1* inner(sym(grad(v)), sym(grad(v))) + c2*tr(sym(grad(v)))**2.)                      \
+    #         + 1./parameters['material']['ell_e']**2.*dot(v, v)                                      \
+    #         + 2*ap*(c1*inner(eps-eps0t, sym(grad(v))) + c2*tr(eps-eps0t)*tr(sym(grad(v))))*beta     \
+    #         + app*(c1*inner(eps-eps0t, eps-eps0t)/2. + c2*(tr(eps-eps0t)**2.)/2.)*beta**2           \
+    #         + 2.*w_1*parameters['material']['ell']** 2.*inner(grad(beta), grad(beta))
+    # # import pdb; pdb.set_trace()
+    # _H1 = a*(c1* inner(sym(grad(v)), sym(grad(v))) + c2*tr(sym(grad(v)))**2.)*dx                    \
+    #         + 1./parameters['material']['ell_e']**2.*dot(v, v)*dx
+    # _H2 = app*(c1*inner(eps-eps0t, eps-eps0t)/2. + c2*(tr(eps-eps0t)**2.)/2.)*beta**2*dx           \
+    #         + 2.*w_1*parameters['material']['ell']** 2.*inner(grad(beta), grad(beta))*dx
+    # _HX =  2*ap*(c1*inner(eps-eps0t, sym(grad(v))) + c2*tr(eps-eps0t)*tr(sym(grad(v))))*beta*dx
 
-    H1 = assemble(derivative(derivative(_H1, z, TestFunction(Z)), z, TrialFunction(Z)))
-    H2 = assemble(derivative(derivative(_H2, z, TestFunction(Z)), z, TrialFunction(Z)))
-    HX = assemble(derivative(derivative(_HX, z, TestFunction(Z)), z, TrialFunction(Z)))
-    HH = assemble(derivative(derivative(_H1+_H2+_HX, z, TestFunction(Z)), z, TrialFunction(Z)))
+    # H1 = assemble(derivative(derivative(_H1, z, TestFunction(Z)), z, TrialFunction(Z)))
+    # H2 = assemble(derivative(derivative(_H2, z, TestFunction(Z)), z, TrialFunction(Z)))
+    # HX = assemble(derivative(derivative(_HX, z, TestFunction(Z)), z, TrialFunction(Z)))
+    # HH = assemble(derivative(derivative(_H1+_H2+_HX, z, TestFunction(Z)), z, TrialFunction(Z)))
 
-    log(LogLevel.INFO, 'H1.norm: {}'.format(H1.norm('frobenius')))
-    log(LogLevel.INFO, 'H2.norm: {}'.format(H2.norm('frobenius')))
-    log(LogLevel.INFO, 'HX.norm: {}'.format(HX.norm('frobenius')))
-    log(LogLevel.INFO, 'HH.norm: {}'.format(HH.norm('frobenius')))
+    # log(LogLevel.INFO, 'H1.norm: {}'.format(H1.norm('frobenius')))
+    # log(LogLevel.INFO, 'H2.norm: {}'.format(H2.norm('frobenius')))
+    # log(LogLevel.INFO, 'HX.norm: {}'.format(HX.norm('frobenius')))
+    # log(LogLevel.INFO, 'HH.norm: {}'.format(HH.norm('frobenius')))
 
-
-    Hessian = derivative(derivative(Wppt*dx, z, TestFunction(Z)), z, TrialFunction(Z))
+    # Hessian = derivative(derivative(Wppt*dx, z, TestFunction(Z)), z, TrialFunction(Z))
 
     file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
     file_out.parameters["functions_share_mesh"] = True
@@ -349,7 +311,8 @@ def numerical_test(
 
 
     solver = EquilibriumAM(energy, state, bcs, parameters=parameters)
-    stability = StabilitySolver(energy, state, bcs, parameters = parameters, Hessian = Hessian)
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters)
+    # stability = StabilitySolver(energy, state, bcs, parameters = parameters, Hessian = Hessian)
     # import pdb; pdb.set_trace()
     # equilibrium = EquilibriumNewton(energy, state, bcs, parameters = parameters)
     # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh= [rP, rN])
@@ -788,7 +751,7 @@ def numerical_test(
 if __name__ == "__main__":
 
     # Parameters
-    with open('../parameters/film2d.yaml') as f:
+    with open('../parameters/film2d_cm.yaml') as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     data, experiment = numerical_test(user_parameters = parameters)
