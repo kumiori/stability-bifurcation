@@ -33,7 +33,8 @@ class EigenSolver(object):
                  slepc_options='',
                  option_prefix='eigen_',
                  comm=MPI.comm_world, 
-                 slepc_eigensolver = None
+                 slepc_eigensolver = None,
+                 initial_guess = None
                 ):
         self.comm = comm
 
@@ -84,6 +85,8 @@ class EigenSolver(object):
                 is_to=self.index_set_not_bc
                 )
 
+        self.initial_guess = initial_guess
+
         # set up the eigensolver
         if slepc_eigensolver:
             self.E = slepc_eigensolver
@@ -117,8 +120,10 @@ class EigenSolver(object):
             E.setProblemType(SLEPc.EPS.ProblemType.GHEP)
         else:
             E.setProblemType(SLEPc.EPS.ProblemType.HEP)
+        # if self.initial_guess:
+            # E.setInitialSpace(self.initial_guess)
         E.setWhichEigenpairs(E.Which.TARGET_REAL)
-        E.setTarget(-.1) 
+        E.setTarget(-.1)
         st = E.getST()
         st.setType('sinvert')
         st.setShift(-1.e-3)
@@ -226,6 +231,7 @@ class StabilitySolver(object):
         self.y = dolfin.Function(self.Z)
         # self.dz = 
         # self.Identity = dot(self.y, dolfin.TestFunction(self.Z))*dx
+        # self.minmode = dolfin.Function(self.Z)
 
         with open('../parameters/stability.yaml') as f:
             self.stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
@@ -641,7 +647,14 @@ class StabilitySolver(object):
             else:
                 log(LogLevel.INFO, 'Full eigenvalue: Using computed Hessian')
                 # log(LogLevel.INFO, '{}'.format(self.eigen_parameters))
-                eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
+                if hasattr(self, 'minmode'):
+                    log(LogLevel.INFO, 'init eigensolver')
+                    eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, 
+                        slepc_options=self.eigen_parameters,
+                        initial_guess = self.minmode.vector().vec())
+                else:
+                    eigen = EigenSolver(self.H, self.z, restricted_dofs_is = index_set, 
+                        slepc_options=self.eigen_parameters)
                 # log(LogLevel.INFO, 'Full eigenvalue: Using computed Hessian and L2 identity')
                 # eigen = EigenSolver(self.H, self.z, a_m=dolfin.as_backend_type(Identity).mat(), restricted_dofs_is = index_set, slepc_options=self.eigen_parameters)
             log(LogLevel.INFO, 'Norm computed {}'.format(assemble(self.H).norm('frobenius')))
@@ -654,6 +667,7 @@ class StabilitySolver(object):
 
             tol, maxit = eigen.E.getTolerances()
             log(LogLevel.INFO, "Eigensolver stopping condition: tol={:.4g}, maxit={:d}".format(tol, maxit))
+            # import pdb; pdb.set_trace()
 
             nconv, it = eigen.solve(min(maxmodes, negev+1))
 

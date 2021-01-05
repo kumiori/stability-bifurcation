@@ -498,8 +498,8 @@ def numerical_test(
                 Ealpha.vector()[:]=assemble(stability.inactiveEalpha)[:]
                 Ealpha.rename('Ealpha-{}'.format(iteration), 'Ealpha-{}'.format(iteration))
 
-                with file_ealpha as file:
-                    file.write(Ealpha, load)
+                # with file_ealpha as file:
+                    # file.write(Ealpha, load)
 
                 save_current_bifurcation = True
 
@@ -641,13 +641,13 @@ def numerical_test(
                 leneigs = len(modes)
                 maxmodes = min(3, leneigs)
 
-                with file_bif as file:
-                    for n in range(len(pert)):
-                        mode = dolfin.project(stability.perturbations_beta[n], V_alpha)
-                        modename = 'beta-%d'%n
-                        mode.rename(modename, modename)
-                        log(LogLevel.INFO, 'Saved mode {}'.format(modename))
-                        file.write(mode, load)
+                # with file_bif as file:
+                #     for n in range(len(pert)):
+                #         mode = dolfin.project(stability.perturbations_beta[n], V_alpha)
+                #         modename = 'beta-%d'%n
+                #         mode.rename(modename, modename)
+                #         log(LogLevel.INFO, 'Saved mode {}'.format(modename))
+                #         file.write(mode, load)
 
                 # with file_bif_postproc as file:
                     # leneigs = len(modes)
@@ -667,7 +667,7 @@ def numerical_test(
                     _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
                     _v.rename('perturbation displacement', 'perturbation displacement')
                     _beta.rename('perturbation damage', 'perturbation damage')
-                    file.write(_v, load)
+                    # file.write(_v, load)
                     file.write(_beta, load)
 
                 # save_current_bifurcation = False
@@ -695,10 +695,10 @@ def numerical_test(
             file.write(alpha, load)
             file.write(u, load)
 
-        with file_postproc as file:
-            file.write_checkpoint(alpha, "alpha-{}".format(step), step, append = True)
-            file.write_checkpoint(u, "u-{}".format(step), step, append = True)
-            log(LogLevel.INFO, 'INFO: written postprocessing step {}'.format(step))
+        # with file_postproc as file:
+        #     file.write_checkpoint(alpha, "alpha-{}".format(step), step, append = True)
+        #     file.write_checkpoint(u, "u-{}".format(step), step, append = True)
+        #     log(LogLevel.INFO, 'INFO: written postprocessing step {}'.format(step))
 
         time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
@@ -752,7 +752,9 @@ def numerical_test(
 if __name__ == "__main__":
 
     # Parameters
-    with open('../parameters/film2d_cm.yaml') as f:
+    # with open('../parameters/film2d_cm.yaml') as f:
+    with open('../parameters/film2d_large.yaml') as f:
+    # with open('../parameters/film2d_small.yaml') as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     data, experiment = numerical_test(user_parameters = parameters)
