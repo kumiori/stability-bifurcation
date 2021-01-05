@@ -5,7 +5,7 @@ general:
 loading: 
     load_min: .0
     load_max: 2.
-    n_steps: 30
+    n_steps: 50
 
 #  === Model === #
 material:
@@ -68,7 +68,7 @@ newton:
 stability:
     order: 3
     projection: 'None'
-    maxmodes: 3
+    maxmodes: 1
     checkstability: 'True'
     continuation: 'False'
     cont_rtol: 1.0e-10

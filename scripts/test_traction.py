@@ -122,10 +122,7 @@ def numerical_test(
     Lx = parameters['geometry']['Lx']
     ell =  parameters['material']['ell']
     savelag = 1
-
-    mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
-    ds = dolfin.Measure("ds", subdomain_data=mf)
-    dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=mesh)
+    # mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
 
     # Function Spaces
     V_u = dolfin.VectorFunctionSpace(mesh, "CG", 1)
@@ -161,7 +158,12 @@ def numerical_test(
              dolfin.DirichletBC(V_u.sub(0), ut, right),
              dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
     bcs_alpha = []
+
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
+
+    ds = dolfin.Measure("ds", subdomain_data=mf)
+    dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=mesh)
+
     ell = parameters['material']['ell']
 
     # -----------------------
@@ -175,6 +177,10 @@ def numerical_test(
     lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
     mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
     nu = parameters['material']['nu']
+    sigma0 = lmbda0 * tr(eps)*dolfin.Identity(parameters['general']['dim']) + 2*mu0*eps
+    e1 = Constant((1., 0))
+    _sigma = ((1 - alpha) ** 2. + k_res)*sigma0
+    _snn = dolfin.dot(dolfin.dot(_sigma, e1), e1)
 
     # -------------------
 
@@ -579,6 +585,8 @@ def numerical_test(
         time_data_i["stable"] = stability.stable
         time_data_i["# neg ev"] = stability.negev
         time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
+        time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*ds(1))
+        # import pdb; pdb.set_trace()
 
         log(LogLevel.INFO,
             "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4e}".format(
@@ -638,9 +646,20 @@ def numerical_test(
 
 if __name__ == "__main__":
 
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--parameters", "-p", type=str, default=None)
+    args, unknown = parser.parse_known_args()
+
     # Parameters
-    with open('../parameters/model1d.yaml') as f:
-        parameters = yaml.load(f, Loader=yaml.FullLoader)
+    if args.parameters:
+        print('loading {}'.format(args.parameters))
+        with open(args.parameters) as f:
+            parameters = yaml.load(f, Loader=yaml.FullLoader)
+    else:
+        with open('../parameters/bar_short.yaml') as f:
+            parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     data, experiment = numerical_test(user_parameters = parameters)
     print(data)
