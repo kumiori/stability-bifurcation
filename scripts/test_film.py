@@ -122,6 +122,9 @@ def numerical_test(
         meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
         plot(mesh)
         plt.savefig(os.path.join(outdir, "mesh.pdf"), bbox_inches='tight')
+        meshf << mesh
+
+    # sys.exit()
 
     with open(os.path.join(outdir, 'parameters.yaml'), "w") as f:
         yaml.dump(parameters, f, default_flow_style=False)
@@ -146,7 +149,14 @@ def numerical_test(
     dalpha = TrialFunction(V_alpha)
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
+    
+    left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
+    right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
+    left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
 
+    mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
+    right.mark(mf, 1)
+    left.mark(mf, 2)
 
     state = {'u': u, 'alpha': alpha}
     Z = dolfin.FunctionSpace(mesh, 
@@ -155,7 +165,13 @@ def numerical_test(
     v, beta = dolfin.split(z)
 
     ut = dolfin.Expression("t", t=0.0, degree=0)
-    bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0., 0.)), 'on_boundary')]
+    if parameters['loading']['bc_u'] == 'clamped':
+        # bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0., 0.)), 'on_boundary')]
+        bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0.), mf, 1),
+                    dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0.), mf, 2)]
+        # bcs_u = [dolfin.DirichletBC(V_u, dolfin.Constant((0., 0.)), 'on_boundary')]
+    elif parameters['loading']['bc_u'] == 'free':
+        bcs_u = []
     bcs_alpha = []
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
     ell = parameters['material']['ell']
@@ -204,39 +220,8 @@ def numerical_test(
 
     energy = total_energy(u,alpha)
 
-
-    c1 = parameters['material']['E']*nu/(2*(1-nu**2.))
-    c2 = parameters['material']['E']/(2.*(1+nu))
-    ap = -2*(1 - alpha)
-    app = 2
-
-    Wppt = a*(c1* inner(sym(grad(v)), sym(grad(v))) + c2*tr(sym(grad(v)))**2.)                      \
-            + 1./parameters['material']['ell_e']**2.*dot(v, v)                                      \
-            + 2*ap*(c1*inner(eps-eps0t, sym(grad(v))) + c2*tr(eps-eps0t)*tr(sym(grad(v))))*beta     \
-            + app*(c1*inner(eps-eps0t, eps-eps0t)/2. + c2*(tr(eps-eps0t)**2.)/2.)*beta**2           \
-            + 2.*w_1*parameters['material']['ell']** 2.*inner(grad(beta), grad(beta))
-    # import pdb; pdb.set_trace()
-    _H1 = a*(c1* inner(sym(grad(v)), sym(grad(v))) + c2*tr(sym(grad(v)))**2.)*dx                    \
-            + 1./parameters['material']['ell_e']**2.*dot(v, v)*dx
-    _H2 = app*(c1*inner(eps-eps0t, eps-eps0t)/2. + c2*(tr(eps-eps0t)**2.)/2.)*beta**2*dx           \
-            + 2.*w_1*parameters['material']['ell']** 2.*inner(grad(beta), grad(beta))*dx
-    _HX =  2*ap*(c1*inner(eps-eps0t, sym(grad(v))) + c2*tr(eps-eps0t)*tr(sym(grad(v))))*beta*dx
-
-    H1 = assemble(derivative(derivative(_H1, z, TestFunction(Z)), z, TrialFunction(Z)))
-    H2 = assemble(derivative(derivative(_H2, z, TestFunction(Z)), z, TrialFunction(Z)))
-    HX = assemble(derivative(derivative(_HX, z, TestFunction(Z)), z, TrialFunction(Z)))
-    HH = assemble(derivative(derivative(_H1+_H2+_HX, z, TestFunction(Z)), z, TrialFunction(Z)))
-
-    log(LogLevel.INFO, 'H1.norm: {}'.format(H1.norm('frobenius')))
-    log(LogLevel.INFO, 'H2.norm: {}'.format(H2.norm('frobenius')))
-    log(LogLevel.INFO, 'HX.norm: {}'.format(HX.norm('frobenius')))
-    log(LogLevel.INFO, 'HH.norm: {}'.format(HH.norm('frobenius')))
-
-
-    Hessian = derivative(derivative(Wppt*dx, z, TestFunction(Z)), z, TrialFunction(Z))
-
     solver = EquilibriumAM(energy, state, bcs, parameters=parameters)
-    stability = StabilitySolver(energy, state, bcs, parameters = parameters, Hessian = Hessian)
+    stability = StabilitySolver(energy, state, bcs, parameters = parameters)
     # import pdb; pdb.set_trace()
     # equilibrium = EquilibriumNewton(energy, state, bcs, parameters = parameters)
     # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh= [rP, rN])
@@ -259,8 +244,25 @@ def numerical_test(
     bifurcation_loads = []
     to_remove = []
 
+    file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
+    file_out.parameters["functions_share_mesh"] = True
+    file_out.parameters["flush_output"] = True
+    file_postproc = dolfin.XDMFFile(os.path.join(outdir, "postprocess.xdmf"))
+    file_postproc.parameters["functions_share_mesh"] = True
+    file_postproc.parameters["flush_output"] = True
+    file_eig = dolfin.XDMFFile(os.path.join(outdir, "perturbations.xdmf"))
+    file_eig.parameters["functions_share_mesh"] = True
+    file_eig.parameters["flush_output"] = True
+    file_bif = dolfin.XDMFFile(os.path.join(outdir, "bifurcation.xdmf"))
+    file_bif.parameters["functions_share_mesh"] = True
+    file_bif.parameters["flush_output"] = True
+    file_bif_postproc = dolfin.XDMFFile(os.path.join(outdir, "bifurcation_postproc.xdmf"))
+    file_bif_postproc.parameters["functions_share_mesh"] = True
+    file_bif_postproc.parameters["flush_output"] = True
+
     perturb = False
     from matplotlib import cm
+    save_current_bifurcation = True
 
     log(LogLevel.INFO, '{}'.format(parameters))
     for step, load in enumerate(load_steps):
@@ -325,34 +327,9 @@ def numerical_test(
                     hbounds.append(bounds)
                     en_perts.append(enpert)
 
+                # if False:
                 if rank == 0:
-                    fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-                    plt.subplot(1, 4, 1)
-                    plt.set_cmap('binary')
-                    # dolfin.plot(mesh, alpha = 1.)
-                    dolfin.plot(
-                        project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.)
-                    plt.title('derivative zero')
-                    plt.subplot(1, 4, 2)
-                    # dolfin.plot(mesh, alpha = .5)
-                    dolfin.plot(
-                        project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.)
-                    plt.title('ub tolerance')
-                    plt.subplot(1, 4, 3)
-                    # dolfin.plot(mesh, alpha = .5)
-                    dolfin.plot(
-                        project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.)
-                    plt.title('alpha-alpha_old')
-                    plt.subplot(1, 4, 4)
-                    # dolfin.plot(mesh, alpha = .5)
-                    dolfin.plot(
-                        project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.)
-                    plt.title('intersec deriv, ub')
-                    plt.savefig(os.path.join(outdir, "{:.3f}-inactivesets-{:d}.pdf".format(load, iteration)))
-
-
-                    plt.set_cmap('hot')
-
+                    plt.figure()
                     for i,mode in enumerate(pert):
                         plt.subplot(2, _nmodes+1, i+2)
                         plt.axis('off')
@@ -399,10 +376,9 @@ def numerical_test(
                 Ealpha.vector()[:]=assemble(stability.inactiveEalpha)[:]
                 Ealpha.rename('Ealpha-{}'.format(iteration), 'Ealpha-{}'.format(iteration))
 
-                with file_ealpha as file:
-                    file.write(Ealpha, load)
+                # with file_ealpha as file:
+                #     file.write(Ealpha, load)
 
-                save_current_bifurcation = True
 
                 # pick the first of the non exhausted modes-
                 non_zero_h = np.where(abs(np.array(h_opts)) > DOLFIN_EPS)[0]
@@ -421,6 +397,32 @@ def numerical_test(
                 (perturbation_v, perturbation_beta) = minmode.split(deepcopy=True)
                 # (perturbation_v, perturbation_beta) = stability.perturbation_v, stability.perturbation_beta
 
+
+                if iteration == 1:
+                    plt.figure()
+                    plot(perturbation_beta)
+                    plt.savefig(os.path.join(outdir, "beta0-{:.3f}.pdf".format(load)))
+                    # import pdb; pdb.set_trace()
+                    
+                    with file_bif as file:
+
+                        mode = perturbation_v
+                        modename = 'beta-0'
+                        mode.rename(modename, modename)
+                        file.write(mode, load)
+                
+                        log(LogLevel.INFO, 'Saved mode {}'.format(modename))
+
+                    with file_bif_postproc as file:
+                        leneigs = len(modes)
+                        maxmodes = min(3, leneigs)
+                        # beta0v = dolfin.project(perturbation_beta, V_alpha)
+                        beta0v = perturbation_beta
+                        file.write_checkpoint(beta0v, 'beta0', 0, append = True)
+                        file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
+                        file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
+                        file.write_checkpoint(alpha, 'alpha', 0, append=True)
+
                 def energy_1d(h):
                     #return assemble(energy_functional(u + h * perturbation_v, alpha + h * perturbation_beta))
                     u_ = Function(u.function_space())
@@ -434,7 +436,7 @@ def numerical_test(
                 (hmin, hmax) = linesearch.admissible_interval(alpha, alpha_old, perturbation_beta)
                 hs = np.linspace(hmin,hmax,20)
                 energy_vals = np.array([energy_1d(h) for h in hs])
-                stability.solve(solver.damage.problem.lb)
+                # stability.solve(solver.damage.problem.lb)
 
                 Hzz = assemble(stability.H*minmode*minmode)
                 Gz = assemble(stability.J*minmode)
@@ -453,7 +455,6 @@ def numerical_test(
                     plt.legend()
                     plt.title("eig {:.4f} vs {:.4f} expected".format(mineig_z, mineig))
                     plt.axvline(h_opt)
-                    # import pdb; pdb.set_trace()
                     plt.savefig(os.path.join(outdir, "energy1d-{:.3f}.pdf".format(load)))
 
                 iteration += 1
@@ -540,23 +541,30 @@ def numerical_test(
                 leneigs = len(modes)
                 maxmodes = min(3, leneigs)
 
-                with file_bif as file:
-                    for n in range(len(pert)):
-                        mode = dolfin.project(stability.perturbations_beta[n], V_alpha)
-                        modename = 'beta-%d'%n
-                        mode.rename(modename, modename)
-                        log(LogLevel.INFO, 'Saved mode {}'.format(modename))
-                        file.write(mode, load)
+                # with file_bif as file:
+                    # import pdb; pdb.set_trace()
+
+                #     mode = dolfin.project(perturbation_v, V_alpha)
+                #     modename = 'beta-0'
+                #     mode.rename(modename, modename)
+                #     file.write(mode, load)
+            
+                #     log(LogLevel.INFO, 'Saved mode {}'.format(modename))
+                #     # for n in range(len(pert)):
+                #     #     mode = dolfin.project(stability.perturbations_beta[n], V_alpha)
+                #     #     modename = 'beta-%d'%n
+                #     #     mode.rename(modename, modename)
+                #     #     log(LogLevel.INFO, 'Saved mode {}'.format(modename))
+                #     #     file.write(mode, load)
 
                 # with file_bif_postproc as file:
-                    # leneigs = len(modes)
-                    # maxmodes = min(3, leneigs)
-                    # beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
-                    # log(LogLevel.DEBUG, 'DEBUG: irrev {}'.format(alpha.vector()-alpha_old.vector()))
-                    # file.write_checkpoint(beta0v, 'beta0', 0, append = True)
-                    # file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
-                    # file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
-                    # file.write_checkpoint(alpha, 'alpha', 0, append=True)
+                #     leneigs = len(modes)
+                #     maxmodes = min(3, leneigs)
+                #     beta0v = dolfin.project(perturbation_beta, V_alpha)
+                #     file.write_checkpoint(beta0v, 'beta0', 0, append = True)
+                #     file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
+                #     file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
+                #     file.write_checkpoint(alpha, 'alpha', 0, append=True)
 
                 np.save(os.path.join(outdir, 'energy_perturbations'), en_perts, allow_pickle=True, fix_imports=True)
 

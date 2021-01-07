@@ -405,29 +405,31 @@ def numerical_test(
 
                 # if False:
                 if rank == 0:
-                    fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-                    plt.subplot(1, 4, 1)
-                    plt.set_cmap('binary')
-                    # dolfin.plot(mesh, alpha = 1.)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
-                    plt.title('derivative zero')
-                    plt.subplot(1, 4, 2)
-                    # dolfin.plot(mesh, alpha = .5)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
-                    plt.title('ub tolerance')
-                    plt.subplot(1, 4, 3)
-                    # dolfin.plot(mesh, alpha = .5)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
-                    plt.title('alpha-alpha_old')
-                    plt.subplot(1, 4, 4)
-                    # dolfin.plot(mesh, alpha = .5)
-                    plt.colorbar(dolfin.plot(
-                        project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.))
-                    plt.title('intersec deriv, ub')
-                    plt.savefig(os.path.join(outdir, "{:.3f}-inactivesets-{:d}.pdf".format(load, iteration)))
+
+
+                    # fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
+                    # plt.subplot(1, 4, 1)
+                    # plt.set_cmap('binary')
+                    # # dolfin.plot(mesh, alpha = 1.)
+                    # plt.colorbar(dolfin.plot(
+                    #     project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.))
+                    # plt.title('derivative zero')
+                    # plt.subplot(1, 4, 2)
+                    # # dolfin.plot(mesh, alpha = .5)
+                    # plt.colorbar(dolfin.plot(
+                    #     project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.))
+                    # plt.title('ub tolerance')
+                    # plt.subplot(1, 4, 3)
+                    # # dolfin.plot(mesh, alpha = .5)
+                    # plt.colorbar(dolfin.plot(
+                    #     project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.))
+                    # plt.title('alpha-alpha_old')
+                    # plt.subplot(1, 4, 4)
+                    # # dolfin.plot(mesh, alpha = .5)
+                    # plt.colorbar(dolfin.plot(
+                    #     project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.))
+                    # plt.title('intersec deriv, ub')
+                    # plt.savefig(os.path.join(outdir, "{:.3f}-inactivesets-{:d}.pdf".format(load, iteration)))
 
 
                     # fig = plt.figure(figsize=(4, 1.5), dpi=180,)
@@ -596,6 +598,7 @@ def numerical_test(
                 log(LogLevel.INFO, 'Iter {} mineigs = {}'.format(iteration, mineigs))
 
                 if rank == 0:
+                    plt.figure()
                     plt.plot(mineigs, marker = 'o')
                     plt.axhline(0.)
                     plt.savefig(os.path.join(outdir, "mineigs-{:.3f}.pdf".format(load)))
@@ -710,6 +713,7 @@ def numerical_test(
             # plt.axhline(parameters['equilibrium']['tol'])
             # plt.savefig(os.path.join(outdir, 'errors-{}.pdf'.format(step)))
             # plt.clf()
+            plt.figure()
             plot(alpha)
             plt.savefig(os.path.join(outdir, 'alpha.pdf'))
             log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
@@ -753,7 +757,8 @@ if __name__ == "__main__":
 
     # Parameters
     # with open('../parameters/film2d_cm.yaml') as f:
-    with open('../parameters/film2d_large.yaml') as f:
+    # with open('../parameters/film2d_large.yaml') as f:
+    with open('../parameters/film2d.yaml') as f:
     # with open('../parameters/film2d_small.yaml') as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 

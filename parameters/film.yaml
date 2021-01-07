@@ -3,8 +3,9 @@ general:
     dim: 2
 # === Loading === #
 loading: 
+    bc_u: clamped
     load_min: .0
-    load_max: 2.
+    load_max: 1.5
     n_steps: 50
 
 #  === Model === #
@@ -18,14 +19,14 @@ material:
     sigma_D0: 1.
 
 geometry:
-    Lx: 3.
+    Lx: 6.
     Ly: .1
     n: 5
 
 equilibrium:
-    tol: 1e-3
+    tol: 1e-4
     max_it: 500
-    criterion: h1                                 # avail: h1, l2, residual
+    criterion: l2                                  # avail: h1, l2, residual
 
 elasticity:
     snes_type: ksponly
@@ -87,5 +88,5 @@ eigen:
     eps_type: "krylovschur"
     # eps_type: "lanczos"
     eps_tol: 1e-5
-    eig_rtol: 1e-5
+    eig_rtol: 1e-10
     eps_max_it: 100

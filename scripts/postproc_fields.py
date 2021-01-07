@@ -108,8 +108,10 @@ np.save(os.path.join(rootdir, "alpha"), alphas,
 print('Saved {}'.format(os.path.join(rootdir, 'alpha.npy')))
 data = np.load(os.path.join(rootdir, "alpha.npy"))
 
-
+# import pdb; pdb.set_trace()
+# 
 # Postprocess perturbations 
+log(LogLevel.INFO, 'Postprocess perturbations')
 
 perturbations = []
 
