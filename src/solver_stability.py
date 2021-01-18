@@ -66,25 +66,30 @@ class EigenSolver(object):
         # if bcs extract reduced matrices on dofs with no bcs
         if self.bcs:
             self.index_set_not_bc = self.get_interior_index_set(self.bcs, self.V)
-        elif restricted_dofs_is:
+
+        if restricted_dofs_is:
             self.index_set_not_bc = restricted_dofs_is
 
+        self.K, self.M = self.restrictOperator(self.index_set_not_bc)
+
+        self.projector = self.crateProjector(self.index_set_not_bc)
+
         if self.index_set_not_bc is not None:
-            try:
-                self.K = self.K.createSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
-                if a_m:
-                   self.M = self.M.createSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
-            except:
-                self.K = self.K.getSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
-                if a_m:
-                    self.M = self.M.getSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
-            self.projector = petsc4py.PETSc.Scatter()
-            self.projector.create(
-                vec_from=self.K.createVecRight(),
-                is_from=None,
-                vec_to=u.vector().vec(),
-                is_to=self.index_set_not_bc
-                )
+            # try:
+            #     self.K = self.K.createSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
+            #     if a_m:
+            #        self.M = self.M.createSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
+            # except:
+            #     self.K = self.K.getSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
+            #     if a_m:
+            #         self.M = self.M.getSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
+            # self.projector = petsc4py.PETSc.Scatter()
+            # self.projector.create(
+            #     vec_from=self.K.createVecRight(),
+            #     is_from=None,
+            #     vec_to=u.vector().vec(),
+            #     is_to=self.index_set_not_bc
+            #     )
 
         self.initial_guess = initial_guess
 
@@ -98,6 +103,29 @@ class EigenSolver(object):
             self.E.setOperators(self.K,self.M)
         else:
             self.E.setOperators(self.K)
+
+    def restrictOperator(self, indexSet):
+        try:
+            K = self.K.createSubMatrix(indexSet, indexSet)
+            if a_m:
+                M = self.M.createSubMatrix(indexSet, indexSet)
+        except:
+            K = self.K.getSubMatrix(indexSet, indexSet)
+            if a_m:
+                M = self.M.getSubMatrix(indexSet, indexSet)
+
+        return (K, M)
+
+    def createProjector(self, indexSet):
+        projector = petsc4py.PETSc.Scatter()
+        projector.create(
+            vec_from=self.K.createVecRight(),
+            is_from=None,
+            vec_to=u.vector().vec(),
+            is_to=indexSet
+            )
+
+        return projector
 
     def get_interior_index_set(self, boundary_conditions, function_space):
         """Returns the index set with free dofs"""
@@ -527,6 +555,7 @@ class StabilitySolver(object):
             self.stable = negev <= 0
             self.eigs = []
             self.mineig = np.nan
+            # return (self.stable, int(negev))
 
 
         if nconv > 0:
