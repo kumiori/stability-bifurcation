@@ -44,7 +44,8 @@ size = comm.Get_size()
 from dolfin.cpp.log import log, LogLevel, set_log_level
 dolfin.parameters["std_out_all_processes"] = False
 
-from solvers import EquilibriumAM, EquilibriumNewton
+from solvers import EquilibriumAM
+# EquilibriumNewton
 from solver_stability import StabilitySolver
 from linsearch import LineSearch
 

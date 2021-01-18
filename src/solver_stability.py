@@ -38,12 +38,23 @@ class EigenSolver(object):
                  slepc_eigensolver = None,
                  initial_guess = None
                 ):
+
+        """
+        Solver object for constrained eigenvalue pb of the type:
+            - K z y = \\lmbda <z, y>, forall y \\in V_h(\\Omega')
+            - K z y = \\lmbda <z, y>, forall y \\in {inactive constraints}
+
+            where \\Omega' \\subseteq \\Omega
+            where {inactive constraints} is a proper subset
+        """
         self.comm = comm
 
 
         self.slepc_options = slepc_options
         self.V = u.function_space()
-        self.index_set_not_bc = None
+        self.u = u
+        self.index_set = None
+
         if type(bcs) == list:
             self.bcs = bcs
         elif type(bcs) == dolfin.fem.dirichletbc.DirichletBC:
@@ -63,56 +74,44 @@ class EigenSolver(object):
         elif a_m is not None and type(a_m) == petsc4py.PETSc.Mat:
             self.M = a_m
 
-        # if bcs extract reduced matrices on dofs with no bcs
         if self.bcs:
-            self.index_set_not_bc = self.get_interior_index_set(self.bcs, self.V)
+            self.index_set = self.get_interior_index_set(self.bcs, self.V)
 
         if restricted_dofs_is:
-            self.index_set_not_bc = restricted_dofs_is
+            self.index_set = restricted_dofs_is
 
-        self.K, self.M = self.restrictOperator(self.index_set_not_bc)
+        self.K, self.M = self.restrictOperator(self.index_set)
+        self.projector = self.createProjector(self.index_set)
 
-        self.projector = self.crateProjector(self.index_set_not_bc)
-
-        if self.index_set_not_bc is not None:
-            # try:
-            #     self.K = self.K.createSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
-            #     if a_m:
-            #        self.M = self.M.createSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
-            # except:
-            #     self.K = self.K.getSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
-            #     if a_m:
-            #         self.M = self.M.getSubMatrix(self.index_set_not_bc, self.index_set_not_bc)
-            # self.projector = petsc4py.PETSc.Scatter()
-            # self.projector.create(
-            #     vec_from=self.K.createVecRight(),
-            #     is_from=None,
-            #     vec_to=u.vector().vec(),
-            #     is_to=self.index_set_not_bc
-            #     )
-
-        self.initial_guess = initial_guess
-
-        # set up the eigensolver
         if slepc_eigensolver:
             self.E = slepc_eigensolver
         else:
             self.E = self.eigensolver_setup(prefix=option_prefix)
 
         if a_m:
-            self.E.setOperators(self.K,self.M)
+            self.E.setOperators(self.K, self.M)
         else:
             self.E.setOperators(self.K)
 
     def restrictOperator(self, indexSet):
+        if indexSet is None:
+            return (self.K, self.M)
         try:
             K = self.K.createSubMatrix(indexSet, indexSet)
-            if a_m:
-                M = self.M.createSubMatrix(indexSet, indexSet)
+            # if a_m:
+                # M = self.M.createSubMatrix(indexSet, indexSet)
         except:
             K = self.K.getSubMatrix(indexSet, indexSet)
-            if a_m:
+            # if a_m:
+                # M = self.M.getSubMatrix(indexSet, indexSet)
+
+        if hasattr(self, 'M'):
+            try:
+                M = self.M.createSubMatrix(indexSet, indexSet)
+            except:
                 M = self.M.getSubMatrix(indexSet, indexSet)
+        else:
+            M = None
 
         return (K, M)
 
@@ -121,7 +120,7 @@ class EigenSolver(object):
         projector.create(
             vec_from=self.K.createVecRight(),
             is_from=None,
-            vec_to=u.vector().vec(),
+            vec_to=self.u.vector().vec(),
             is_to=indexSet
             )
 
@@ -199,7 +198,7 @@ class EigenSolver(object):
         v_r, v_i = self.K.createVecs()
         eig = self.E.getEigenpair(i, v_r, v_i)
         err = self.E.computeError(i)
-        if self.index_set_not_bc:
+        if self.index_set:
             self.projector.scatter(vec_from=v_r, vec_to=u_r.vector().vec())
             self.projector.scatter(vec_from=v_i, vec_to=u_im.vector().vec())
             u_r.vector().vec().ghostUpdate()
