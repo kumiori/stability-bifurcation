@@ -27,7 +27,7 @@ geometry:
 
 equilibrium:
     tol: 1e-4
-    max_it: 50
+    max_it: 51
     criterion: l2                                 # avail: h1, l2, residual
 
 # TODO

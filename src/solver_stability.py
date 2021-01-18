@@ -41,7 +41,6 @@ class EigenSolver(object):
         self.comm = comm
 
 
-        # import pdb; pdb.set_trace()
         self.slepc_options = slepc_options
         self.V = u.function_space()
         self.index_set_not_bc = None
@@ -224,62 +223,39 @@ class StabilitySolver(object):
         self._u = dolfin.Vector(self.u.vector())
         self._alpha = dolfin.Vector(self.alpha.vector())
         self.mesh = state['alpha'].function_space().mesh()
-        self.meshsize = (self.mesh.hmax()+self.mesh.hmax())/2.
 
         self.Z = dolfin.FunctionSpace(self.mesh, 
             dolfin.MixedElement([self.u.ufl_element(),self.alpha.ufl_element()]))
         self.z = dolfin.Function(self.Z)
-        self.dm = self.Z.dofmap()
-        self.ownership = self.Z.dofmap().ownership_range()
-
-        self.assigner = dolfin.FunctionAssigner(
-            self.Z,            # receiving space
-            [self.u.function_space(), self.alpha.function_space()]) # assigning spaces
-
-        dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=self.mesh)
-        self.y = dolfin.Function(self.Z)
-
-        with open('../parameters/stability.yaml') as f:
-            self.stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
-        with open('../parameters/eigensolver.yml') as f:
-            self.inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
-        with open('../parameters/eigensolver.yml') as f:
-            self.eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
-
-        if 'eigen' in parameters:
-            self.eigen_parameters.update(parameters['eigen'])
-        if 'inertia' in parameters:
-            self.inertia_parameters.update(parameters['inertia'])
-        if 'stability' in parameters:
-            self.stability_parameters.update(parameters['stability'])
-
         self.z_old = dolfin.Function(self.Z)
         zeta = dolfin.TestFunction(self.Z)
         v, beta = dolfin.split(zeta)
 
-        cdm = dolfin.project(dolfin.CellDiameter(self.mesh)**2., dolfin.FunctionSpace(self.mesh, 'CG', 1))
-        self.cellarea = dolfin.Function(self.z.function_space())
-        self.cellarea.assign(cdm)
-
+        self.dm = self.Z.dofmap()
         self.ownership = self.Z.dofmap().ownership_range()
-        self.assigner = dolfin.FunctionAssigner(
-            self.Z,            # receiving space
-            [self.u.function_space(), self.alpha.function_space()]) # assigning space
-
-        dim = self.u.function_space().ufl_element().value_size()
-        self.u_zero = dolfin.project(dolfin.Constant(0.), self.u.function_space()) if dim==1 else dolfin.project(dolfin.Constant([0.]*dim), self.u.function_space())
-        self.a_one  = dolfin.project(dolfin.Constant(1.), self.alpha.function_space())
 
         Zu = self.Z.extract_sub_space([0])
         Za = self.Z.extract_sub_space([1])
 
         self.Xa = Za.collapse().tabulate_dof_coordinates()
         self.Xu = Zu.collapse().tabulate_dof_coordinates()
+
         (_, self.mapa) = Za.collapse(collapsed_dofs = True)
         (_, self.mapu) = Zu.collapse(collapsed_dofs = True)
 
-        self.computed = []
-        self.provided = []
+        self.assigner = dolfin.FunctionAssigner(
+            self.Z,            # receiving space
+            [self.u.function_space(), self.alpha.function_space()]) # assigning spaces
+
+        self.parameters = self.setParameters(parameters)
+
+        self.ownership = self.Z.dofmap().ownership_range()
+
+        self.assigner = dolfin.FunctionAssigner(
+            self.Z,            # receiving space
+            [self.u.function_space(), self.alpha.function_space()]) # assigning space
+
+        dim = self.u.function_space().ufl_element().value_size()
 
         self.stable = ''
         self.negev = -1
@@ -310,6 +286,27 @@ class StabilitySolver(object):
 
         self._Hessian = Hessian if Hessian.__class__ == ufl.form.Form else self.H
 
+    def setParameters(self, parameters):
+
+        with open('../parameters/stability.yaml') as f:
+            stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
+        with open('../parameters/eigensolver.yml') as f:
+            inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
+        with open('../parameters/eigensolver.yml') as f:
+            eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
+
+        if 'eigen' in parameters:
+            eigen_parameters.update(parameters['eigen'])
+        if 'inertia' in parameters:
+            inertia_parameters.update(parameters['inertia'])
+        if 'stability' in parameters:
+            stability_parameters.update(parameters['stability'])
+
+        return {'eigen': eigen_parameters,
+                'inertia': inertia_parameters,
+                'stability': stability_parameters}
+
+
     def normalise_eigen(self, v, beta, mode='none'):
         if mode=='none':
             return
@@ -317,7 +314,7 @@ class StabilitySolver(object):
             coef = beta.vector().norm('l2')
         elif mode=='max':
             coef = max(abs(beta.vector()[:]))
-        # import pdb; pdb.set_trace()   
+
         coeff_glob = np.array(0.0,'d')
         comm.Allreduce(coef, coeff_glob, op=mpi4py.MPI.MAX)
 
@@ -326,11 +323,9 @@ class StabilitySolver(object):
         log(LogLevel.DEBUG, '{}: v vector real {}'.format(rank, real))
 
         real = np.all(np.isfinite(beta.vector()[:]))
+
         log(LogLevel.DEBUG, '{}: beta vector real {}'.format(rank, real))
-
-        log(LogLevel.DEBUG, '{}: nonzero coeff {}'.format(rank, coef!=0))
         log(LogLevel.DEBUG, '{}: coeff {}'.format(rank, coef))
-
         log(LogLevel.DEBUG, '{}: coeff_glob {}'.format(rank, coeff_glob))
 
         vval = v.vector()[:]/coeff_glob
@@ -338,6 +333,9 @@ class StabilitySolver(object):
 
         v.vector().set_local(vval)
         beta.vector().set_local(bval)
+
+        v.vector().vec().ghostUpdate()
+        beta.vector().vec().ghostUpdate()
 
         return coeff_glob
 
@@ -406,31 +404,21 @@ class StabilitySolver(object):
         return np.all(vec[:]>0)
 
     def getInactiveSet(self):
-        gtol = self.stability_parameters['inactiveset_gatol']
-        ubtol = self.stability_parameters['inactiveset_ubtol']
+        gtol = self.parameters['stability']['inactiveset_gatol']
+        ubtol = self.parameters['stability']['inactiveset_ubtol']
 
-        self.inactivemarker1 = dolfin.Function(self.alpha.function_space())
-        self.inactivemarker2 = dolfin.Function(self.alpha.function_space())
-        self.inactivemarker3 = dolfin.Function(self.alpha.function_space())
         self.inactivemarker4 = dolfin.Function(self.alpha.function_space())
 
         Ealpha = assemble(self.Ealpha)
         mask = Ealpha[:] < gtol
         mask2 = self.alpha.vector()[:] < 1.-ubtol
-        mask3 = self.alpha.vector()[:] > self.alpha_old[:]
 
         inactive_set_alpha = set(np.where(mask2 == True)[0]) & set(np.where(mask == True)[0])
 
         log(LogLevel.DEBUG, 'DEBUG: E\'(z)(0|β) norm {}'.format(Ealpha.norm('l2')))
         log(LogLevel.DEBUG, 'DEBUG: Inactive set E\'(z)(0|β) #nodes {}'.format(len(set(np.where(mask == True)[0]))))
         log(LogLevel.DEBUG, 'DEBUG: Inactive set ub tol #nodes {}'.format(len(set(np.where(mask2 == True)[0]))))
-        log(LogLevel.DEBUG, 'DEBUG: Inactive set a-a0 #nodes {}'.format(len(set(np.where(mask3 == True)[0]))))
         log(LogLevel.DEBUG, 'DEBUG: Inactive set Ea cap a<ub #nodes {}'.format(len(set(np.where(mask2 == True)[0]) & set(np.where(mask == True)[0]))))
-
-        for field, mask in zip([self.inactivemarker1, self.inactivemarker2,
-            self.inactivemarker3], [mask, mask2, mask3]):
-
-            field.vector()[np.where(mask == True)[0]] = 1.
 
         self.inactivemarker4.vector()[list(inactive_set_alpha)] = 1.
         self.inactivemarker4.vector().vec().ghostUpdate()
@@ -442,7 +430,6 @@ class StabilitySolver(object):
         return inactive_set
 
     def reduce_Hessian(self, Hessian=None, restricted_dofs_is=None):
-        # if not Hessian: H = dolfin.as_backend_type(assemble(self.H)).mat()
         if isinstance(Hessian, ufl.form.Form):
             H = dolfin.as_backend_type(assemble(Hessian)).mat()
         elif isinstance(Hessian, petsc4py.PETSc.Mat):
@@ -464,15 +451,15 @@ class StabilitySolver(object):
             self.pc.setOptionsPrefix(prefix)
         self.pc.setFromOptions()
 
-        for parameter, value in self.inertia_parameters.items():
+        for parameter, value in self.parameters['inertia'].items():
             dolfin.PETScOptions.set(parameter, value)
             log(LogLevel.DEBUG, 'Setting up inertia solver: {}: {}'.format(prefix+parameter, value))
 
         dolfin.PETScOptions.set("inertia_ksp_type", "preonly")
         dolfin.PETScOptions.set("inertia_pc_type", "cholesky")
         dolfin.PETScOptions.set("inertia_pc_factor_mat_solver_type", "mumps")
-        # dolfin.PETScOptions.set("inertia_mat_mumps_icntl_24", 1)
-        # dolfin.PETScOptions.set("inertia_mat_mumps_icntl_13", 1)
+        dolfin.PETScOptions.set("inertia_mat_mumps_icntl_24", 1)
+        dolfin.PETScOptions.set("inertia_mat_mumps_icntl_13", 1)
 
         self.pc.setFromOptions()
 
@@ -504,7 +491,6 @@ class StabilitySolver(object):
         return None
 
     def stabilityLog(self):
-        # log(LogLevel.INFO, 'Inertia: Using user-provided Hessian')
 
         log(LogLevel.INFO, 'H norm {}'.format(assemble(self.H).norm('frobenius')))
         log(LogLevel.INFO, 'H reduced norm {}'.format(self.H_reduced.norm(2)))
@@ -513,7 +499,7 @@ class StabilitySolver(object):
         log(LogLevel.INFO, '________________________ STABILITY _________________________')
         log(LogLevel.INFO, 'Negative eigenvalues (based on inertia) {}'.format(negev))
         log(LogLevel.INFO, 'Stable (counting neg. eigs) {}'.format(not (negev > 0)))
-        log(LogLevel.INFO, 'Stable (Computing min. ev) {}'.format(eig.real > float(self.eigen_parameters['eig_rtol'])))
+        log(LogLevel.INFO, 'Stable (Computing min. ev) {}'.format(eig.real > float(self.parameters['eigen']['eig_rtol'])))
         log(LogLevel.INFO, 'Min eig {:.5e}'.format(self.mineig))
 
     def getFreeDofsIS(self, inactiveDofs):
@@ -525,19 +511,22 @@ class StabilitySolver(object):
         return index_set
 
     def getNonPositiveCount(self, eigs):
+        """
+        Get the count of nonpositive eigenvalues bases on solution of full eigenproblem
+        """
         negconv = sum(eigs[:,0]<0)
-        zeroconv = sum(abs(eigs[:,0]) < 3*float(self.eigen_parameters['eig_rtol']))
+        zeroconv = sum(abs(eigs[:,0]) < 3*float(self.parameters['eigen']['eig_rtol']))
 
         return (negconv, zeroconv)
 
     def postprocEigs(self, eigs, eigen):
         nconv = len(eigs)
+
         if nconv == 0:
             log(LogLevel.WARNING, 'Eigensolver did not converge')
             self.stable = negev <= 0
             self.eigs = []
             self.mineig = np.nan
-            # return (self.stable, int(negev))
 
 
         if nconv > 0:
@@ -548,15 +537,17 @@ class StabilitySolver(object):
                 log(LogLevel.INFO,  "%d %12e %12e" %(i, k[0], k[1]) )
             log(LogLevel.INFO, '')
 
+            _, self.minmode, _, _  = eigen.get_eigenpair(0)
+
         linsearch = []
 
         negconv, zeroconv = self.getNonPositiveCount(eigs)
 
-        numModes = min(negconv, self.stability_parameters['maxmodes'])
+        numModes = min(negconv, self.parameters['stability']['maxmodes'])
 
         if negconv > 0:
             for n in range(numModes):
-                log(LogLevel.INFO, 'Processing perturbation mode (neg eigenv) {}/{}'.format(n,self.stability_parameters['maxmodes']))
+                log(LogLevel.INFO, 'Processing perturbation mode (neg eigenv) {}/{}'.format(n,self.parameters['stability']['maxmodes']))
                 eig, u_r, u_im, err = eigen.get_eigenpair(n)
                 v_n, beta_n = u_r.split(deepcopy=True)
                 norm_coeff = self.normalise_eigen(v_n, beta_n, mode='max')
@@ -582,22 +573,23 @@ class StabilitySolver(object):
         pass
 
     def compileData(self, stabilityData, eigs):
-        import pdb; pdb.set_trace()
 
         self.eigs = eigs[:,0]
         self.mineig = eigs[:,0][0].real
         # self.negev = negev  # based on inertia
 
+
         if eigs[0,0] < dolfin.DOLFIN_EPS:
             # self.minmode = stabilityData[0]['beta_n']
             self.perturbation_v = stabilityData[0]['v_n']
             self.perturbation_beta = stabilityData[0]['beta_n']
-            self.perturbations_v = [stabilityData[n]['v_n'] for n in range(numModes)]
-            self.perturbations_beta = [stabilityData[n]['beta_n'] for n in range(numModes)]
+            self.perturbations_v = [mode['v_n'] for mode in stabilityData]
+            self.perturbations_beta = [mode['beta_n'] for mode in stabilityData]
 
     def solve(self, alpha_old):
         """
-        Solves second order stability
+        Solves second order problem returning stability flag and number of negative
+        eigenvalues.
         """
 
         self.alpha_old = alpha_old
@@ -605,8 +597,6 @@ class StabilitySolver(object):
 
         if self.is_elastic():
             log(LogLevel.INFO, 'Current state: elastic')
-            self.stable = True
-            self.negev = np.nan
         else:
             log(LogLevel.INFO, 'Current state: inelastic')
 
@@ -619,28 +609,25 @@ class StabilitySolver(object):
             self._Hessian,
             restricted_dofs_is=index_set)
 
-        eigen_tol = self.eigen_parameters['eig_rtol']
-
         eigen = EigenSolver(self.H, self.z,
-            restricted_dofs_is = index_set,
-            slepc_options=self.eigen_parameters,
-            initial_guess = self.getInitialGuess())
+            restricted_dofs_is=index_set,
+            slepc_options=self.parameters['eigen'],
+            initial_guess=self.getInitialGuess())
 
-        nconv, it = eigen.solve(min(self.stability_parameters['maxmodes'], negev+1))
+        nconv, it = eigen.solve(min(self.parameters['stability']['maxmodes'], negev+1))
 
         eigs = eigen.get_eigenvalues(nconv)
-
         self.sanityCheck(negev, eigs)
 
-        _stabilityData  = self.postprocEigs(eigs, eigen)
-
+        _stabilityData = self.postprocEigs(eigs, eigen)
         self.compileData(_stabilityData, eigs)
 
-        # stability data
+        self.i += 1
 
-        self.i +=1
+        self.stable = eigs[0, 0].real > float(self.parameters['eigen']['eig_rtol'])  # based on eigenvalue
 
-        self.stable = eigs[0, 0].real > float(self.eigen_parameters['eig_rtol'])  # based on eigenvalue
+        if self.is_elastic():
+            self.stable = True
 
         return (self.stable, int(negev))
 
