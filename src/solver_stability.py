@@ -286,6 +286,7 @@ class StabilitySolver(object):
 
         self.stable = ''
         self.negev = -1
+        self.mineig = 1.
 
         self.Ealpha = derivative(energy, self.alpha, dolfin.TestFunction(self.alpha.ufl_function_space()))
         self.energy = energy

@@ -133,7 +133,7 @@ class EquilibriumAM:
             log(LogLevel.DEBUG, 'DEBUG: res  {}'.format(Ealpha_residual.norm(2)))
 
             log(LogLevel.INFO,
-                "INFO: Equilibrium solver iteration {:2d}: convergence criterion: {},\nalpha_error={:.3e} (tol={:.3e}), alpha_max={:.4g}, energy = {:.6e}".format(
+                "Equilibrium solver iteration {:2d}: convergence criterion: {},\nalpha_error={:.3e} (tol={:.3e}), alpha_max={:.4g}, energy = {:.6e}".format(
                     it,
                     self.parameters['equilibrium']['criterion'],
                     criterion,
@@ -156,7 +156,7 @@ class EquilibriumAM:
         alt_min_data["energy"].append(assemble(self.energy))
 
         log(LogLevel.INFO,
-                "INFO: AM converged in {} iterations, err_alpha = {:.8e}, energy = {:.6e}".format(it, criterion, assemble(self.energy)))
+                "AM converged in {} iterations, err_alpha = {:.8e}, energy = {:.6e}".format(it, criterion, assemble(self.energy)))
 
         log(LogLevel.INFO,'')
 
@@ -232,8 +232,8 @@ class ElasticitySolver:
         snes.setFromOptions()
 
     def solve(self):
-        log(LogLevel.INFO, 'INFO: ________________________ EQUILIBRIUM _________________________')
-        log(LogLevel.INFO, "INFO: Solving elasticity")
+        log(LogLevel.INFO, '________________________ EQUILIBRIUM _________________________')
+        log(LogLevel.INFO, 'Solving elasticity')
         problem = self.problem
 
         u = problem.state["u"].vector()
@@ -258,7 +258,7 @@ class DamageSolver:
 
         """
 
-        log(LogLevel.INFO, "INFO: Solving damage")
+        log(LogLevel.INFO, "Solving damage")
 
         try:
             self.solver.solve()
