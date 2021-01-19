@@ -1,8 +1,6 @@
-# sys.path.append("../src/")
 import sys
 sys.path.append("../src/")
 sys.path.append("../scripts/")
-# from post_processing import compute_sig, local_project
 import site
 import sys
 
@@ -19,7 +17,6 @@ from dolfin import MPI
 import os
 import sympy
 import numpy as np
-# import post_processing as pp
 import petsc4py
 from functools import reduce
 import ufl
@@ -28,7 +25,6 @@ from string import Template
 petsc4py.init(sys.argv)
 
 from petsc4py import PETSc
-# from hashlib import md5
 from pathlib import Path
 import json
 import hashlib
@@ -45,7 +41,6 @@ from dolfin.cpp.log import log, LogLevel, set_log_level
 dolfin.parameters["std_out_all_processes"] = False
 
 from solvers import EquilibriumAM
-# EquilibriumNewton
 from solver_stability import StabilitySolver
 from linsearch import LineSearch
 
@@ -73,16 +68,13 @@ def numerical_test(
     bifurc_i = 0
     bifurcation_loads = []
 
-    # Create mesh and define function space
-    # Define Dirichlet boundaries
     comm = MPI.comm_world
 
     default_parameters = getDefaultParameters()
     default_parameters.update(user_parameters)
-    # FIXME: Not nice
+
     parameters = default_parameters
     parameters['code']['script'] = __file__
-    # import pdb; pdb.set_trace()
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
     outdir = '../output/traction/{}-{}CPU'.format(signature, size)
@@ -96,9 +88,6 @@ def numerical_test(
 
     geom_signature = hashlib.md5(str(d).encode('utf-8')).hexdigest()
 
-
-    # --------------------------------------------------------
-    # Mesh creation with gmsh
     Lx = parameters['geometry']['Lx']
     Ly = parameters['geometry']['Ly']
     n = parameters['geometry']['n']
@@ -109,7 +98,6 @@ def numerical_test(
     resolution = 100
 
     geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
-    # mesh = mshr.generate_mesh(geom, n * int(float(Lx / ell)))
     mesh = mshr.generate_mesh(geom, resolution)
 
     log(LogLevel.INFO, 'Number of dofs: {}'.format(mesh.num_vertices()*(1+parameters['general']['dim'])))
@@ -124,7 +112,6 @@ def numerical_test(
     Lx = parameters['geometry']['Lx']
     ell =  parameters['material']['ell']
     savelag = 1
-    # mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
 
     # Function Spaces
     V_u = dolfin.VectorFunctionSpace(mesh, "CG", 1)
@@ -210,8 +197,6 @@ def numerical_test(
 
     energy = total_energy(u,alpha)
 
-    # Hessian = derivative(derivative(Wppt*dx, z, TestFunction(Z)), z, TrialFunction(Z))
-
     def create_output(outdir):
         file_out = dolfin.XDMFFile(os.path.join(outdir, "output.xdmf"))
         file_out.parameters["functions_share_mesh"] = True
@@ -240,7 +225,6 @@ def numerical_test(
 
         return files
 
-
     files = create_output(outdir)
 
     solver = EquilibriumAM(energy, state, bcs, parameters=parameters)
@@ -255,7 +239,6 @@ def numerical_test(
 
     _eps = 1e-3
     load_steps = [0., tc-_eps, tc+_eps]
-
 
     time_data = []
     time_data_pd = []
@@ -283,19 +266,17 @@ def numerical_test(
         log(LogLevel.CRITICAL, 'CRITICAL: Solving load t = {:.2f}'.format(load))
         alpha_old.assign(alpha)
         ut.t = load
-        # (time_data_i, am_iter) = solver.solve(outdir)
         (time_data_i, am_iter) = solver.solve()
 
         # Second order stability conditions
         (stable, negev) = stability.solve(solver.damage.problem.lb)
-
         log(LogLevel.CRITICAL, 'Current state is{}stable'.format(' ' if stable else ' un'))
 
         mineig = stability.mineig if hasattr(stability, 'mineig') else 0.0
-        # log(LogLevel.INFO, 'INFO: lmbda min {}'.format(lmbda_min_prev))
         log(LogLevel.INFO, 'INFO: mineig {:.5e}'.format(mineig))
-        Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
 
+# -----------------------------------------------------------------------
+        Deltav = (mineig-lmbda_min_prev) if hasattr(stability, 'eigs') else 0
         if (mineig + Deltav)*(lmbda_min_prev+dolfin.DOLFIN_EPS) < 0 and not bifurcated:
             bifurcated = True
 
@@ -307,6 +288,7 @@ def numerical_test(
             bifurc_i += 1
 
         lmbda_min_prev = mineig if hasattr(stability, 'mineig') else 0.
+# -----------------------------------------------------------------------
 
         # we postpone the update after the stability check
         if stable:
@@ -336,73 +318,58 @@ def numerical_test(
                     hbounds.append(bounds)
                     en_perts.append(enpert)
 
-                if rank == 0:
-                    fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-                    plt.subplot(1, 1, 1)
-                    plt.set_cmap('binary')
-                    # # dolfin.plot(mesh, alpha = 1.)
-                    # dolfin.plot(
-                    #     project(stability.inactivemarker1, L2), alpha = 1., vmin=0., vmax=1.)
-                    # plt.title('derivative zero')
-                    # plt.subplot(1, 4, 2)
-                    # # dolfin.plot(mesh, alpha = .5)
-                    # dolfin.plot(
-                    #     project(stability.inactivemarker2, L2), alpha = 1., vmin=0., vmax=1.)
-                    # plt.title('ub tolerance')
-                    # plt.subplot(1, 4, 3)
-                    # # dolfin.plot(mesh, alpha = .5)
-                    # dolfin.plot(
-                    #     project(stability.inactivemarker3, L2), alpha = 1., vmin=0., vmax=1.)
-                    # plt.title('alpha-alpha_old')
-                    # plt.subplot(1, 4, 4)
-                    # dolfin.plot(mesh, alpha = .5)
-                    dolfin.plot(
-                        project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.)
-                    plt.title('intersec deriv, ub')
-                    plt.savefig(os.path.join(outdir, "inactivesets-{:.3f}-{:d}.pdf".format(load, iteration)))
+# -----------------------------------------------------------------------
 
+                # if rank == 0:
+                #     fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
+                #     plt.subplot(1, 1, 1)
+                #     plt.set_cmap('binary')
 
-                    plt.set_cmap('hot')
+                #     dolfin.plot(
+                #         project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.)
+                #     plt.title('intersec deriv, ub')
+                #     plt.savefig(os.path.join(outdir, "inactivesets-{:.3f}-{:d}.pdf".format(load, iteration)))
+                #     plt.set_cmap('hot')
 
-                    fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
+                #     fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
 
-                    for i,mode in enumerate(pert):
-                        plt.subplot(2, _nmodes+1, i+2)
-                        plt.axis('off')
-                        plot(mode[1], cmap = cm.ocean)
+                #     for i,mode in enumerate(pert):
+                #         plt.subplot(2, _nmodes+1, i+2)
+                #         plt.axis('off')
+                #         plot(mode[1], cmap = cm.ocean)
 
-                        plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
-                            .format(i, h_opts[i], i, stability.eigs[i], en_vars[i]), fontsize= 15)
+                #         plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
+                #             .format(i, h_opts[i], i, stability.eigs[i], en_vars[i]), fontsize= 15)
 
-                        # plt.title('mode {}'
-                        #     .format(i), fontsize= 15)
+                #         # plt.title('mode {}'
+                #         #     .format(i), fontsize= 15)
 
-                        plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
-                        plt.axis('off')
-                        _pert_beta = mode[1]
-                        _pert_v = mode[0]
+                #         plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
+                #         plt.axis('off')
+                #         _pert_beta = mode[1]
+                #         _pert_v = mode[0]
 
-                        if hbounds[i][0] == hbounds[i][1] == 0:
-                            plt.plot(hbounds[i][0], 0)
-                        else:
-                            hs = np.linspace(hbounds[i][0], hbounds[i][1], 100)
-                            z = np.polyfit(np.linspace(hbounds[i][0], hbounds[i][1],
-                                len(en_perts[i])), en_perts[i], parameters['stability']['order'])
-                            p = np.poly1d(z)
-                            plt.plot(hs, p(hs), c='k')
-                            plt.plot(np.linspace(hbounds[i][0], hbounds[i][1],
-                                len(en_perts[i])), en_perts[i], marker='o', markersize=10, c='k')
-                            # import pdb; pdb.set_trace()
-                            plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
-                            plt.axvline(h_opts[i], lw = .3, c='k')
-                            plt.axvline(0, lw=2, c='k')
-                        # plt.title('{}'.format(i))
-                        plt.tight_layout(h_pad=1.5, pad=1.5)
-                    # plt.legend()
-                    plt.savefig(os.path.join(outdir, "modes-{:.3f}-{}.pdf".format(load, iteration)))
-                    plt.close(fig)
-                    plt.clf()
-                    log(LogLevel.INFO, 'plotted modes')
+                #         if hbounds[i][0] == hbounds[i][1] == 0:
+                #             plt.plot(hbounds[i][0], 0)
+                #         else:
+                #             hs = np.linspace(hbounds[i][0], hbounds[i][1], 100)
+                #             z = np.polyfit(np.linspace(hbounds[i][0], hbounds[i][1],
+                #                 len(en_perts[i])), en_perts[i], parameters['stability']['order'])
+                #             p = np.poly1d(z)
+                #             plt.plot(hs, p(hs), c='k')
+                #             plt.plot(np.linspace(hbounds[i][0], hbounds[i][1],
+                #                 len(en_perts[i])), en_perts[i], marker='o', markersize=10, c='k')
+                #             # import pdb; pdb.set_trace()
+                #             plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
+                #             plt.axvline(h_opts[i], lw = .3, c='k')
+                #             plt.axvline(0, lw=2, c='k')
+                #         # plt.title('{}'.format(i))
+                #         plt.tight_layout(h_pad=1.5, pad=1.5)
+                #     # plt.legend()
+                #     plt.savefig(os.path.join(outdir, "modes-{:.3f}-{}.pdf".format(load, iteration)))
+                #     plt.close(fig)
+                #     plt.clf()
+                #     log(LogLevel.INFO, 'plotted modes')
 
                 cont_data_pre = compile_continuation_data(state, energy)
 
