@@ -69,82 +69,61 @@ def estimate(values, target):
 
 
 def plotstep():
-                    # if rank == 0:
-                #     fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
-                #     plt.subplot(1, 1, 1)
-                #     plt.set_cmap('binary')
+    if rank == 0:
+        fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
+        plt.subplot(1, 1, 1)
+        plt.set_cmap('binary')
 
-                #     dolfin.plot(
-                #         project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.)
-                #     plt.title('intersec deriv, ub')
-                #     plt.savefig(os.path.join(outdir, "inactivesets-{:.3f}-{:d}.pdf".format(load, iteration)))
-                #     plt.set_cmap('hot')
+        dolfin.plot(
+            project(stability.inactivemarker4, L2), alpha = 1., vmin=0., vmax=1.)
+        plt.title('intersec deriv, ub')
+        plt.savefig(os.path.join(outdir, "inactivesets-{:.3f}-{:d}.pdf".format(load, iteration)))
+        plt.set_cmap('hot')
 
-                #     fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
+        fig = plt.figure(dpi=80, facecolor='w', edgecolor='k')
 
-                #     for i,mode in enumerate(pert):
-                #         plt.subplot(2, _nmodes+1, i+2)
-                #         plt.axis('off')
-                #         plot(mode[1], cmap = cm.ocean)
+        for i,mode in enumerate(pert):
+            plt.subplot(2, _nmodes+1, i+2)
+            plt.axis('off')
+            plot(mode[1], cmap = cm.ocean)
 
-                #         plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
-                #             .format(i, h_opts[i], i, stability.eigs[i], en_vars[i]), fontsize= 15)
+            plt.title('mode {} $h^*$={:.3f}\n $\\lambda_{}$={:.3e} \n $\\Delta E$={:.3e}'
+                .format(i, h_opts[i], i, stability.eigs[i], en_vars[i]), fontsize= 15)
 
-                #         # plt.title('mode {}'
-                #         #     .format(i), fontsize= 15)
+            # plt.title('mode {}'
+            #     .format(i), fontsize= 15)
 
-                #         plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
-                #         plt.axis('off')
-                #         _pert_beta = mode[1]
-                #         _pert_v = mode[0]
+            plt.subplot(2, _nmodes+1, _nmodes+2+1+i)
+            plt.axis('off')
+            _pert_beta = mode[1]
+            _pert_v = mode[0]
 
-                #         if hbounds[i][0] == hbounds[i][1] == 0:
-                #             plt.plot(hbounds[i][0], 0)
-                #         else:
-                #             hs = np.linspace(hbounds[i][0], hbounds[i][1], 100)
-                #             z = np.polyfit(np.linspace(hbounds[i][0], hbounds[i][1],
-                #                 len(en_perts[i])), en_perts[i], parameters['stability']['order'])
-                #             p = np.poly1d(z)
-                #             plt.plot(hs, p(hs), c='k')
-                #             plt.plot(np.linspace(hbounds[i][0], hbounds[i][1],
-                #                 len(en_perts[i])), en_perts[i], marker='o', markersize=10, c='k')
-                #             # import pdb; pdb.set_trace()
-                #             plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
-                #             plt.axvline(h_opts[i], lw = .3, c='k')
-                #             plt.axvline(0, lw=2, c='k')
-                #         # plt.title('{}'.format(i))
-                #         plt.tight_layout(h_pad=1.5, pad=1.5)
-                #     # plt.legend()
-                #     plt.savefig(os.path.join(outdir, "modes-{:.3f}-{}.pdf".format(load, iteration)))
-                #     plt.close(fig)
-                #     plt.clf()
-                #     log(LogLevel.INFO, 'plotted modes')
-                # if rank == 0:
-                #     plt.figure()
-                #     plt.plot(mineigs, marker = 'o')
-                #     plt.axhline(0.)
-                #     plt.savefig(os.path.join(outdir, "mineigs-{:.3f}.pdf".format(load)))
+            if hbounds[i][0] == hbounds[i][1] == 0:
+                plt.plot(hbounds[i][0], 0)
+            else:
+                hs = np.linspace(hbounds[i][0], hbounds[i][1], 100)
+                z = np.polyfit(np.linspace(hbounds[i][0], hbounds[i][1],
+                    len(en_perts[i])), en_perts[i], parameters['stability']['order'])
+                p = np.poly1d(z)
+                plt.plot(hs, p(hs), c='k')
+                plt.plot(np.linspace(hbounds[i][0], hbounds[i][1],
+                    len(en_perts[i])), en_perts[i], marker='o', markersize=10, c='k')
+                # import pdb; pdb.set_trace()
+                plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
+                plt.axvline(h_opts[i], lw = .3, c='k')
+                plt.axvline(0, lw=2, c='k')
+            # plt.title('{}'.format(i))
+            plt.tight_layout(h_pad=1.5, pad=1.5)
+        # plt.legend()
+        plt.savefig(os.path.join(outdir, "modes-{:.3f}-{}.pdf".format(load, iteration)))
+        plt.close(fig)
+        plt.clf()
+        log(LogLevel.INFO, 'plotted modes')
 
-        # if rank == 0:
-        #     plt.close('all')
-
-        #     fig = plt.figure()
-        #     for i,d in enumerate(time_data_pd['eigs']):
-        #         # if d is not (np.inf or np.nan or float('inf')):
-        #         if np.isfinite(d).all():
-        #             # import pdb; pdb.set_trace()
-        #             lend = len(d) if isinstance(d, np.ndarray) else 1
-        #             plt.scatter([(time_data_pd['load'].values)[i]]*lend, d,
-        #                        c=np.where(np.array(d)<0., 'red', 'black'))
-
-        #     plt.axhline(0, c='k', lw=2.)
-        #     plt.xlabel('t')
-
-        #     log(LogLevel.INFO, 'Spectrum bifurcation loads : {}'.format(bifurcation_loads))
-        #     plt.xticks(list(plt.xticks()[0]) + bifurcation_loads)
-        #     [plt.axvline(bif, lw=2, c='k') for bif in bifurcation_loads]
-        #     plt.savefig(os.path.join(outdir, "spectrum.pdf"), bbox_inches='tight')
-        # # plt.plot()
+        plt.figure()
+        plt.plot(mineigs, marker = 'o')
+        plt.axhline(0.)
+        plt.savefig(os.path.join(outdir, "mineigs-{:.3f}.pdf".format(load)))
 
 
     def plotPerturbationData():
