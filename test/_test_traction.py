@@ -10,6 +10,7 @@ import sys
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import cm
 
 # import mshr
 import dolfin
@@ -54,6 +55,32 @@ code_parameters = get_versions()
 
 set_log_level(LogLevel.INFO)
 
+def perturbState(state, perturb):
+    """ Perturbs current state with perturbation
+
+        Arguments
+        ---------
+
+        state: dict like {'u': Coefficient, 'alpha': Coefficient}
+        perturb: dict like {'v': Coefficient, 'beta': Coefficient, 'h': Float}
+
+    """
+
+    u = state['u']
+    alpha = state['alpha']
+    perturbation_v = perturb['v']
+    perturbation_beta = perturb['beta']
+    h_opt = perturb['h']
+
+    uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
+    aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
+
+    u.vector()[:] = uval
+    alpha.vector()[:] = aval
+    u.vector().vec().ghostUpdate()
+    alpha.vector().vec().ghostUpdate()
+
+    return
 
 def estimate(values, target):
     """
@@ -108,7 +135,6 @@ def plotstep():
                 plt.plot(hs, p(hs), c='k')
                 plt.plot(np.linspace(hbounds[i][0], hbounds[i][1],
                     len(en_perts[i])), en_perts[i], marker='o', markersize=10, c='k')
-                # import pdb; pdb.set_trace()
                 plt.plot(hs, stability.eigs[i]*hs**2, c='r', lw=.3)
                 plt.axvline(h_opts[i], lw = .3, c='k')
                 plt.axvline(0, lw=2, c='k')
@@ -149,7 +175,6 @@ def numerical_test(
     bifurcated = False
     bifurcation_loads = []
     save_current_bifurcation = False
-    bifurc_i = 0
     bifurcation_loads = []
 
     comm = MPI.comm_world
@@ -330,19 +355,13 @@ def numerical_test(
 
     time_data = []
     time_data_pd = []
-    spacetime = []
-    lmbda_min_prev = 1e-6
-    bifurcated = False
     bifurcation_loads = []
     save_current_bifurcation = False
-    bifurc_i = 0
+
     alpha_bif = dolfin.Function(V_alpha)
     alpha_bif_old = dolfin.Function(V_alpha)
-    bifurcation_loads = []
-    lmbdas = []
 
-    perturb = False
-    from matplotlib import cm
+    bifurcation_loads = []
 
     save_bifurcation = 1
 
@@ -372,9 +391,10 @@ def numerical_test(
 
             while stable == False:
                 log(LogLevel.INFO, 'Continuation iteration {}'.format(iteration))
-                plt.close('all')
-                pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
-                _nmodes = len(pert)
+                iteration += 1
+
+                # pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
+                # _nmodes = len(pert)
 
                 # plotstep()
 
@@ -383,35 +403,34 @@ def numerical_test(
 
                 perturbation_v    = stability.perturbations_v[opt_mode]
                 perturbation_beta = stability.perturbations_beta[opt_mode]
+
                 minmode = stability.minmode
-                (perturbation_v, perturbation_beta) = stability.perturbation_v, stability.perturbation_beta
+
+                # (perturbation_v, perturbation_beta) = stability.perturbation_v, stability.perturbation_beta
 
                 (hmin, hmax) = linesearch.admissible_interval(alpha, alpha_old, perturbation_beta)
-                hs = np.linspace(hmin,hmax,20)
+
+                hs = np.linspace(hmin, hmax, 20)
                 energy_vals = np.array([energy_1d(h, perturbation_v, perturbation_beta) for h in hs])
-                stability.solve(solver.damage.problem.lb)
 
-                Hzz = assemble(stability.H*minmode*minmode)
-                Gz = assemble(stability.J*minmode)
-                mineig_z = Hzz/assemble(dot(minmode,minmode)*dx)
+                # stability.solve(solver.damage.problem.lb)
 
-                energy_vals_quad = energy_1d(0) + hs*Gz + hs**2*Hzz/2
-                h_opt = np.argmin(energy_vals)
+                # sanityCheck(stability, minmode)
+                # Hzz = assemble(stability.H*minmode*minmode)
+                # Gz = assemble(stability.J*minmode)
+                # mineig_z = Hzz/assemble(dot(minmode,minmode)*dx)
+
+                # energy_vals_quad = energy_1d(0) + hs*Gz + hs**2*Hzz/2
+
+                h_opt = hs[np.argmin(energy_vals)]
                 log(LogLevel.INFO, 'Computed h_opt {}'.format(h_opt))
 
-                iteration += 1
-                log(LogLevel.CRITICAL, 'Bifurcating')
+                perturbation = {'v': stability.perturbations_v[opt_mode], 
+                                'beta': stability.perturbations_beta[opt_mode], 
+                                'h': h_opt}
 
-# ---------------------------------------------------------------
-                # admissible perturbation
-                uval = u.vector()[:]     + h_opt * perturbation_v.vector()[:]
-                aval = alpha.vector()[:] + h_opt * perturbation_beta.vector()[:]
 
-                u.vector()[:] = uval
-                alpha.vector()[:] = aval
-                u.vector().vec().ghostUpdate()
-                alpha.vector().vec().ghostUpdate()
-# ---------------------------------------------------------------
+                perturbState(state, perturbation)
 
                 (time_data_i, am_iter) = solver.solve(outdir)
                 (stable, negev) = stability.solve(solver.damage.problem.lb)
@@ -421,7 +440,7 @@ def numerical_test(
                 cont_data_post = compile_continuation_data(state, energy)
 
                 relDeltaE = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy']
-                release = relDeltaE < 0 and np.abs(DeltaE) > parameters['stability']['cont_rtol']
+                release = relDeltaE < 0 and np.abs(relDeltaE) > parameters['stability']['cont_rtol']
 
                 # continuation criterion
                 if abs(np.diff(mineigs)[-1]) > parameters['stability']['cont_rtol']:
@@ -456,7 +475,7 @@ def numerical_test(
                     file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
                     file.write_checkpoint(alpha, 'alpha', 0, append=True)
 
-            #     np.save(os.path.join(outdir, 'energy_perturbations'), en_perts, allow_pickle=True, fix_imports=True)
+                np.save(os.path.join(outdir, 'energy_perturbations'), en_perts, allow_pickle=True, fix_imports=True)
 
                 with files['eigen'] as file:
                     _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
