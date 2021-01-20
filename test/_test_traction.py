@@ -152,18 +152,49 @@ def plotstep():
         plt.savefig(os.path.join(outdir, "mineigs-{:.3f}.pdf".format(load)))
 
 
-    def plotPerturbationData():
-        if rank == 0:
-            plt.figure()
-            plt.plot(hs,energy_vals, marker = 'o', label="exact")
-            plt.plot(hs,energy_vals_quad, label="quadratic approximation")
-            plt.legend()
-            plt.title("eig {:.4f} vs {:.4f} computed".format(mineig_z, mineig))
-            plt.axvline(h_opt)
-            plt.savefig(os.path.join(outdir, "energy1d-{:.3f}.pdf".format(load)))
+def plotPerturbationData():
+    if rank == 0:
+        plt.figure()
+        plt.plot(hs,energy_vals, marker = 'o', label="exact")
+        plt.plot(hs,energy_vals_quad, label="quadratic approximation")
+        plt.legend()
+        plt.title("eig {:.4f} vs {:.4f} computed".format(mineig_z, mineig))
+        plt.axvline(h_opt)
+        plt.savefig(os.path.join(outdir, "energy1d-{:.3f}.pdf".format(load)))
 
     pass
 
+def savePerturbationData():
+    log(LogLevel.INFO, 'Save perturbation data')
+
+    with files['bifurcation'] as file:
+        for n in range(len(pert)):
+            mode = dolfin.project(stability.perturbations_beta[n], V_alpha)
+            modename = 'beta-%d'%n
+            mode.rename(modename, modename)
+            log(LogLevel.INFO, 'Saved mode {}'.format(modename))
+            file.write(mode, load)
+
+    with files['file_bif_postproc'] as file:
+        leneigs = len(modes)
+        maxmodes = min(3, leneigs)
+        beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
+        log(LogLevel.DEBUG, 'DEBUG: irrev {}'.format(alpha.vector()-alpha_old.vector()))
+        file.write_checkpoint(beta0v, 'beta0', 0, append = True)
+        file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
+        file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
+        file.write_checkpoint(alpha, 'alpha', 0, append=True)
+
+    np.save(os.path.join(outdir, 'energy_perturbations'), en_perts, allow_pickle=True, fix_imports=True)
+
+    with files['eigen'] as file:
+        _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
+        _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
+        _v.rename('perturbation displacement', 'perturbation displacement')
+        _beta.rename('perturbation damage', 'perturbation damage')
+        file.write(_v, load)
+        file.write(_beta, load)
+    pass
 
 def numerical_test(
     user_parameters
@@ -393,9 +424,6 @@ def numerical_test(
                 log(LogLevel.INFO, 'Continuation iteration {}'.format(iteration))
                 iteration += 1
 
-                # pert = [(_v, _b) for _v, _b in zip(stability.perturbations_v, stability.perturbations_beta)]
-                # _nmodes = len(pert)
-
                 # plotstep()
 
                 cont_data_pre = compile_continuation_data(state, energy)
@@ -404,43 +432,28 @@ def numerical_test(
                 perturbation_v    = stability.perturbations_v[opt_mode]
                 perturbation_beta = stability.perturbations_beta[opt_mode]
 
-                minmode = stability.minmode
-
-                # (perturbation_v, perturbation_beta) = stability.perturbation_v, stability.perturbation_beta
-
                 (hmin, hmax) = linesearch.admissible_interval(alpha, alpha_old, perturbation_beta)
 
                 hs = np.linspace(hmin, hmax, 20)
                 energy_vals = np.array([energy_1d(h, perturbation_v, perturbation_beta) for h in hs])
 
-                # stability.solve(solver.damage.problem.lb)
-
-                # sanityCheck(stability, minmode)
-                # Hzz = assemble(stability.H*minmode*minmode)
-                # Gz = assemble(stability.J*minmode)
-                # mineig_z = Hzz/assemble(dot(minmode,minmode)*dx)
-
-                # energy_vals_quad = energy_1d(0) + hs*Gz + hs**2*Hzz/2
-
                 h_opt = hs[np.argmin(energy_vals)]
+
                 log(LogLevel.INFO, 'Computed h_opt {}'.format(h_opt))
 
                 perturbation = {'v': stability.perturbations_v[opt_mode], 
                                 'beta': stability.perturbations_beta[opt_mode], 
                                 'h': h_opt}
 
-
                 perturbState(state, perturbation)
 
                 (time_data_i, am_iter) = solver.solve(outdir)
                 (stable, negev) = stability.solve(solver.damage.problem.lb)
                 mineigs.append(stability.mineig)
+
                 log(LogLevel.INFO, 'Continuation iteration {}, current state is{}stable'.format(iteration, ' ' if stable else ' un'))
 
                 cont_data_post = compile_continuation_data(state, energy)
-
-                relDeltaE = (cont_data_post['energy']-cont_data_pre['energy'])/cont_data_pre['energy']
-                release = relDeltaE < 0 and np.abs(relDeltaE) > parameters['stability']['cont_rtol']
 
                 # continuation criterion
                 if abs(np.diff(mineigs)[-1]) > parameters['stability']['cont_rtol']:
@@ -454,74 +467,48 @@ def numerical_test(
 
             if save_current_bifurcation:
                 plotPerturbationData()
+                savePerturbationData()
+                save_current_bifurcation = False
 
-                log(LogLevel.INFO, 'Save perturbation data')
+        def compileTimeData(time_data_i, load):
 
-                with files['bifurcation'] as file:
-                    for n in range(len(pert)):
-                        mode = dolfin.project(stability.perturbations_beta[n], V_alpha)
-                        modename = 'beta-%d'%n
-                        mode.rename(modename, modename)
-                        log(LogLevel.INFO, 'Saved mode {}'.format(modename))
-                        file.write(mode, load)
+            time_data_i["load"] = load
+            time_data_i["alpha_max"] = max(alpha.vector()[:])
+            time_data_i["elastic_energy"] = dolfin.assemble(elastic_energy(
+                u,alpha, E=E, nu=nu, eps0t=eps0t, k_res=k_res))
+            time_data_i["dissipated_energy"] = dolfin.assemble(
+                (w + w_1 * parameters['material']['ell'] ** 2. * inner(grad(alpha), grad(alpha)))*dx)
+            time_data_i["stable"] = stability.stable
+            time_data_i["# neg ev"] = stability.negev
+            time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
+            time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*ds(1))
 
-                with files['file_bif_postproc'] as file:
-                    leneigs = len(modes)
-                    maxmodes = min(3, leneigs)
-                    beta0v = dolfin.project(stability.perturbation_beta, V_alpha)
-                    log(LogLevel.DEBUG, 'DEBUG: irrev {}'.format(alpha.vector()-alpha_old.vector()))
-                    file.write_checkpoint(beta0v, 'beta0', 0, append = True)
-                    file.write_checkpoint(alpha_bif_old, 'alpha-old', 0, append=True)
-                    file.write_checkpoint(alpha_bif, 'alpha-bif', 0, append=True)
-                    file.write_checkpoint(alpha, 'alpha', 0, append=True)
+            log(LogLevel.INFO,
+                "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4e}".format(
+                    time_data_i["load"],
+                    time_data_i["iterations"][0],
+                    time_data_i["alpha_error"][0]))
 
-                np.save(os.path.join(outdir, 'energy_perturbations'), en_perts, allow_pickle=True, fix_imports=True)
+            return time_data_i
 
-                with files['eigen'] as file:
-                    _v = dolfin.project(dolfin.Constant(h_opt)*perturbation_v, V_u)
-                    _beta = dolfin.project(dolfin.Constant(h_opt)*perturbation_beta, V_alpha)
-                    _v.rename('perturbation displacement', 'perturbation displacement')
-                    _beta.rename('perturbation damage', 'perturbation damage')
-                    file.write(_v, load)
-                    file.write(_beta, load)
-                save_current_bifurcation -= 1
-
-        time_data_i["load"] = load
-        time_data_i["alpha_max"] = max(alpha.vector()[:])
-        time_data_i["elastic_energy"] = dolfin.assemble(elastic_energy(
-            u,alpha, E=E, nu=nu, eps0t=eps0t, k_res=k_res))
-        time_data_i["dissipated_energy"] = dolfin.assemble(
-            (w + w_1 * parameters['material']['ell'] ** 2. * inner(grad(alpha), grad(alpha)))*dx)
-        time_data_i["stable"] = stability.stable
-        time_data_i["# neg ev"] = stability.negev
-        time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
-        time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*ds(1))
-
-        log(LogLevel.INFO,
-            "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4e}".format(
-                time_data_i["load"],
-                time_data_i["iterations"][0],
-                time_data_i["alpha_error"][0]))
-
-        time_data.append(time_data_i)
+        time_data.append(compileTimeData(time_data_i, load))
         time_data_pd = pd.DataFrame(time_data)
 
-# ================================
-#               write out
+        def outputData():
+            np.save(os.path.join(outdir, 'bifurcation_loads'), bifurcation_loads, allow_pickle=True, fix_imports=True)
 
-        np.save(os.path.join(outdir, 'bifurcation_loads'), bifurcation_loads, allow_pickle=True, fix_imports=True)
+            with files['output'] as file:
+                file.write(alpha, load)
+                file.write(u, load)
 
-        with files['output'] as file:
-            file.write(alpha, load)
-            file.write(u, load)
+            with files['postproc'] as file:
+                file.write_checkpoint(alpha, "alpha-{}".format(step), step, append = True)
+                file.write_checkpoint(u, "u-{}".format(step), step, append = True)
+                log(LogLevel.INFO, 'Written postprocessing step {}'.format(step))
 
-        with files['postproc'] as file:
-            file.write_checkpoint(alpha, "alpha-{}".format(step), step, append = True)
-            file.write_checkpoint(u, "u-{}".format(step), step, append = True)
-            log(LogLevel.INFO, 'Written postprocessing step {}'.format(step))
+            time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
 
-        time_data_pd.to_json(os.path.join(outdir, "time_data.json"))
-
+        outputData()
     return time_data_pd, outdir
 
 
@@ -533,7 +520,6 @@ if __name__ == "__main__":
     parser.add_argument("--parameters", "-p", type=str, default=None)
     args, unknown = parser.parse_known_args()
 
-    # Parameters
     if args.parameters:
         print('loading {}'.format(args.parameters))
         with open(args.parameters) as f:
@@ -574,7 +560,7 @@ if __name__ == "__main__":
 
         (fig2, ax1, ax2) =pp.plot_spectrum(parameters, data, tc)
         plt.legend(loc='lower left')
-        # ax2.set_ylim(-1e-7, 2e-4)
+
         fig2.savefig(os.path.join(experiment, "spectrum.pdf"), bbox_inches='tight')
 
         list_timings(TimingClear.keep, [TimingType.wall, TimingType.system])
