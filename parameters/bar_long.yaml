@@ -1,0 +1,87 @@
+general:
+    dim: 2
+material:
+    E: 1
+    # ell: 0.588235         # short
+    ell: 0.2              # long
+    sigma_D0: 1.0
+    k_res: 1.e-8
+    nu: 0.
+
+loading: 
+    load_min: .0
+    load_max: 3.
+    n_steps: 100
+
+geometry:
+    Lx: 1.
+    Ly: .1
+    n: 5
+
+equilibrium:
+    tol: 1e-5
+    max_it: 500
+    criterion: linf                                 # avail: h1, l2, residual
+
+elasticity:
+    snes_type: ksponly
+    ksp_type: preonly
+    pc_factor_mat_solver_type: mumps
+    pc_type: lu
+    ksp_atol: 1.0e-08
+    ksp_rtol: 1.0e-08
+    ksp_stol: 1.0e-08
+
+damage:
+    type:
+        - SNES
+    snes:
+        snes_type: vinewtonrsls
+        snes_linesearch_type: basic
+        ksp_type: preonly
+        pc_type: lu
+        pc_factor_mat_solver_type: mumps
+        snes_atol: 1.0e-08
+        ksp_rtol: 1.0e-08
+        snes_rtol: 1.0e-08
+        snes_stol: 0.0
+        snes_max_it: 500
+        snes_divergence_tolerance: -1.0
+
+newton:
+    snes_type: vinewtonrsls
+    snes_linesearch_type: basic
+    ksp_type: preonly
+    pc_type: lu
+    pc_factor_mat_solver_type: mumps
+    snes_atol: 1.0e-08
+    ksp_rtol: 1.0e-08
+    snes_rtol: 1.0e-08
+    snes_stol: 0.0
+    snes_max_it: 502
+    snes_divergence_tolerance: -1.0
+
+stability:
+    order: 3
+    projection: 'None'
+    maxmodes: 3
+    checkstability: 'True'
+    continuation: 'False'
+    cont_rtol: 1.0e-10
+    inactiveset_gatol: 1.e-8
+    inactiveset_ubtol: 1.e-3
+
+inertia:
+    # MUMPS
+    ksp_type: "preonly"
+    pc_type: "cholesky"
+    pc_factor_mat_solver_type: "mumps"
+    mat_mumps_icntl_24: 1
+    mat_mumps_icntl_13: 1
+
+eigen:
+    eps_type: "krylovschur"
+    # eps_type: "lanczos"
+    eps_tol: 1.e-7
+    eig_rtol: 1.e-7
+    eps_max_it: 100
