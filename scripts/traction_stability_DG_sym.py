@@ -299,6 +299,7 @@ def numerical_test(
     # Problem definition
     h = CellDiameter(mesh)
     h_avg = 0.5 * (h('+') + h('-'))
+    normal = FacetNormal(mesh)
     pen = 1e3 #Penalty parameter for DG
     k_res = parameters['material']['k_res']
     a = (1 - alpha) ** 2. + k_res
@@ -328,11 +329,11 @@ def numerical_test(
     def C(tensor, E=E, nu=nu): #useful for penalty term
         mu    = E/(2.0*(1.0 + nu))
         lmbda = E*nu / (1 - nu)**2 #plane stress?
-        return 2*mu * tensor + lmbda*tr(tensor)*Identity(ndim)
+        return 2*mu * tensor + lmbda*tr(tensor)*Identity(2)
 
     def penalty_energy(u, alpha, k_res=k_res):
         a = (1 - alpha('+')) ** 2. + k_res
-        return 0.5*pen*a/h_avg * inner(outer(jump(u), n('+')),C(outer(jump(u), n('+')))) * dS + 0.5*pen/h * inner(outer(u,n('+')),C(outer(u,n('+')))) * (ds(1)+ds(2)) - pen/h * inner(outer(u_D,n('+')),C(outer(u,n('+')))) * ds(1)
+        return 0.5*pen*a/h_avg * inner(outer(jump(u), normal('+')),C(outer(jump(u), normal('+')))) * dS + 0.5*pen/h * inner(outer(u,normal('+')),C(outer(u,normal('+')))) * (ds(1)+ds(2)) - pen/h * inner(outer(ut,normal('+')),C(outer(u,normal('+')))) * ds(1)
 
     def consistency_energy(u, alpha, k_res=k_res):
         a = (1 - alpha) ** 2. + k_res
