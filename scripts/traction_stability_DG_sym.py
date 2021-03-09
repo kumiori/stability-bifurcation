@@ -283,12 +283,13 @@ def numerical_test(
     left.mark(mf, 2)
     bottom.mark(mf, 3)
     ut = dolfin.Expression("t", t=0.0, degree=0)
-    bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), left),
-             dolfin.DirichletBC(V_u.sub(0), ut, right),
-             dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
+    #bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), left),
+    #         dolfin.DirichletBC(V_u.sub(0), ut, right),
+    #         dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
+    bcs_u = []
     bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0), left), dolfin.DirichletBC(V_alpha, dolfin.Constant(0), right)]
 
-    bcs = {"damage": bcs_alpha} #, "elastic": bcs_u}
+    bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 
     ds = dolfin.Measure("ds", subdomain_data=mf)
     dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=mesh)
@@ -333,12 +334,12 @@ def numerical_test(
 
     def penalty_energy(u, alpha, k_res=k_res):
         a = (1 - alpha('+')) ** 2. + k_res
-        return 0.5*pen*a/h_avg * inner(outer(jump(u), normal('+')),C(outer(jump(u), normal('+')))) * dS + 0.5*pen/h * inner(outer(u,normal('+')),C(outer(u,normal('+')))) * (ds(1)+ds(2)) - pen/h * inner(outer(ut,normal('+')),C(outer(u,normal('+')))) * ds(1)
+        return 0.5*pen*a/h_avg * inner(outer(jump(u), normal('+')),C(outer(jump(u), normal('+')))) * dS + 0.5*pen/h * inner(outer(u,normal('+')),C(outer(u,normal('+')))) * (ds(1)+ds(2)) - pen/h * inner(outer(ut*normal('+'),normal('+')),C(outer(u,normal('+')))) * ds(1)
 
     def consistency_energy(u, alpha, k_res=k_res):
         a = (1 - alpha) ** 2. + k_res
         sigma = a * C(sym(grad(u)))
-        return -inner(dot(avg(sigma),n('+')), jump(u))*dS #lacking the term on the boundary?
+        return -inner(dot(avg(sigma),normal('+')), jump(u))*dS #lacking the term on the boundary?
 
     def dissipated_energy(alpha,w_1=w_1,ell=ell):
         return w_1 *( alpha + ell** 2.*inner(grad(alpha), grad(alpha)))*dx
