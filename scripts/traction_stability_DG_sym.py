@@ -254,8 +254,8 @@ def numerical_test(
     savelag = 1
 
     # Function Spaces
-    V_u = dolfin.VectorFunctionSpace(mesh, "CG", 1)
-    V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
+    V_u = dolfin.VectorFunctionSpace(mesh, "DG", 1) #DG for displacement
+    V_alpha = dolfin.FunctionSpace(mesh, "CR", 1) #Crouzeix-Raviart for damage
     L2 = dolfin.FunctionSpace(mesh, "DG", 0)
     u = dolfin.Function(V_u, name="Total displacement")
     u.rename('u', 'u')
@@ -297,6 +297,7 @@ def numerical_test(
 
     # -----------------------
     # Problem definition
+    pen = 1e3 #Penalty parameter for DG
     k_res = parameters['material']['k_res']
     a = (1 - alpha) ** 2. + k_res
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
@@ -321,7 +322,19 @@ def numerical_test(
         eps = sym(grad(u))
         Wt = a*E*nu/(2*(1-nu**2.)) * tr(eps)**2.                                \
             + a*E/(2.*(1+nu))*(inner(eps, eps))
-        return Wt * dx 
+        return Wt * dx
+
+    def C(tensor): #useful for penalty term
+    """Stress tensor of the undamaged material as a function of the displacement"""
+    mu    = E/(2.0*(1.0 + nu))
+    lmbda = E*nu / (1 - 2*nu) / (1 - nu)
+    return 2*mu * tensor + lmbda*tr(tensor)*Identity(ndim)
+
+    def penalty_energy():
+        return 0.5*pen*a(alpha('+'))/h_avg * inner(outer(jump(u), n('+')),C(outer(jump(u), n('+')))) * dS + 0.5*pen/h * inner(outer(u,n('+')),C(outer(u,n('+')))) * ds(1) - pen_value/h * inner(outer(u_D,n('+')),C(outer(u,n('+')))) * ds(1) #change boundary integrals
+
+    def consistency_energy():
+        return -inner(dot(avg(sigma(u,alpha)),n('+')), jump(u))*dS
 
     def dissipated_energy(alpha,w_1=w_1,ell=ell):
         return w_1 *( alpha + ell** 2.*inner(grad(alpha), grad(alpha)))*dx
