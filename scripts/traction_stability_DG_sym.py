@@ -286,9 +286,9 @@ def numerical_test(
     bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), left),
              dolfin.DirichletBC(V_u.sub(0), ut, right),
              dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
-    bcs_alpha = []
+    bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0), left), dolfin.DirichletBC(V_alpha, dolfin.Constant(0), right)]
 
-    bcs = {"damage": bcs_alpha, "elastic": bcs_u}
+    bcs = {"damage": bcs_alpha} #, "elastic": bcs_u}
 
     ds = dolfin.Measure("ds", subdomain_data=mf)
     dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=mesh)
@@ -297,6 +297,8 @@ def numerical_test(
 
     # -----------------------
     # Problem definition
+    h = CellDiameter(mesh)
+    h_avg = 0.5 * (h('+') + h('-'))
     pen = 1e3 #Penalty parameter for DG
     k_res = parameters['material']['k_res']
     a = (1 - alpha) ** 2. + k_res
@@ -320,21 +322,22 @@ def numerical_test(
     def elastic_energy(u,alpha, E=E, nu=nu, eps0t=eps0t, k_res=k_res):
         a = (1 - alpha) ** 2. + k_res
         eps = sym(grad(u))
-        Wt = a*E*nu/(2*(1-nu**2.)) * tr(eps)**2.                                \
-            + a*E/(2.*(1+nu))*(inner(eps, eps))
+        Wt = a*E*nu/(2*(1-nu**2.)) * tr(eps)**2. + a*E/(2.*(1+nu))*(inner(eps, eps))
         return Wt * dx
 
-    def C(tensor): #useful for penalty term
-    """Stress tensor of the undamaged material as a function of the displacement"""
-    mu    = E/(2.0*(1.0 + nu))
-    lmbda = E*nu / (1 - 2*nu) / (1 - nu)
-    return 2*mu * tensor + lmbda*tr(tensor)*Identity(ndim)
+    def C(tensor, E=E, nu=nu): #useful for penalty term
+        mu    = E/(2.0*(1.0 + nu))
+        lmbda = E*nu / (1 - nu)**2 #plane stress?
+        return 2*mu * tensor + lmbda*tr(tensor)*Identity(ndim)
 
-    def penalty_energy():
-        return 0.5*pen*a(alpha('+'))/h_avg * inner(outer(jump(u), n('+')),C(outer(jump(u), n('+')))) * dS + 0.5*pen/h * inner(outer(u,n('+')),C(outer(u,n('+')))) * ds(1) - pen_value/h * inner(outer(u_D,n('+')),C(outer(u,n('+')))) * ds(1) #change boundary integrals
+    def penalty_energy(u, alpha, k_res=k_res):
+        a = (1 - alpha('+')) ** 2. + k_res
+        return 0.5*pen*a/h_avg * inner(outer(jump(u), n('+')),C(outer(jump(u), n('+')))) * dS + 0.5*pen/h * inner(outer(u,n('+')),C(outer(u,n('+')))) * (ds(1)+ds(2)) - pen/h * inner(outer(u_D,n('+')),C(outer(u,n('+')))) * ds(1)
 
-    def consistency_energy():
-        return -inner(dot(avg(sigma(u,alpha)),n('+')), jump(u))*dS
+    def consistency_energy(u, alpha, k_res=k_res):
+        a = (1 - alpha) ** 2. + k_res
+        sigma = a * C(sym(grad(u)))
+        return -inner(dot(avg(sigma),n('+')), jump(u))*dS #lacking the term on the boundary?
 
     def dissipated_energy(alpha,w_1=w_1,ell=ell):
         return w_1 *( alpha + ell** 2.*inner(grad(alpha), grad(alpha)))*dx
@@ -346,11 +349,12 @@ def numerical_test(
                             eps0t=eps0t):
         elastic_energy_ = elastic_energy(u,alpha, E=E, nu=nu, eps0t=eps0t, k_res=k_res)
         dissipated_energy_ = dissipated_energy(alpha,w_1=w_1,ell=ell)
-        return elastic_energy_ + dissipated_energy_
+        penalty_energy_ = penalty_energy(u, alpha, k_res=k_res)
+        consistency_energy_ = consistency_energy(u, alpha, k_res=k_res)
+        return elastic_energy_ + dissipated_energy_ + penalty_energy_ + consistency_energy_
 
     def energy_1d(h, perturbation_v=Function(u.function_space()), perturbation_beta=Function(alpha.function_space())):
-        return assemble(total_energy(u + float(h) * perturbation_v,
-                                alpha + float(h) * perturbation_beta))
+        return assemble(total_energy(u + float(h) * perturbation_v, alpha + float(h) * perturbation_beta))
 
     energy = total_energy(u,alpha)
 
