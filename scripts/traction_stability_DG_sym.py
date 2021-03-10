@@ -334,7 +334,7 @@ def numerical_test(
 
     def penalty_energy(u, alpha, k_res=k_res):
         a = (1 - alpha('+')) ** 2. + k_res
-        return 0.5*pen*a/h_avg * inner(outer(jump(u), normal('+')),C(outer(jump(u), normal('+')))) * dS + 0.5*pen/h * inner(outer(u,normal('+')),C(outer(u,normal('+')))) * (ds(1)+ds(2)) - pen/h * inner(outer(ut*normal('+'),normal('+')),C(outer(u,normal('+')))) * ds(1)
+        return 0.5*pen*a/h_avg * inner(outer(jump(u), normal('+')),C(outer(jump(u), normal('+')))) * dS + 0.5*pen/h * inner(outer(u,normal),C(outer(u,normal))) * (ds(1)+ds(2)) - pen/h * inner(outer(ut*normal,normal),C(outer(u,normal))) * ds(1)
 
     def consistency_energy(u, alpha, k_res=k_res):
         a = (1 - alpha) ** 2. + k_res
@@ -344,16 +344,12 @@ def numerical_test(
     def dissipated_energy(alpha,w_1=w_1,ell=ell):
         return w_1 *( alpha + ell** 2.*inner(grad(alpha), grad(alpha)))*dx
 
-    def total_energy(u, alpha, k_res=k_res, w_1=w_1, 
-                            E=E, 
-                            nu=nu, 
-                            ell=ell,
-                            eps0t=eps0t):
+    def total_energy(u, alpha, k_res=k_res, w_1=w_1, E=E, nu=nu, ell=ell, eps0t=eps0t):
         elastic_energy_ = elastic_energy(u,alpha, E=E, nu=nu, eps0t=eps0t, k_res=k_res)
         dissipated_energy_ = dissipated_energy(alpha,w_1=w_1,ell=ell)
         penalty_energy_ = penalty_energy(u, alpha, k_res=k_res)
         consistency_energy_ = consistency_energy(u, alpha, k_res=k_res)
-        return elastic_energy_ + dissipated_energy_ + penalty_energy_ + consistency_energy_
+        return elastic_energy_ + dissipated_energy_ + consistency_energy_ + penalty_energy_
 
     def energy_1d(h, perturbation_v=Function(u.function_space()), perturbation_beta=Function(alpha.function_space())):
         return assemble(total_energy(u + float(h) * perturbation_v, alpha + float(h) * perturbation_beta))
