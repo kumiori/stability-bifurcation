@@ -217,7 +217,7 @@ def numerical_test(
     parameters['code']['script'] = __file__
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir = '../output/traction/{}-{}CPU'.format(signature, size)
+    outdir = '../output/traction_CG/{}-{}CPU'.format(signature, size)
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     log(LogLevel.INFO, 'Outdir is: '+outdir)
@@ -286,7 +286,7 @@ def numerical_test(
     bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), left),
              dolfin.DirichletBC(V_u.sub(0), ut, right),
              dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
-    bcs_alpha = []
+    bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0), left), dolfin.DirichletBC(V_alpha, dolfin.Constant(0), right)]
 
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 

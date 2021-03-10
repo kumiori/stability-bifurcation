@@ -217,7 +217,7 @@ def numerical_test(
     parameters['code']['script'] = __file__
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir = '../output/traction/{}-{}CPU'.format(signature, size)
+    outdir = '../output/traction_DG/{}-{}CPU'.format(signature, size)
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     log(LogLevel.INFO, 'Outdir is: '+outdir)
@@ -301,7 +301,7 @@ def numerical_test(
     h = CellDiameter(mesh)
     h_avg = 0.5 * (h('+') + h('-'))
     normal = FacetNormal(mesh)
-    pen = 1e3 #Penalty parameter for DG
+    pen = 1e3 #Penalty parameter for DG. Put more?
     k_res = parameters['material']['k_res']
     a = (1 - alpha) ** 2. + k_res
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
