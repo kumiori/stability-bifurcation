@@ -277,7 +277,7 @@ def numerical_test(
     mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
     #Dirichlet BC
     x = SpatialCoordinate(mesh)
-    E = dolfin.as_tensor(((2, 1), (1, 2)))
+    E_tilde = dolfin.as_tensor(((2, 1), (1, 2)))
     ut = dolfin.Expression(("t*(2*x[0]+x[1])", "t*(x[0]+2*x[1])"), t=0., degree=1)
     bcs_u = [dolfin.DirichletBC(V_u, ut, bnd)]
     
@@ -374,7 +374,10 @@ def numerical_test(
         parameters['loading']['load_max'],
         parameters['loading']['n_steps'])
 
-    tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
+    #tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
+    en = assemble(0.5 * inner(lmbda0*ufl.tr(E_tilde)*dolfin.Identity(2) + 2*mu0*E_tilde, ufl.sym(E_tilde)) * dx)
+    Gc = 8/3*w_1*ell
+    tc = ufl.sqrt(Gc/(16 * parameters['material']['ell']*en))
 
     _eps = 1e-3
     load_steps = [0., tc-_eps, tc+_eps]
