@@ -217,7 +217,7 @@ def numerical_test(
     parameters['code']['script'] = __file__
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir = '../output/traction_CG/{}-{}CPU'.format(signature, size)
+    outdir = '../output/no_driving_force_CG/{}-{}CPU'.format(signature, size)
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     log(LogLevel.INFO, 'Outdir is: '+outdir)
@@ -272,21 +272,16 @@ def numerical_test(
             dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
     z = dolfin.Function(Z)
     v, beta = dolfin.split(z)
-    left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
-    right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
-    bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
-    top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
-    left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
+    bnd = dolfin.CompiledSubDomain("on_boundary")
 
     mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
-    right.mark(mf, 1)
-    left.mark(mf, 2)
-    bottom.mark(mf, 3)
-    ut = dolfin.Expression("t", t=0.0, degree=0)
-    bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), left),
-             dolfin.DirichletBC(V_u.sub(0), ut, right),
-             dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
-    bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0), left), dolfin.DirichletBC(V_alpha, dolfin.Constant(0), right)]
+    #Dirichlet BC
+    x = SpatialCoordinate(mesh)
+    E = dolfin.as_tensor(((2, 1), (1, 2)))
+    ut = dolfin.Expression(("t*(2*x[0]+x[1])", "t*(x[0]+2*x[1])"), t=0., degree=1)
+    bcs_u = [dolfin.DirichletBC(V_u, ut, bnd)]
+    
+    bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0), bnd)]
 
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 
