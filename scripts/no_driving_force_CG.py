@@ -307,9 +307,9 @@ def numerical_test(
 
     #Dirichlet BC disp
     x = SpatialCoordinate(mesh)
-    theta = 0 #sample [0,2*Pi]
-    E_bar = as_tensor(((cos(theta)-nu*sin(theta), 0), (0, sin(theta)-nu*cos(theta))))
-    ut = dolfin.Expression(("t*(cos(theta)-nu*sin(theta))*x[0]", "t*(sin(theta)-nu*cos(theta))*x[1]"), t=0., theta=theta, nu=nu, degree=1)
+    theta = dolfin.pi/4 #sample [0,2*Pi]
+    E_bar = as_tensor(((cos(theta)-nu*sin(theta), 0), (0, sin(theta)-nu*cos(theta)))) / (sqrt(2)*E)
+    ut = dolfin.Expression(("t*(cos(theta)-nu*sin(theta))*x[0]/(sqrt(2)*E)", "t*(sin(theta)-nu*cos(theta))*x[1]/(sqrt(2)*E)"), t=0., E=E, theta=theta, nu=nu, degree=1)
     bcs_u = [dolfin.DirichletBC(V_u, ut, bnd)]
     bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 
@@ -379,10 +379,12 @@ def numerical_test(
     #tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
     en = assemble(0.5 * inner(lmbda0*ufl.tr(E_bar)*dolfin.Identity(2) + 2*mu0*E_bar, ufl.sym(E_bar)) * dx)
     Gc = 8/3*w_1*ell
-    tc = ufl.sqrt(Gc/(16 * parameters['material']['ell']*en))
+    #tc = ufl.sqrt(Gc/(16 * parameters['material']['ell']*en))
+    tc = np.sqrt(2)*E #correct?
 
     _eps = 1e-3
     load_steps = [0., tc-_eps, tc+_eps]
+    #load_steps = [0., 1-_eps, 1+_eps]
 
     time_data = []
     time_data_pd = []
