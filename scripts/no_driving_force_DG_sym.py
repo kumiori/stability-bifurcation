@@ -288,7 +288,7 @@ def numerical_test(
     h = CellDiameter(mesh)
     h_avg = 0.5 * (h('+') + h('-'))
     normal = FacetNormal(mesh)
-    pen = 1e3 #Penalty parameter for DG. Put more?
+    pen = 1e5 #Penalty parameter for DG. Put more?
     k_res = parameters['material']['k_res']
     a = (1 - alpha) ** 2. + k_res
     w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
