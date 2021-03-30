@@ -237,7 +237,7 @@ def numerical_test(
     resolution = max(parameters['geometry']['n'] * Lx / ell, 5/(Ly*10))
     resolution = 100
 
-    geom = mshr.Circle(dolfin.Point(0, 0), 1)
+    geom = mshr.Circle(dolfin.Point(0, 0), 5)
     mesh = mshr.generate_mesh(geom, resolution)
 
     log(LogLevel.INFO, 'Number of dofs: {}'.format(mesh.num_vertices()*(1+parameters['general']['dim'])))
@@ -307,7 +307,7 @@ def numerical_test(
 
     #Dirichlet BC disp
     x = SpatialCoordinate(mesh)
-    theta = dolfin.pi/4 #sample [0,2*Pi]
+    theta = -dolfin.pi/2 #dolfin.pi #dolfin.pi/2 #0 #dolfin.pi/4 #sample [0,2*Pi]
     E_bar = as_tensor(((cos(theta)-nu*sin(theta), 0), (0, sin(theta)-nu*cos(theta)))) / (sqrt(2)*E)
     ut = dolfin.Expression(("t*(cos(theta)-nu*sin(theta))*x[0]/(sqrt(2)*E)", "t*(sin(theta)-nu*cos(theta))*x[1]/(sqrt(2)*E)"), t=0., E=E, theta=theta, nu=nu, degree=1)
     bcs_u = [dolfin.DirichletBC(V_u, ut, bnd)]
@@ -384,7 +384,6 @@ def numerical_test(
 
     _eps = 1e-3
     load_steps = [0., tc-_eps, tc+_eps]
-    #load_steps = [0., 1-_eps, 1+_eps]
 
     time_data = []
     time_data_pd = []

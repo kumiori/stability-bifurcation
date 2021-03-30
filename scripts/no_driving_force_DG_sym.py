@@ -217,7 +217,7 @@ def numerical_test(
     parameters['code']['script'] = __file__
 
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-    outdir = '../output/traction_DG/{}-{}CPU'.format(signature, size)
+    outdir = '../output/no_driving_force_DG/{}-{}CPU'.format(signature, size)
     Path(outdir).mkdir(parents=True, exist_ok=True)
 
     log(LogLevel.INFO, 'Outdir is: '+outdir)
@@ -237,7 +237,7 @@ def numerical_test(
     resolution = max(parameters['geometry']['n'] * Lx / ell, 5/(Ly*10))
     resolution = 100
 
-    geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
+    geom = mshr.Circle(dolfin.Point(0, 0), 5)
     mesh = mshr.generate_mesh(geom, resolution)
 
     log(LogLevel.INFO, 'Number of dofs: {}'.format(mesh.num_vertices()*(1+parameters['general']['dim'])))
@@ -254,8 +254,8 @@ def numerical_test(
     savelag = 1
 
     # Function Spaces
-    V_u = dolfin.VectorFunctionSpace(mesh, "DG", 1) #DG for displacement
-    V_alpha = dolfin.FunctionSpace(mesh, "CR", 1) #Crouzeix-Raviart for damage
+    V_u = dolfin.VectorFunctionSpace(mesh, "DG", 1)
+    V_alpha = dolfin.FunctionSpace(mesh, "CR", 1)
     L2 = dolfin.FunctionSpace(mesh, "DG", 0)
     u = dolfin.Function(V_u, name="Total displacement")
     u.rename('u', 'u')
@@ -272,24 +272,11 @@ def numerical_test(
             dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
     z = dolfin.Function(Z)
     v, beta = dolfin.split(z)
-    left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
-    right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
-    bottom = dolfin.CompiledSubDomain("near(x[1],-Ly/2.)", Ly=Ly)
-    top = dolfin.CompiledSubDomain("near(x[1],Ly/2.)", Ly=Ly)
-    left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
+    bnd = dolfin.CompiledSubDomain("on_boundary")
 
     mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
-    right.mark(mf, 1)
-    left.mark(mf, 2)
-    bottom.mark(mf, 3)
-    ut = dolfin.Expression("t", t=0.0, degree=0)
-    #bcs_u = [dolfin.DirichletBC(V_u.sub(0), dolfin.Constant(0), left),
-    #         dolfin.DirichletBC(V_u.sub(0), ut, right),
-    #         dolfin.DirichletBC(V_u, (0, 0), left_bottom_pt, method="pointwise")]
-    bcs_u = []
-    bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0), left), dolfin.DirichletBC(V_alpha, dolfin.Constant(0), right)]
-
-    bcs = {"damage": bcs_alpha, "elastic": bcs_u}
+    #Dirichlet BC damage
+    bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0), bnd)]
 
     ds = dolfin.Measure("ds", subdomain_data=mf)
     dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=mesh)
@@ -321,10 +308,20 @@ def numerical_test(
     ell = parameters['material']['ell']
     E = parameters['material']['E']
 
+
+    #Dirichlet BC disp
+    x = SpatialCoordinate(mesh)
+    theta = -dolfin.pi/2 #dolfin.pi #dolfin.pi/2 #0 #dolfin.pi/4 #sample [0,2*Pi]
+    E_bar = as_tensor(((cos(theta)-nu*sin(theta), 0), (0, sin(theta)-nu*cos(theta)))) / (sqrt(2)*E)
+    ut = dolfin.Expression(("t*(cos(theta)-nu*sin(theta))*x[0]/(sqrt(2)*E)", "t*(sin(theta)-nu*cos(theta))*x[1]/(sqrt(2)*E)"), t=0., E=E, theta=theta, nu=nu, degree=1)
+    bcs_u = []
+    bcs = {"damage": bcs_alpha, "elastic": bcs_u}
+
     def elastic_energy(u,alpha, E=E, nu=nu, eps0t=eps0t, k_res=k_res):
         a = (1 - alpha) ** 2. + k_res
         eps = sym(grad(u))
-        Wt = a*E*nu/(2*(1-nu**2.)) * tr(eps)**2. + a*E/(2.*(1+nu))*(inner(eps, eps))
+        Wt = a*E*nu/(2*(1-nu**2.)) * tr(eps)**2.                                \
+            + a*E/(2.*(1+nu))*(inner(eps, eps))
         return Wt * dx
 
     def C(tensor, E=E, nu=nu): #useful for penalty term
@@ -332,17 +329,17 @@ def numerical_test(
         lmbda = E*nu / (1 - nu)**2 #plane stress?
         return 2*mu * tensor + lmbda*tr(tensor)*Identity(2)
 
+    def dissipated_energy(alpha,w_1=w_1,ell=ell):
+        return w_1 *( alpha + ell** 2.*inner(grad(alpha), grad(alpha)))*dx
+
     def penalty_energy(u, alpha, k_res=k_res):
         a = (1 - alpha('+')) ** 2. + k_res
-        return 0.5*pen*a/h_avg * inner(outer(jump(u), normal('+')),C(outer(jump(u), normal('+')))) * dS + 0.5*pen/h * inner(outer(u,normal),C(outer(u,normal))) * (ds(1)+ds(2)) - pen/h * inner(outer(ut*normal,normal),C(outer(u,normal))) * ds(1)
+        return 0.5*pen*a/h_avg * inner(outer(jump(u), normal('+')),C(outer(jump(u), normal('+')))) * dS + 0.5*pen/h * inner(outer(u,normal),C(outer(u,normal))) * ds - pen/h * inner(outer(ut,normal),C(outer(u,normal))) * ds
 
     def consistency_energy(u, alpha, k_res=k_res):
         a = (1 - alpha) ** 2. + k_res
         sigma = a * C(sym(grad(u)))
         return -inner(dot(avg(sigma),normal('+')), jump(u))*dS #lacking the term on the boundary?
-
-    def dissipated_energy(alpha,w_1=w_1,ell=ell):
-        return w_1 *( alpha + ell** 2.*inner(grad(alpha), grad(alpha)))*dx
 
     def total_energy(u, alpha, k_res=k_res, w_1=w_1, E=E, nu=nu, ell=ell, eps0t=eps0t):
         elastic_energy_ = elastic_energy(u,alpha, E=E, nu=nu, eps0t=eps0t, k_res=k_res)
@@ -352,7 +349,8 @@ def numerical_test(
         return elastic_energy_ + dissipated_energy_ + consistency_energy_ + penalty_energy_
 
     def energy_1d(h, perturbation_v=Function(u.function_space()), perturbation_beta=Function(alpha.function_space())):
-        return assemble(total_energy(u + float(h) * perturbation_v, alpha + float(h) * perturbation_beta))
+        return assemble(total_energy(u + float(h) * perturbation_v,
+                                alpha + float(h) * perturbation_beta))
 
     energy = total_energy(u,alpha)
 
@@ -394,7 +392,11 @@ def numerical_test(
         parameters['loading']['load_max'],
         parameters['loading']['n_steps'])
 
-    tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
+    #tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
+    en = assemble(0.5 * inner(lmbda0*ufl.tr(E_bar)*dolfin.Identity(2) + 2*mu0*E_bar, ufl.sym(E_bar)) * dx)
+    Gc = 8/3*w_1*ell
+    #tc = ufl.sqrt(Gc/(16 * parameters['material']['ell']*en))
+    tc = np.sqrt(2)*E #correct?
 
     _eps = 1e-3
     load_steps = [0., tc-_eps, tc+_eps]
@@ -496,7 +498,7 @@ def numerical_test(
             time_data_i["stable"] = stability.stable
             time_data_i["# neg ev"] = stability.negev
             time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
-            time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*ds(1))
+            time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*ds)
 
             log(LogLevel.INFO,
                 "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4e}".format(
