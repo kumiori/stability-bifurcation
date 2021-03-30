@@ -237,7 +237,7 @@ def numerical_test(
     resolution = max(parameters['geometry']['n'] * Lx / ell, 5/(Ly*10))
     resolution = 100
 
-    geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
+    geom = mshr.Circle(dolfin.Point(0, 0), 1)
     mesh = mshr.generate_mesh(geom, resolution)
 
     log(LogLevel.INFO, 'Number of dofs: {}'.format(mesh.num_vertices()*(1+parameters['general']['dim'])))
@@ -275,15 +275,8 @@ def numerical_test(
     bnd = dolfin.CompiledSubDomain("on_boundary")
 
     mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
-    #Dirichlet BC
-    x = SpatialCoordinate(mesh)
-    E_tilde = dolfin.as_tensor(((2, 1), (1, 2)))
-    ut = dolfin.Expression(("t*(2*x[0]+x[1])", "t*(x[0]+2*x[1])"), t=0., degree=1)
-    bcs_u = [dolfin.DirichletBC(V_u, ut, bnd)]
-    
+    #Dirichlet BC damage
     bcs_alpha = [dolfin.DirichletBC(V_alpha, dolfin.Constant(0), bnd)]
-
-    bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 
     ds = dolfin.Measure("ds", subdomain_data=mf)
     dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=mesh)
@@ -310,6 +303,15 @@ def numerical_test(
 
     ell = parameters['material']['ell']
     E = parameters['material']['E']
+
+
+    #Dirichlet BC disp
+    x = SpatialCoordinate(mesh)
+    theta = 0 #sample [0,2*Pi]
+    E_bar = as_tensor(((cos(theta)-nu*sin(theta), 0), (0, sin(theta)-nu*cos(theta))))
+    ut = dolfin.Expression(("t*(cos(theta)-nu*sin(theta))*x[0]", "t*(sin(theta)-nu*cos(theta))*x[1]"), t=0., theta=theta, nu=nu, degree=1)
+    bcs_u = [dolfin.DirichletBC(V_u, ut, bnd)]
+    bcs = {"damage": bcs_alpha, "elastic": bcs_u}
 
     def elastic_energy(u,alpha, E=E, nu=nu, eps0t=eps0t, k_res=k_res):
         a = (1 - alpha) ** 2. + k_res
@@ -375,7 +377,7 @@ def numerical_test(
         parameters['loading']['n_steps'])
 
     #tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
-    en = assemble(0.5 * inner(lmbda0*ufl.tr(E_tilde)*dolfin.Identity(2) + 2*mu0*E_tilde, ufl.sym(E_tilde)) * dx)
+    en = assemble(0.5 * inner(lmbda0*ufl.tr(E_bar)*dolfin.Identity(2) + 2*mu0*E_bar, ufl.sym(E_bar)) * dx)
     Gc = 8/3*w_1*ell
     tc = ufl.sqrt(Gc/(16 * parameters['material']['ell']*en))
 
