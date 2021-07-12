@@ -298,6 +298,8 @@ def numerical_test(
     lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
     mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
     nu = parameters['material']['nu']
+    print(nu)
+    sys.exit()
     sigma0 = lmbda0 * tr(eps)*dolfin.Identity(parameters['general']['dim']) + 2*mu0*eps
     e1 = Constant((1., 0))
     _sigma = ((1 - alpha) ** 2. + k_res)*sigma0
