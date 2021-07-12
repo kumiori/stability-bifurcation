@@ -297,9 +297,7 @@ def numerical_test(
     eps0t=Expression([['t', 0.],[0.,'t']], t=0., degree=0)
     lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
     mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
-    nu = parameters['material']['nu']
-    print(nu)
-    sys.exit()
+    nu = 0.3 #parameters['material']['nu']
     sigma0 = lmbda0 * tr(eps)*dolfin.Identity(parameters['general']['dim']) + 2*mu0*eps
     e1 = Constant((1., 0))
     _sigma = ((1 - alpha) ** 2. + k_res)*sigma0
@@ -397,6 +395,8 @@ def numerical_test(
     #tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
     en = assemble(0.5 * inner(lmbda0*ufl.tr(E_bar)*dolfin.Identity(2) + 2*mu0*E_bar, ufl.sym(E_bar)) * dx)
     Gc = 8/3*w_1*ell
+    print(Gc)
+    sys.exit()
     #tc = ufl.sqrt(Gc/(16 * parameters['material']['ell']*en))
     tc = np.sqrt(2)*E #correct?
 
