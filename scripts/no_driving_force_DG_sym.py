@@ -223,21 +223,18 @@ def numerical_test(
     log(LogLevel.INFO, 'Outdir is: '+outdir)
     BASE_DIR = os.path.dirname(os.path.realpath(__file__))
     print(parameters['geometry'])
-    d={'Lx': parameters['geometry']['Lx'],'Ly': parameters['geometry']['Ly'],
-        'h': parameters['material']['ell']/parameters['geometry']['n']}
+    d={'L': parameters['geometry']['L'], 'h': parameters['material']['ell']/parameters['geometry']['n']}
 
     geom_signature = hashlib.md5(str(d).encode('utf-8')).hexdigest()
 
-    Lx = parameters['geometry']['Lx']
-    Ly = parameters['geometry']['Ly']
+    L = parameters['geometry']['L']
     n = parameters['geometry']['n']
     ell = parameters['material']['ell']
     fname = os.path.join('../meshes', 'strip-{}'.format(geom_signature))
 
-    resolution = max(parameters['geometry']['n'] * Lx / ell, 5/(Ly*10))
-    resolution = 100
+    resolution = parameters['geometry']['n'] * L / ell
 
-    geom = mshr.Circle(dolfin.Point(0, 0), 5)
+    geom = mshr.Circle(dolfin.Point(0, 0), L)
     mesh = mshr.generate_mesh(geom, resolution)
 
     log(LogLevel.INFO, 'Number of dofs: {}'.format(mesh.num_vertices()*(1+parameters['general']['dim'])))
@@ -249,7 +246,7 @@ def numerical_test(
     with open(os.path.join(outdir, 'parameters.yaml'), "w") as f:
         yaml.dump(parameters, f, default_flow_style=False)
 
-    Lx = parameters['geometry']['Lx']
+    L = parameters['geometry']['L']
     ell =  parameters['material']['ell']
     savelag = 1
 
@@ -298,8 +295,6 @@ def numerical_test(
     lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
     mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
     nu = parameters['material']['nu']
-    print(nu)
-    sys.exit()
     sigma0 = lmbda0 * tr(eps)*dolfin.Identity(parameters['general']['dim']) + 2*mu0*eps
     e1 = Constant((1., 0))
     _sigma = ((1 - alpha) ** 2. + k_res)*sigma0
@@ -500,7 +495,7 @@ def numerical_test(
             time_data_i["stable"] = stability.stable
             time_data_i["# neg ev"] = stability.negev
             time_data_i["eigs"] = stability.eigs if hasattr(stability, 'eigs') else np.inf
-            time_data_i["sigma"] = 1/Ly * dolfin.assemble(_snn*ds)
+            time_data_i["sigma"] = 1/L * dolfin.assemble(_snn*ds)
 
             log(LogLevel.INFO,
                 "Load/time step {:.4g}: converged in iterations: {:3d}, err_alpha={:.4e}".format(
@@ -544,8 +539,7 @@ if __name__ == "__main__":
         with open(args.parameters) as f:
             parameters = yaml.load(f, Loader=yaml.FullLoader)
     else:
-        # with open('../parameters/bar_short.yaml') as f:
-        with open('../parameters/bar_long.yaml') as f:
+        with open('../parameters/no_driving_force.yaml') as f:
             parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     data, experiment = numerical_test(user_parameters = parameters)
