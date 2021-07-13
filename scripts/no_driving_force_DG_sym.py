@@ -287,12 +287,11 @@ def numerical_test(
     h_avg = 0.5 * (h('+') + h('-'))
     normal = FacetNormal(mesh)
     pen = 1e1
-    k_res = parameters['material']['k_res']
+    k_res = 1e-8
     a = (1 - alpha) ** 2. + k_res
     E = 1
-    print(parameters['material']['sigma_D0'])
-    sys.exit()
-    w_1 = parameters['material']['sigma_D0'] ** 2 / E
+    sigma_D0 = 1
+    w_1 = sigma_D0 ** 2 / E
     w = w_1 * alpha
     eps = sym(grad(u))
     eps0t=Expression([['t', 0.],[0.,'t']], t=0., degree=0)
