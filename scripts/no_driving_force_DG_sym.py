@@ -223,15 +223,15 @@ def numerical_test(
     log(LogLevel.INFO, 'Outdir is: '+outdir)
     BASE_DIR = os.path.dirname(os.path.realpath(__file__))
     print(parameters['geometry'])
+    ell = 0.2
     d={'Lx': parameters['geometry']['Lx'],'Ly': parameters['geometry']['Ly'],
-        'h': parameters['material']['ell']/parameters['geometry']['n']}
+        'h': ell/parameters['geometry']['n']}
 
     geom_signature = hashlib.md5(str(d).encode('utf-8')).hexdigest()
 
     Lx = parameters['geometry']['Lx']
     Ly = parameters['geometry']['Ly']
     n = parameters['geometry']['n']
-    ell = parameters['material']['ell']
     fname = os.path.join('../meshes', 'strip-{}'.format(geom_signature))
 
     resolution = max(parameters['geometry']['n'] * Lx / ell, 5/(Ly*10))
@@ -281,32 +281,31 @@ def numerical_test(
     ds = dolfin.Measure("ds", subdomain_data=mf)
     dx = dolfin.Measure("dx", metadata=parameters['compiler'], domain=mesh)
 
-    ell = parameters['material']['ell']
-
     # -----------------------
     # Problem definition
     h = CellDiameter(mesh)
     h_avg = 0.5 * (h('+') + h('-'))
     normal = FacetNormal(mesh)
-    pen = 1e5 #Penalty parameter for DG. Put more?
+    pen = 1e1
     k_res = parameters['material']['k_res']
     a = (1 - alpha) ** 2. + k_res
-    w_1 = parameters['material']['sigma_D0'] ** 2 / parameters['material']['E']
+    E = 1
+    print(parameters['material']['sigma_D0'])
+    sys.exit()
+    w_1 = parameters['material']['sigma_D0'] ** 2 / E
     w = w_1 * alpha
     eps = sym(grad(u))
     eps0t=Expression([['t', 0.],[0.,'t']], t=0., degree=0)
-    lmbda0 = parameters['material']['E'] * parameters['material']['nu'] /(1. - parameters['material']['nu'])**2.
-    mu0 = parameters['material']['E']/ 2. / (1.0 + parameters['material']['nu'])
-    nu = 0.3 #parameters['material']['nu']
+    nu = 0.3
+    ell = 0.2
+    lmbda0 = E * nu /(1. - nu)**2.
+    mu0 = E / 2. / (1.0 + nu)
     sigma0 = lmbda0 * tr(eps)*dolfin.Identity(parameters['general']['dim']) + 2*mu0*eps
     e1 = Constant((1., 0))
     _sigma = ((1 - alpha) ** 2. + k_res)*sigma0
     _snn = dolfin.dot(dolfin.dot(_sigma, e1), e1)
 
     # -------------------
-
-    ell = parameters['material']['ell']
-    E = parameters['material']['E']
 
 
     #Dirichlet BC disp
@@ -395,9 +394,6 @@ def numerical_test(
     #tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
     en = assemble(0.5 * inner(lmbda0*ufl.tr(E_bar)*dolfin.Identity(2) + 2*mu0*E_bar, ufl.sym(E_bar)) * dx)
     Gc = 8/3*w_1*ell
-    print(Gc)
-    sys.exit()
-    #tc = ufl.sqrt(Gc/(16 * parameters['material']['ell']*en))
     tc = np.sqrt(2)*E #correct?
 
     _eps = 1e-3
@@ -565,13 +561,9 @@ if __name__ == "__main__":
     size = comm.Get_size()
 
     if rank == 0:
-        lab = '\\ell={}, E={}, \\sigma_D = {}'.format(
-            parameters['material']['ell'],
-            parameters['material']['E'],
-            parameters['material']['sigma_D0'])
-        tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
+        lab = '\\ell={}, E={}, \\sigma_D = {}'.format(ell, E, sigma_D0)
+        #tc = (parameters['material']['sigma_D0']/parameters['material']['E'])**(.5)
         # tc = sqrt(2.)/2.
-        ell = parameters['material']['ell']
 
         fig1, ax1 =pp.plot_energy(parameters, data, tc)
 
