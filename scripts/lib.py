@@ -40,25 +40,25 @@ from utils import get_versions
 code_parameters = get_versions()
 
 def getDefaultParameters():
-    with open('../parameters/form_compiler.yml') as f:
+    with open('../../parameters/form_compiler.yml') as f:
         form_compiler_parameters = yaml.load(f, Loader=yaml.FullLoader)
-    with open('../parameters/solvers_default.yml') as f:
+    with open('../../parameters/solvers_default.yml') as f:
         equilibrium_parameters = yaml.load(f, Loader=yaml.FullLoader)['equilibrium']
-    with open('../parameters/solvers_default.yml') as f:
+    with open('../../parameters/solvers_default.yml') as f:
         damage_parameters = yaml.load(f, Loader=yaml.FullLoader)['damage']
-    with open('../parameters/solvers_default.yml') as f:
+    with open('../../parameters/solvers_default.yml') as f:
         elasticity_parameters = yaml.load(f, Loader=yaml.FullLoader)['elasticity']
-    # with open('../parameters/film.yaml') as f:
+    # with open('../../parameters/film.yaml') as f:
     #     material_parameters = yaml.load(f, Loader=yaml.FullLoader)['material']
-    # with open('../parameters/film.yaml') as f:
+    # with open('../../parameters/film.yaml') as f:
     #     newton_parameters = yaml.load(f, Loader=yaml.FullLoader)['newton']
-    with open('../parameters/loading.yaml') as f:
+    with open('../../parameters/loading.yaml') as f:
         loading_parameters = yaml.load(f, Loader=yaml.FullLoader)['loading']
-    with open('../parameters/stability.yaml') as f:
+    with open('../../parameters/stability.yaml') as f:
         stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
-    with open('../parameters/stability.yaml') as f:
+    with open('../../parameters/stability.yaml') as f:
         inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
-    with open('../parameters/stability.yaml') as f:
+    with open('../../parameters/stability.yaml') as f:
         eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
 
     default_parameters = {

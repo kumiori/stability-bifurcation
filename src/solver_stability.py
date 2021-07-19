@@ -316,11 +316,11 @@ class StabilitySolver(object):
 
     def setParameters(self, parameters):
 
-        with open('../parameters/stability.yaml') as f:
+        with open('../../parameters/stability.yaml') as f:
             stability_parameters = yaml.load(f, Loader=yaml.FullLoader)['stability']
-        with open('../parameters/eigensolver.yml') as f:
+        with open('../../parameters/eigensolver.yml') as f:
             inertia_parameters = yaml.load(f, Loader=yaml.FullLoader)['inertia']
-        with open('../parameters/eigensolver.yml') as f:
+        with open('../../parameters/eigensolver.yml') as f:
             eigen_parameters = yaml.load(f, Loader=yaml.FullLoader)['eigen']
 
         if 'eigen' in parameters:
