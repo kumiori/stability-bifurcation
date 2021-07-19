@@ -42,7 +42,7 @@ size = comm.Get_size()
 from dolfin.cpp.log import log, LogLevel, set_log_level
 dolfin.parameters["std_out_all_processes"] = False
 
-from solvers import EquilibriumSolver
+from solvers import EquilibriumAM
 from solver_stability import StabilitySolver
 from linsearch import LineSearch
 
@@ -124,22 +124,22 @@ def numerical_test(
     # Ly = parameters['geometry']['Ly']
     ell =  parameters['material']['ell']
     # comm = MPI.comm_world
-    # geom = mshr.Rectangle(dolfin.Point(-Lx/2., -Ly/2.), dolfin.Point(Lx/2., Ly/2.))
+    # geom = mshr.Rectangle(dolfin.Point(0, -Ly/2.), dolfin.Point(Lx, Ly/2.))
     # import pdb; pdb.set_trace()
     # resolution = max(geometry_parameters['n'] * Lx / ell, 1/(Ly*10))
     # resolution = max(geometry_parameters['n'] * Lx / ell, 5/(Ly*10))
     resolution = 50
-    mesh = dolfin.IntervalMesh(50, -Lx/2., Lx/2.)
-    # mesh = dolfin.IntervalMesh(int(float(geometry_parameters['n'] * Lx / ell)), -Lx/2., Lx/2.)
+    mesh = dolfin.IntervalMesh(3, 0, Lx)
+    # mesh = dolfin.IntervalMesh(int(float(geometry_parameters['n'] * Lx / ell)), 0, Lx)
     meshf = dolfin.File(os.path.join(outdir, "mesh.xml"))
     meshf << mesh
     plot(mesh)
     plt.savefig(os.path.join(outdir, "mesh.pdf"), bbox_inches='tight')
 
     savelag = 1
-    left = dolfin.CompiledSubDomain("near(x[0], -Lx/2.)", Lx=Lx)
-    right = dolfin.CompiledSubDomain("near(x[0], Lx/2.)", Lx=Lx)
-    # left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],-Lx/2.) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
+    left = dolfin.CompiledSubDomain("near(x[0], 0)", Lx=Lx)
+    right = dolfin.CompiledSubDomain("near(x[0], Lx)", Lx=Lx)
+    # left_bottom_pt = dolfin.CompiledSubDomain("near(x[0],0) && near(x[1],-Ly/2.)", Lx=Lx, Ly=Ly)
 
     mf = dolfin.MeshFunction("size_t", mesh, 1, 0)
     right.mark(mf, 1)
@@ -218,18 +218,21 @@ def numerical_test(
     file_bif_postproc.parameters["flush_output"] = True
 
 
-    solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
+    solver = EquilibriumAM(energy, state, bcs, parameters=parameters['solver'])
     stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
-    # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], rayleigh=[rP, rN])
-    # stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'], Hessian=Hessian)
     linesearch = LineSearch(energy, state)
 
-    load_steps = np.linspace(parameters['loading']['load_min'],
-        parameters['loading']['load_max'],
-        parameters['loading']['n_steps'])
-    xs = np.linspace(-parameters['geometry']['Lx']/2., parameters['geometry']['Lx']/2, 50)
+    # load_steps = np.linspace(parameters['loading']['load_min'],
+    #     parameters['loading']['load_max'],
+    #     parameters['loading']['n_steps'])
+
+    load_steps = [0.0, 1.0, 1.1]
+
+    xs = np.linspace(0, parameters['geometry']['Lx'], 50)
+
     log(LogLevel.INFO, '====================== EVO ==========================')
     log(LogLevel.INFO, '{}'.format(parameters))
+
     for it, load in enumerate(load_steps):
         alpha_old.assign(alpha)
         log(LogLevel.CRITICAL, '====================== STEPPING ==========================')
@@ -413,7 +416,7 @@ def numerical_test(
     log(LogLevel.INFO, "Saved figure: {}".format(os.path.join(outdir, 'alpha.pdf')))
 
 
-    xs = np.linspace(-Lx/2., Lx/2., 100)
+    xs = np.linspace(0, Lx, 100)
     profile = np.array([alpha(x) for x in xs])
     plt.figure()
     plt.plot(xs, profile, marker='o')

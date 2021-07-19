@@ -16,8 +16,8 @@ class DamageElasticityModel(object):
         user_functional=None,
     ):
 
-        self.u = state[0]
-        self.alpha = state[1]
+        self.u = state['u']
+        self.alpha = state['alpha']
         self.E0 = E0
         self.nu = nu
         self.ell = ell
@@ -25,7 +25,7 @@ class DamageElasticityModel(object):
         self.k_res = k_res
         self.lmbda_0 = self.lmbda3D(0)
         self.mu_0 = self.mu3D(0)
-        self.dim = state[0].function_space().ufl_element().value_size()
+        self.dim = self.u.function_space().ufl_element().value_size()
         self.user_functional = user_functional
 
     def lmbda3D(self, alpha):

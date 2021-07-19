@@ -42,7 +42,7 @@ size = comm.Get_size()
 from dolfin.cpp.log import log, LogLevel, set_log_level
 dolfin.parameters["std_out_all_processes"] = False
 
-from solvers import EquilibriumSolver
+from solvers import EquilibriumAM
 from solver_stability import StabilitySolver
 from linsearch import LineSearch
 
@@ -250,7 +250,7 @@ def numerical_test(
     file_bif_postproc.parameters["flush_output"] = True
 
 
-    solver = EquilibriumSolver(energy, state, bcs, parameters=parameters['solver'])
+    solver = EquilibriumAM(energy, state, bcs, parameters=parameters['solver'])
     stability = StabilitySolver(energy, state, bcs, parameters = parameters['stability'])
     linesearch = LineSearch(energy, state)
 

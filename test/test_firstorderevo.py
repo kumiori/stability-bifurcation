@@ -52,7 +52,7 @@ code_parameters = get_versions()
 
 set_log_level(LogLevel.INFO)
 
-from solvers import EquilibriumSolver
+from solvers import EquilibriumAM
 from solver_stability import StabilitySolver
 
 def numerical_test(

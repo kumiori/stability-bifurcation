@@ -316,7 +316,7 @@ class DamageSolverSNES:
         snes.setVariableBounds(self.problem.lb.vec(),
             self.problem.ub.vec()) # 
 
-        snes.solve(None, Function(V).vector().vec())
+        # snes.solve(None, Function(V).vector().vec())
 
         self.solver = snes
 

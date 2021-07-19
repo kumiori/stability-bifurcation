@@ -28,7 +28,7 @@ class LineSearch(object):
 
         # positive part
         mask = beta.vector()[:]>0.
-        
+
         hp2 = (one-alpha.vector()[mask])/beta.vector()[mask]  if len(np.where(mask==True)[0])>0 else [np.inf]
         hp1 = (alpha_old.vector()[mask]-alpha.vector()[mask])/beta.vector()[mask]  if len(np.where(mask==True)[0])>0 else [-np.inf]
         hp = (max(hp1), min(hp2))

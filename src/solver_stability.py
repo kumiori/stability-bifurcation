@@ -334,7 +334,6 @@ class StabilitySolver(object):
                 'inertia': inertia_parameters,
                 'stability': stability_parameters}
 
-
     def normalise_eigen(self, v, beta, mode='none'):
         if mode=='none':
             return
@@ -397,6 +396,7 @@ class StabilitySolver(object):
                 raise RuntimeError("Couldn't find where bcs for displacement are applied")
 
             bcs_Z.append(new_bc)
+
         for bc in self.bcs['damage']:
             if hasattr(bc, 'sub_domain'):
                 new_bc = dolfin.DirichletBC(self.Z.sub(1), zero, bc.sub_domain, bc.method())
@@ -410,6 +410,7 @@ class StabilitySolver(object):
         dofmap = self.Z.dofmap()
         bc_keys_glob = []
 
+
         for bc_key in bc_keys:
             bc_key_global = []
             for x in bc_key:
@@ -421,6 +422,7 @@ class StabilitySolver(object):
             self.bc_dofs  = set()
 
         self.bcs_Z = bcs_Z
+
         return self.bc_dofs
 
     def is_elastic(self):
@@ -454,6 +456,9 @@ class StabilitySolver(object):
         local_inactive_set_alpha = [self.mapa[k] for k in inactive_set_alpha]
         global_set_alpha = [self.dm.local_to_global_index(k) for k in local_inactive_set_alpha]
         inactive_set = set(global_set_alpha) | set(self.Z.sub(0).dofmap().dofs())
+        # import pdb; pdb.set_trace()
+        print(f'len inactive_set {len(inactive_set)}')
+        print(inactive_set)
 
         return inactive_set
 
@@ -631,6 +636,9 @@ class StabilitySolver(object):
 
         inactive_dofs = self.getInactiveSet()
         index_set = self.getFreeDofsIS(inactive_dofs)
+
+        print(f'inactive_dofs {inactive_dofs}')
+        print(f'free_dofs {index_set}')
 
         self.inertia_setup()
 

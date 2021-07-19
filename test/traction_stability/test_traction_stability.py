@@ -11,7 +11,7 @@ import os
 import pandas as pd
 import sympy
 import numpy as np
-import post_processing as pp
+# import post_processing as pp
 import petsc4py
 from functools import reduce
 import ufl
@@ -157,7 +157,7 @@ def traction_test(
     V_alpha = dolfin.FunctionSpace(mesh, "CG", 1)
     u = dolfin.Function(V_u, name="Total displacement")
     alpha = dolfin.Function(V_alpha, name="Damage")
-    state = [u, alpha]
+    state = {'u': u, 'alpha':alpha}
 
     Z = dolfin.FunctionSpace(mesh, dolfin.MixedElement([u.ufl_element(),alpha.ufl_element()]))
     z = dolfin.Function(Z)
@@ -176,14 +176,14 @@ def traction_test(
     energy = model.total_energy_density(u, alpha)*dx
 
     # Alternate minimization solver
-    solver = solvers.AlternateMinimizationSolver(
-        energy, [u, alpha], [bcs_u, bcs_alpha], parameters = alt_min_parameters)
+    solver = solvers.EquilibriumAM(
+        energy, {'u':u, 'alpha':alpha}, {'elastic':bcs_u, 'damage':bcs_alpha}, parameters = alt_min_parameters)
 
     rP = model.rP(u, alpha, v, beta)*dx
-    rN = model.rN(u, alpha, beta)*dx
+    rN = model.rN(u, alpha, beta)
 
     stability = StabilitySolver(mesh, energy,
-        [u, alpha], [bcs_u, bcs_alpha], z, rayleigh=[rP, rN], parameters = stability_parameters)
+        {'u':u, 'alpha':alpha}, {'elastic':bcs_u, 'damage':bcs_alpha}, z, parameters = stability_parameters)
 
     # Time iterations
     time_data = []
@@ -222,13 +222,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--ell", type=float, default=0.1)
-    parser.add_argument("--load_max", type=float, default=2.0)
+    parser.add_argument("--load_max", type=float, default=3.0)
     parser.add_argument("--load_min", type=float, default=0.0)
     parser.add_argument("--Lx", type=float, default=1)
     parser.add_argument("--Ly", type=float, default=0.1)
     parser.add_argument("--nu", type=float, default=0.0)
     parser.add_argument("--n", type=int, default=2)
-    parser.add_argument("--nsteps", type=int, default=100)
+    parser.add_argument("--nsteps", type=int, default=10)
     parser.add_argument("--degree", type=int, default=2)
     parser.add_argument("--postfix", type=str, default='')
     parser.add_argument("--savelag", type=int, default=1)
